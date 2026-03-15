@@ -25,7 +25,8 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 ## Install
 
 ```bash
-cd X:\Fabric\FlareCrawl
+git clone https://github.com/0xDarkMatter/flarecrawl.git
+cd flarecrawl
 uv venv && uv pip install -e .
 ```
 
@@ -267,9 +268,9 @@ FlareCrawl is designed as a drop-in replacement for the `firecrawl` CLI:
 - **PDF command** — bonus: Cloudflare supports PDF rendering, Firecrawl doesn't
 - **Output directory** — `.flarecrawl/` instead of `.firecrawl/`
 
-## Output Format (Fabric Protocol)
+## Output Format
 
-All `--json` output follows the Fabric Protocol envelope:
+All `--json` output follows a consistent envelope:
 
 ```json
 {
@@ -345,8 +346,8 @@ Browser time is shared between REST API calls and Workers bindings. Track your u
 ## Project Structure
 
 ```
-X:/Fabric/FlareCrawl/
-├── pyproject.toml              # Package config + [tool.fabric] metadata
+flarecrawl/
+├── pyproject.toml              # Package config
 ├── AGENTS.md                   # AI agent context
 ├── README.md                   # This file
 ├── src/flarecrawl/
