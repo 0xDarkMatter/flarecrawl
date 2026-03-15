@@ -1,5 +1,10 @@
 # FlareCrawl
 
+[![GitHub](https://img.shields.io/badge/github-0xDarkMatter%2Fflarecrawl-blue?logo=github)](https://github.com/0xDarkMatter/flarecrawl)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Cloudflare](https://img.shields.io/badge/cloudflare-browser--rendering-orange?logo=cloudflare)](https://developers.cloudflare.com/browser-rendering/)
+
 > Cloudflare Browser Rendering CLI — drop-in replacement for `firecrawl`, much cheaper.
 
 CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.cloudflare.com/browser-rendering/rest-api/) with the same command structure as `firecrawl`. Supports scraping, crawling, URL discovery, screenshots, PDFs, and AI-powered data extraction — all running on Cloudflare's headless Chromium infrastructure. Significantly cheaper than Firecrawl at scale (free 10 min/day, then $0.09/hr vs per-page credit pricing).
