@@ -70,10 +70,13 @@ flarecrawl scrape https://example.com --format html
 # JSON envelope (for piping)
 flarecrawl scrape https://example.com --json
 
-# Multiple URLs (scraped concurrently, up to 3 at a time)
+# Multiple URLs (scraped concurrently)
 flarecrawl scrape https://a.com https://b.com https://c.com --json
 
-# From a file of URLs
+# Batch mode: file input with NDJSON output and configurable workers
+flarecrawl scrape --batch urls.txt --workers 5
+
+# From a file of URLs (backward-compatible alias for --batch)
 flarecrawl scrape --input urls.txt --json
 
 # With timing info
@@ -178,6 +181,9 @@ flarecrawl extract "Extract data" --urls https://example.com --schema-file schem
 
 # Multiple URLs
 flarecrawl extract "Get page title" --urls https://a.com,https://b.com --json
+
+# Batch mode: parallel extraction with NDJSON output
+flarecrawl extract "Get page title" --batch urls.txt --workers 5
 ```
 
 Uses Cloudflare Workers AI for extraction (no additional cost).
@@ -252,7 +258,7 @@ Flarecrawl is designed as a drop-in replacement for the `firecrawl` CLI:
 | firecrawl command | flarecrawl equivalent | Notes |
 |---|---|---|
 | `firecrawl scrape URL` | `flarecrawl scrape URL` | Same flags |
-| `firecrawl scrape URL1 URL2` | `flarecrawl scrape URL1 URL2` | Concurrent (3 workers) |
+| `firecrawl scrape URL1 URL2` | `flarecrawl scrape URL1 URL2` | Concurrent |
 | `firecrawl crawl URL --wait` | `flarecrawl crawl URL --wait` | Same flags |
 | `firecrawl map URL` | `flarecrawl map URL` | Same flags |
 | `firecrawl download URL` | `flarecrawl download URL` | Saves to `.flarecrawl/` |
@@ -299,6 +305,61 @@ Errors:
 | 5 | Forbidden | Check token permissions |
 | 7 | Rate limited | Wait and retry |
 
+## Batch & Parallel
+
+Commands that operate on multiple URLs support batch mode with configurable parallelism.
+
+### Batch input (`--batch`)
+
+```bash
+# Plain text file (one URL per line, # comments supported)
+flarecrawl scrape --batch urls.txt --workers 5
+
+# JSON array
+flarecrawl scrape --batch urls.json
+
+# NDJSON (one JSON object per line)
+flarecrawl extract "Get title" --batch urls.ndjson --workers 3
+```
+
+Input format is auto-detected: starts with `[` → JSON array, starts with `{` → NDJSON, otherwise plain text.
+
+### Batch output
+
+Batch mode outputs **NDJSON** (one JSON object per line) with index correlation:
+
+```json
+{"index": 0, "status": "ok", "data": {"url": "https://a.com", "content": "...", "elapsed": 1.2}}
+{"index": 1, "status": "error", "error": {"code": "TIMEOUT", "message": "Request timed out..."}}
+{"index": 2, "status": "ok", "data": {"url": "https://c.com", "content": "...", "elapsed": 0.8}}
+```
+
+Results are sorted by index. Failed URLs don't stop processing — errors are reported inline.
+
+### Workers
+
+| Flag | Default | Max | Notes |
+|------|---------|-----|-------|
+| `--workers` / `-w` | 3 | 10 | Matches CF paid tier concurrency limit |
+
+```bash
+# Conservative (free tier: 3 concurrent browsers)
+flarecrawl scrape --batch urls.txt --workers 3
+
+# Aggressive (paid tier: up to 10)
+flarecrawl scrape --batch urls.txt --workers 10
+```
+
+### Supported commands
+
+| Command | `--batch` | `--workers` | Notes |
+|---------|-----------|-------------|-------|
+| `scrape` | Yes | Yes | Also supports `--input` (alias) |
+| `extract` | Yes | Yes | Supplements `--urls` |
+| `crawl` | No | No | Has its own async job system |
+| `screenshot` | No | No | Single URL |
+| `pdf` | No | No | Single URL |
+
 ## Advanced Usage
 
 ### Raw JSON body passthrough
@@ -316,10 +377,10 @@ flarecrawl scrape --body '{
 ### Piping and chaining
 
 ```bash
-# Map URLs then scrape them
+# Map URLs then batch scrape them
 flarecrawl map https://docs.example.com --json | \
   jq -r '.data[]' | head -10 > urls.txt
-flarecrawl scrape --input urls.txt --json -o results.json
+flarecrawl scrape --batch urls.txt --workers 5
 
 # Crawl and extract just the markdown
 flarecrawl crawl https://example.com --wait --limit 10 --json | \
@@ -352,12 +413,14 @@ flarecrawl/
 ├── README.md                   # This file
 ├── src/flarecrawl/
 │   ├── __init__.py             # Version
+│   ├── batch.py                # Batch processing (parse + parallel workers)
 │   ├── cli.py                  # Typer CLI (all commands)
 │   ├── client.py               # CF Browser Rendering API client
 │   └── config.py               # Credentials + usage tracking
 └── tests/
     ├── conftest.py             # Test fixtures
-    ├── test_cli.py             # CLI tests (46 tests)
+    ├── test_batch.py           # Batch module tests
+    ├── test_cli.py             # CLI tests
     └── test_client.py          # Client tests
 ```
 

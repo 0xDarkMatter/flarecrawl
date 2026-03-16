@@ -1,4 +1,4 @@
-"""CLI tests for FlareCrawl."""
+"""CLI tests for Flarecrawl."""
 
 import json
 
@@ -43,6 +43,8 @@ class TestHelp:
         assert "--fields" in result.output
         assert "--timeout" in result.output
         assert "--input" in result.output
+        assert "--batch" in result.output
+        assert "--workers" in result.output
 
     def test_crawl_help(self):
         result = runner.invoke(app, ["crawl", "--help"])
@@ -68,6 +70,8 @@ class TestHelp:
         assert result.exit_code == 0
         assert "--urls" in result.output
         assert "--schema" in result.output
+        assert "--batch" in result.output
+        assert "--workers" in result.output
 
     def test_screenshot_help(self):
         result = runner.invoke(app, ["screenshot", "--help"])
@@ -192,3 +196,48 @@ class TestHelpers:
         result = runner.invoke(app, ["scrape", "--input", str(url_file), "--json"])
         # Will fail on API call, but should get past URL loading
         assert result.exit_code != 4  # Not a validation error
+
+
+class TestBatch:
+    """Test batch mode flags and validation."""
+
+    def test_scrape_batch_file_not_found(self, mock_credentials):
+        result = runner.invoke(app, ["scrape", "--batch", "nonexistent.txt"])
+        assert result.exit_code != 0
+
+    def test_scrape_batch_and_input_conflict(self, mock_credentials, tmp_path):
+        """Cannot use both --batch and --input."""
+        f = tmp_path / "urls.txt"
+        f.write_text("https://example.com\n")
+        result = runner.invoke(app, [
+            "scrape", "--batch", str(f), "--input", str(f),
+        ])
+        assert result.exit_code == 4
+
+    def test_scrape_batch_no_urls(self, mock_credentials, tmp_path):
+        """Batch file with no URLs should error."""
+        f = tmp_path / "empty.txt"
+        f.write_text("")
+        result = runner.invoke(app, ["scrape", "--batch", str(f)])
+        assert result.exit_code == 4
+
+    def test_scrape_batch_reads_urls(self, mock_credentials, tmp_path):
+        """Batch mode reads URLs from file (will fail on API but passes validation)."""
+        f = tmp_path / "urls.txt"
+        f.write_text("https://example.com\nhttps://test.com\n")
+        result = runner.invoke(app, ["scrape", "--batch", str(f)])
+        # Should get past validation (exit code != 4)
+        assert result.exit_code != 4
+
+    def test_extract_batch_reads_urls(self, mock_credentials, tmp_path):
+        """Extract batch mode reads URLs from file."""
+        f = tmp_path / "urls.txt"
+        f.write_text("https://example.com\nhttps://test.com\n")
+        result = runner.invoke(app, ["extract", "Get title", "--batch", str(f)])
+        # Should get past validation (exit code != 4)
+        assert result.exit_code != 4
+
+    def test_extract_no_urls_no_batch(self, mock_credentials):
+        """Extract with no --urls and no --batch should error."""
+        result = runner.invoke(app, ["extract", "Get title", "--json"])
+        assert result.exit_code == 4

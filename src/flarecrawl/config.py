@@ -1,4 +1,4 @@
-"""FlareCrawl configuration and credential storage."""
+"""Flarecrawl configuration and credential storage."""
 
 import json
 import os

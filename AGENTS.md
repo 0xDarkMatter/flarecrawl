@@ -10,7 +10,8 @@
 | Scrape page to markdown | `flarecrawl scrape URL` |
 | Scrape page to HTML | `flarecrawl scrape URL --format html` |
 | Scrape multiple URLs | `flarecrawl scrape URL1 URL2 URL3 --json` |
-| Scrape from file | `flarecrawl scrape --input urls.txt --json` |
+| Batch scrape from file | `flarecrawl scrape --batch urls.txt --workers 5` |
+| Scrape from file (compat) | `flarecrawl scrape --input urls.txt --json` |
 | Crawl site | `flarecrawl crawl URL --wait --limit N` |
 | Crawl with progress | `flarecrawl crawl URL --wait --progress --limit N` |
 | Check crawl status | `flarecrawl crawl JOB_ID --status` |
@@ -19,6 +20,7 @@
 | Discover URLs | `flarecrawl map URL --json` |
 | Download site as files | `flarecrawl download URL --limit N` |
 | AI data extraction | `flarecrawl extract PROMPT --urls URL --json` |
+| Batch extraction | `flarecrawl extract PROMPT --batch urls.txt --workers 5` |
 | Screenshot | `flarecrawl screenshot URL -o file.png` |
 | Full page screenshot | `flarecrawl screenshot URL -o file.png --full-page` |
 | PDF | `flarecrawl pdf URL -o file.pdf` |
@@ -49,7 +51,7 @@ flarecrawl auth status --json
 
 ### scrape
 
-Fetches a single page. Default output is markdown to stdout.
+Fetches pages. Default output is markdown to stdout.
 
 ```bash
 # Basic (markdown to stdout)
@@ -59,9 +61,17 @@ flarecrawl scrape https://example.com
 flarecrawl scrape https://example.com --json
 # Returns: {"data": {"url": "...", "content": "# Page Title\n...", "elapsed": 2.9}, "meta": {"format": "markdown"}}
 
-# Multiple URLs (concurrent, 3 workers)
+# Multiple URLs (concurrent)
 flarecrawl scrape https://a.com https://b.com --json --timing
 # Returns: {"data": [...], "meta": {"count": 2, "format": "markdown"}}
+
+# Batch mode: file input → parallel workers → NDJSON output
+flarecrawl scrape --batch urls.txt --workers 5
+# Output: {"index": 0, "status": "ok", "data": {...}}
+#         {"index": 1, "status": "ok", "data": {...}}
+
+# From file (backward-compatible alias for --batch, uses --json output)
+flarecrawl scrape --input urls.txt --json
 
 # Formats: markdown (default), html, links, screenshot, json
 flarecrawl scrape URL --format html --json
@@ -70,12 +80,9 @@ flarecrawl scrape URL --format json --json        # AI extraction via /json endp
 
 # Filter output fields
 flarecrawl scrape URL --json --fields url,content
-
-# From file (one URL per line, # comments supported)
-flarecrawl scrape --input urls.txt --json
 ```
 
-**Key flags:** `--format`, `--json`, `--output`, `--timing`, `--timeout`, `--fields`, `--input`, `--wait-for`, `--body`
+**Key flags:** `--format`, `--json`, `--output`, `--timing`, `--timeout`, `--fields`, `--batch`, `--workers`, `--input`, `--wait-for`, `--body`
 
 ### crawl
 
@@ -156,8 +163,12 @@ flarecrawl extract "Extract metadata" --urls URL --schema '{"type":"json_schema"
 # Schema from file
 flarecrawl extract "Extract data" --urls URL --schema-file schema.json
 
-# Multiple URLs
+# Multiple URLs (sequential)
 flarecrawl extract "Get page title" --urls https://a.com,https://b.com --json
+
+# Batch mode: parallel extraction with NDJSON output
+flarecrawl extract "Get page title" --batch urls.txt --workers 5
+# Output: {"index": 0, "status": "ok", "data": {...}}
 ```
 
 ### screenshot
@@ -228,6 +239,63 @@ flarecrawl usage --json
 {"error": {"code": "AUTH_REQUIRED", "message": "Not authenticated. Run: flarecrawl auth login"}}
 ```
 
+## Batch & Parallel
+
+`scrape` and `extract` support `--batch` for file-based input with parallel processing.
+
+### Flags
+
+| Flag | Short | Default | Max | Description |
+|------|-------|---------|-----|-------------|
+| `--batch` | `-b` | — | — | Input file (plain text, JSON array, or NDJSON) |
+| `--workers` | `-w` | 3 | 10 | Concurrent workers (capped at CF paid tier limit) |
+
+### Input formats (auto-detected)
+
+| Format | Detection | Example |
+|--------|-----------|---------|
+| Plain text | Default | One URL per line, `#` comments skipped |
+| JSON array | Starts with `[` | `["https://a.com", "https://b.com"]` |
+| NDJSON | Starts with `{` | `{"url": "https://a.com"}\n{"url": "https://b.com"}` |
+
+### Output format
+
+Batch mode outputs NDJSON with index correlation:
+
+```json
+{"index": 0, "status": "ok", "data": {"url": "...", "content": "...", "elapsed": 1.2}}
+{"index": 1, "status": "error", "error": {"code": "TIMEOUT", "message": "..."}}
+{"index": 2, "status": "ok", "data": {"url": "...", "content": "...", "elapsed": 0.8}}
+```
+
+- Results sorted by `index` (zero-based position in input file)
+- Partial failures don't stop processing — errors reported inline
+- Exit code 1 if any items failed, 0 if all succeeded
+- Progress reported to stderr: `completed/total (errors: N)`
+
+### Examples
+
+```bash
+# Map a site → batch scrape the results
+flarecrawl map https://docs.example.com --json | jq -r '.data[]' > urls.txt
+flarecrawl scrape --batch urls.txt --workers 5
+
+# Batch extract with schema
+flarecrawl extract "Get title and date" --batch urls.txt --workers 3 \
+  --schema '{"type":"json_schema","schema":{"type":"object","properties":{"title":{"type":"string"}}}}'
+
+# Process batch output with jq
+flarecrawl scrape --batch urls.txt | jq 'select(.status == "ok") | .data.content'
+```
+
+### Agent guidance
+
+- **Free tier:** Use `--workers 3` (3 concurrent browsers max)
+- **Paid tier:** Up to `--workers 10`
+- **Always check usage first** for large batches: `flarecrawl usage --json`
+- **Use `--batch` over `--input`** — `--input` is backward compat only
+- Batch output is NDJSON, not `{data, meta}` envelope — parse line by line
+
 ## Exit Codes
 
 | Code | Name | Meaning | Agent Action |
@@ -267,15 +335,17 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 ## Agent Rules
 
 1. **Check auth first:** `flarecrawl auth status --json` — exit code 2 means not authenticated
-2. **Always use `--json`** when parsing output programmatically
+2. **Always use `--json`** when parsing output programmatically (or `--batch` for NDJSON)
 3. **Always use `--limit`** on crawl/download — prevents runaway browser time
-4. **Check usage before large crawls:** `flarecrawl usage --json` — free tier is 10 min/day
-5. **Crawl is async by default** — use `--wait` to block until complete, `--progress` for visual feedback
-6. **Screenshots/PDFs save to files** — always specify `-o path` and verify the file was created
-7. **Use `--fields`** on crawl results to reduce JSON size: `--fields url,markdown`
-8. **Use `--ndjson`** for large crawl results to avoid loading everything into memory
-9. **Map before crawling** — `flarecrawl map URL --json` shows what pages exist
-10. **Retry is automatic** — 429, 502, 503 errors retry 3 times with backoff
+4. **Check usage before large batches/crawls:** `flarecrawl usage --json` — free tier is 10 min/day
+5. **Use `--batch` for multi-URL work** — parallel processing, NDJSON output, configurable `--workers`
+6. **Crawl is async by default** — use `--wait` to block until complete, `--progress` for visual feedback
+7. **Screenshots/PDFs save to files** — always specify `-o path` and verify the file was created
+8. **Use `--fields`** on crawl results to reduce JSON size: `--fields url,markdown`
+9. **Use `--ndjson`** for large crawl results to avoid loading everything into memory
+10. **Map before crawling** — `flarecrawl map URL --json` shows what pages exist
+11. **Retry is automatic** — 429, 502, 503 errors retry 3 times with backoff
+12. **Free tier: `--workers 3`**, paid tier: up to `--workers 10`
 
 ## Pricing Reference
 

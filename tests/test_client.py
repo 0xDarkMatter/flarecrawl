@@ -1,4 +1,4 @@
-"""Client tests for FlareCrawl."""
+"""Client tests for Flarecrawl."""
 
 from flarecrawl.client import Client
 

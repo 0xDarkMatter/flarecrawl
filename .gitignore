@@ -10,7 +10,7 @@ build/
 .venv/
 venv/
 
-# FlareCrawl output
+# Flarecrawl output
 .flarecrawl/
 
 # IDE

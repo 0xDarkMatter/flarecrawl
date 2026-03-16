@@ -1,7 +1,8 @@
-"""FlareCrawl CLI - Firecrawl-compatible CLI backed by Cloudflare Browser Rendering."""
+"""Flarecrawl CLI - Firecrawl-compatible CLI backed by Cloudflare Browser Rendering."""
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import concurrent.futures
 import json
@@ -19,6 +20,7 @@ from rich.spinner import Spinner
 from rich.table import Table
 
 from . import __version__
+from .batch import parse_batch_file, process_batch
 from .client import Client, FlareCrawlError
 from .config import (
     clear_credentials,
@@ -342,7 +344,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
 
 @app.command()
 def scrape(
-    urls: Annotated[list[str], typer.Argument(help="URL(s) to scrape")],
+    urls: Annotated[list[str], typer.Argument(help="URL(s) to scrape")] = None,
     format: Annotated[
         str,
         typer.Option("--format", "-f", help="Output format: markdown, html, links, screenshot, json"),
@@ -357,35 +359,89 @@ def scrape(
     timeout: Annotated[Optional[int], typer.Option("--timeout", help="Request timeout in ms")] = None,
     fields: Annotated[Optional[str], typer.Option("--fields", help="Comma-separated fields to include in JSON")] = None,
     input_file: Annotated[Optional[Path], typer.Option("--input", "-i", help="File with URLs (one per line)")] = None,
+    batch: Annotated[Optional[Path], typer.Option("--batch", "-b", help="Batch input file (JSON array, NDJSON, or text)")] = None,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
     body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body (overrides all flags)")] = None,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
-    Multiple URLs are scraped concurrently (up to 3 at a time).
+    Multiple URLs are scraped concurrently. Use --batch for file input
+    with NDJSON output and configurable workers.
 
     Example:
         flarecrawl scrape https://example.com
         flarecrawl scrape https://example.com --format html --json
         flarecrawl scrape https://a.com https://b.com --json
+        flarecrawl scrape --batch urls.txt --workers 5
         flarecrawl scrape --input urls.txt --json
     """
-    client = _get_client(json_output)
-    raw_body = _parse_body(body, json_output)
+    # Validate --batch and --input are not both provided
+    if batch and input_file:
+        _error(
+            "Cannot use both --batch and --input. Use --batch (preferred).",
+            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+        )
 
-    # Load URLs from file if provided
-    all_urls = list(urls)
-    if input_file:
+    # Resolve batch file (--batch takes precedence, --input is backward compat)
+    batch_file = batch or input_file
+    is_batch_mode = batch is not None
+
+    client = _get_client(json_output or is_batch_mode)
+    raw_body = _parse_body(body, json_output or is_batch_mode)
+
+    # Load URLs
+    all_urls = list(urls or [])
+    if batch_file:
         try:
-            file_urls = [
-                line.strip() for line in input_file.read_text().splitlines()
-                if line.strip() and not line.strip().startswith("#")
-            ]
-            all_urls.extend(file_urls)
+            file_urls = parse_batch_file(batch_file)
+            # parse_batch_file returns strings for plain text, ensure we have URL strings
+            all_urls.extend(str(u) for u in file_urls)
         except OSError as e:
-            _error(f"Cannot read input file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+            _error(f"Cannot read file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION,
+                   as_json=json_output or is_batch_mode)
+
+    if not all_urls:
+        _error(
+            "Provide at least one URL as argument or via --batch/--input.",
+            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output or is_batch_mode,
+        )
 
     for url in all_urls:
-        _validate_url(url, json_output)
+        _validate_url(url, json_output or is_batch_mode)
+
+    # ------------------------------------------------------------------
+    # Batch mode: asyncio + NDJSON output
+    # ------------------------------------------------------------------
+    if is_batch_mode:
+        capped_workers = min(workers, 10)
+
+        async def _scrape_one(url: str) -> dict:
+            return await asyncio.to_thread(
+                _scrape_single, client, url, format, wait_for,
+                screenshot, full_page_screenshot, raw_body, timeout,
+            )
+
+        def _on_progress(completed: int, total: int, errors: int):
+            console.print(f"[dim]{completed}/{total} (errors: {errors})[/dim]")
+
+        console.print(f"[dim]Scraping {len(all_urls)} URLs with {capped_workers} workers...[/dim]")
+        results = asyncio.run(
+            process_batch(all_urls, _scrape_one, workers=capped_workers, on_progress=_on_progress)
+        )
+
+        has_errors = any(r["status"] == "error" for r in results)
+        for r in sorted(results, key=lambda x: x["index"]):
+            _output_ndjson(r)
+
+        errors = sum(1 for r in results if r["status"] == "error")
+        console.print(f"[dim]Done: {len(results) - errors} ok, {errors} errors[/dim]")
+        if has_errors:
+            raise typer.Exit(EXIT_ERROR)
+        return
+
+    # ------------------------------------------------------------------
+    # Non-batch: existing behavior
+    # ------------------------------------------------------------------
 
     # Single URL: binary screenshot can go to stdout/file directly
     if len(all_urls) == 1 and (format == "screenshot" or screenshot or full_page_screenshot) and not json_output:
@@ -412,7 +468,7 @@ def scrape(
     # Concurrent scraping for multiple URLs
     results = []
     if len(all_urls) > 1:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, 10)) as pool:
             future_to_url = {
                 pool.submit(
                     _scrape_single, client, url, format, wait_for,
@@ -817,27 +873,41 @@ def extract(
     schema_file: Annotated[Optional[Path], typer.Option("--schema-file", help="Path to JSON schema file")] = None,
     output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    batch: Annotated[Optional[Path], typer.Option("--batch", "-b", help="Batch input file with URLs")] = None,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
     body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body")] = None,
 ):
     """AI-powered structured data extraction from web pages.
 
     Uses Cloudflare Workers AI to extract structured data based on a prompt.
+    Use --batch for parallel extraction with NDJSON output.
 
     Example:
         flarecrawl extract "Extract all product names and prices" --urls https://shop.example.com --json
         flarecrawl extract "Get article title and date" --urls https://blog.example.com --schema-file schema.json
+        flarecrawl extract "Get page title" --batch urls.txt --workers 5
     """
-    client = _get_client(json_output)
-    raw_body = _parse_body(body, json_output)
+    is_batch_mode = batch is not None
+    client = _get_client(json_output or is_batch_mode)
+    raw_body = _parse_body(body, json_output or is_batch_mode)
 
-    # Parse URLs
+    # Parse URLs from --urls flag
     url_list = []
     if urls:
         url_list = [u.strip() for u in urls.split(",")]
+
+    # Load URLs from --batch file
+    if batch:
+        try:
+            batch_urls = parse_batch_file(batch)
+            url_list.extend(str(u) for u in batch_urls)
+        except OSError as e:
+            _error(f"Cannot read batch file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=True)
+
     if not url_list and not raw_body:
         _error(
-            "Provide at least one URL with --urls",
-            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+            "Provide at least one URL with --urls or --batch",
+            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output or is_batch_mode,
         )
 
     # Parse schema
@@ -846,18 +916,54 @@ def extract(
         try:
             response_format = json.loads(schema_file.read_text())
         except (OSError, json.JSONDecodeError) as e:
-            _error(f"Invalid schema file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+            _error(f"Invalid schema file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION,
+                   as_json=json_output or is_batch_mode)
     elif schema:
         try:
             response_format = json.loads(schema)
         except json.JSONDecodeError as e:
-            _error(f"Invalid --schema JSON: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+            _error(f"Invalid --schema JSON: {e}", "VALIDATION_ERROR", EXIT_VALIDATION,
+                   as_json=json_output or is_batch_mode)
 
-    results = []
     target_urls = url_list if not raw_body else [raw_body.get("url", "")]
 
     for url in target_urls:
-        _validate_url(url, json_output)
+        _validate_url(url, json_output or is_batch_mode)
+
+    # ------------------------------------------------------------------
+    # Batch mode: asyncio + NDJSON output
+    # ------------------------------------------------------------------
+    if is_batch_mode:
+        capped_workers = min(workers, 10)
+
+        async def _extract_one(url: str) -> dict:
+            return await asyncio.to_thread(
+                client.extract_json, url, prompt, response_format,
+            )
+
+        def _on_progress(completed: int, total: int, errors: int):
+            console.print(f"[dim]{completed}/{total} (errors: {errors})[/dim]")
+
+        console.print(f"[dim]Extracting from {len(target_urls)} URLs with {capped_workers} workers...[/dim]")
+        results = asyncio.run(
+            process_batch(target_urls, _extract_one, workers=capped_workers, on_progress=_on_progress)
+        )
+
+        has_errors = any(r["status"] == "error" for r in results)
+        for r in sorted(results, key=lambda x: x["index"]):
+            _output_ndjson(r)
+
+        error_count = sum(1 for r in results if r["status"] == "error")
+        console.print(f"[dim]Done: {len(results) - error_count} ok, {error_count} errors[/dim]")
+        if has_errors:
+            raise typer.Exit(EXIT_ERROR)
+        return
+
+    # ------------------------------------------------------------------
+    # Non-batch: existing sequential behavior
+    # ------------------------------------------------------------------
+    results = []
+    for url in target_urls:
         try:
             if raw_body:
                 raw_body.setdefault("url", url)

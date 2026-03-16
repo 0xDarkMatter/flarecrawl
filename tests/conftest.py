@@ -1,4 +1,4 @@
-"""Test fixtures for FlareCrawl."""
+"""Test fixtures for Flarecrawl."""
 
 import pytest
 
