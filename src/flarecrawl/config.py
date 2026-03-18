@@ -3,6 +3,7 @@
 import json
 import os
 import platform
+import tempfile
 from pathlib import Path
 
 APP_NAME = "flarecrawl"
@@ -41,9 +42,18 @@ def load_config() -> dict:
 
 
 def save_config(config: dict) -> None:
-    """Save configuration."""
+    """Save configuration atomically (write to temp, then rename)."""
     config_file = get_config_file()
-    config_file.write_text(json.dumps(config, indent=2))
+    config_dir = config_file.parent
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=config_dir, suffix=".tmp", prefix=".config_")
+        with os.fdopen(fd, "w") as f:
+            json.dump(config, f, indent=2)
+        # Atomic rename (same filesystem)
+        Path(tmp_path).replace(config_file)
+    except OSError:
+        # Fallback to direct write if temp file fails
+        config_file.write_text(json.dumps(config, indent=2))
 
 
 def get_account_id() -> str | None:
