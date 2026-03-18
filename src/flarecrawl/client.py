@@ -7,7 +7,10 @@ from collections.abc import Iterator
 
 import httpx
 
-from .config import get_account_id, get_api_token, track_usage
+from .config import (
+    DEFAULT_CACHE_TTL, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT,
+    get_account_id, get_api_token, track_usage,
+)
 
 
 class FlareCrawlError(Exception):
@@ -27,8 +30,8 @@ class Client:
     """
 
     BASE_URL = "https://api.cloudflare.com/client/v4/accounts"
-    TIMEOUT = 120  # Browser rendering can be slow
-    MAX_RETRIES = 3
+    TIMEOUT = DEFAULT_TIMEOUT
+    MAX_RETRIES = DEFAULT_MAX_RETRIES
     RETRY_CODES = {429, 503, 502}
     # Endpoints whose responses can be cached
     CACHEABLE_ENDPOINTS = {"markdown", "content", "links", "json"}

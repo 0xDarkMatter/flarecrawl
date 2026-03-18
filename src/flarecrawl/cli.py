@@ -23,6 +23,8 @@ from . import __version__
 from .batch import parse_batch_file, process_batch
 from .client import Client, FlareCrawlError
 from .config import (
+    DEFAULT_CACHE_TTL,
+    DEFAULT_MAX_WORKERS,
     clear_credentials,
     get_account_id,
     get_api_token,
@@ -478,7 +480,7 @@ def scrape(
     if js and not wait_until:
         wait_until = "networkidle0"
 
-    cache_ttl = 0 if no_cache else 3600
+    cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
     client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
     raw_body = _parse_body(body, json_output or is_batch_mode)
 
@@ -506,7 +508,7 @@ def scrape(
     # Batch mode: asyncio + NDJSON output
     # ------------------------------------------------------------------
     if is_batch_mode:
-        capped_workers = min(workers, 10)
+        capped_workers = min(workers, DEFAULT_MAX_WORKERS)
 
         async def _scrape_one(url: str) -> dict:
             return await asyncio.to_thread(
@@ -562,7 +564,7 @@ def scrape(
     # Concurrent scraping for multiple URLs
     results = []
     if len(all_urls) > 1:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, 10)) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, DEFAULT_MAX_WORKERS)) as pool:
             future_to_url = {
                 pool.submit(
                     _scrape_single, client, url, format, wait_for,
@@ -818,7 +820,7 @@ def map_urls(
         flarecrawl map https://example.com --json
         flarecrawl map https://example.com --include-subdomains
     """
-    cache_ttl = 0 if no_cache else 3600
+    cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
     client = _get_client(json_output, cache_ttl=cache_ttl)
     _validate_url(url, json_output)
     raw_body = _parse_body(body, json_output)
@@ -990,7 +992,7 @@ def extract(
         flarecrawl extract "Get page title" --batch urls.txt --workers 5
     """
     is_batch_mode = batch is not None
-    cache_ttl = 0 if no_cache else 3600
+    cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
     client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
     raw_body = _parse_body(body, json_output or is_batch_mode)
 
@@ -1037,7 +1039,7 @@ def extract(
     # Batch mode: asyncio + NDJSON output
     # ------------------------------------------------------------------
     if is_batch_mode:
-        capped_workers = min(workers, 10)
+        capped_workers = min(workers, DEFAULT_MAX_WORKERS)
 
         async def _extract_one(url: str) -> dict:
             return await asyncio.to_thread(
@@ -1286,7 +1288,7 @@ def favicon(
         flarecrawl favicon https://example.com
         flarecrawl favicon https://example.com --all --json
     """
-    cache_ttl = 0 if no_cache else 3600
+    cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
     client = _get_client(json_output, cache_ttl=cache_ttl)
     _validate_url(url, json_output)
 

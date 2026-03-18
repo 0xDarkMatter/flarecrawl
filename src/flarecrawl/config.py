@@ -9,6 +9,24 @@ from pathlib import Path
 APP_NAME = "flarecrawl"
 
 
+def get_env_int(key: str, default: int) -> int:
+    """Get integer from environment variable with fallback."""
+    val = os.environ.get(key, "").strip()
+    if val:
+        try:
+            return int(val)
+        except ValueError:
+            pass
+    return default
+
+
+# Configurable via environment variables
+DEFAULT_CACHE_TTL = get_env_int("FLARECRAWL_CACHE_TTL", 3600)
+DEFAULT_MAX_RETRIES = get_env_int("FLARECRAWL_MAX_RETRIES", 3)
+DEFAULT_MAX_WORKERS = get_env_int("FLARECRAWL_MAX_WORKERS", 10)
+DEFAULT_TIMEOUT = get_env_int("FLARECRAWL_TIMEOUT", 120)
+
+
 def get_config_dir() -> Path:
     """Get platform-appropriate config directory."""
     system = platform.system()
