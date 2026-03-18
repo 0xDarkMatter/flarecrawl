@@ -5,3 +5,5 @@ iteration	commit	fc_total	fl_total	delta	status	description
 3	4376cf7	-	-	-	keep	Add file-based cache (7x speedup on hits)
 4	c807746	4.05	4.15	-0.40	revert-partial	networkidle2 hurt speed (19s blog timeout)
 5	c6c4ca1	4.05	4.35	-0.20	keep	Reverted networkidle default, added --wait-until flag
+6	73d2483	-	-	-	keep	Updated benchmark report
+7	aa8becc	4.05	4.45	+0.10	keep	Smart JS fallback (networkidle0+8s timeout, retry on fail)

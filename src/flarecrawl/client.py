@@ -342,7 +342,7 @@ class Client:
         user_specified_wait = "wait_until" in kwargs
         if not user_specified_wait:
             kwargs["wait_until"] = "networkidle0"
-            kwargs.setdefault("timeout", 8000)
+            kwargs.setdefault("timeout", 5000)
 
         body = self._build_body(url=url, **kwargs)
         try:
