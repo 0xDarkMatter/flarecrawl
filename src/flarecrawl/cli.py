@@ -397,6 +397,7 @@ def scrape(
     workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
     body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body (overrides all flags)")] = None,
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
+    js: Annotated[bool, typer.Option("--js", help="Wait for JS rendering (networkidle0, slower but captures dynamic content)")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -421,6 +422,10 @@ def scrape(
     # Resolve batch file (--batch takes precedence, --input is backward compat)
     batch_file = batch or input_file
     is_batch_mode = batch is not None
+
+    # --js implies networkidle0 (unless --wait-until explicitly set)
+    if js and not wait_until:
+        wait_until = "networkidle0"
 
     cache_ttl = 0 if no_cache else 3600
     client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
