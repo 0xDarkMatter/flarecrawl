@@ -3,12 +3,15 @@ iteration	commit	fc_total	fl_total	delta	status	description
 1	b47567c	-	-	-	keep	networkidle0 default (httpbin 493->1292 chars)
 2	30f48b4	-	-	-	keep	Enrich metadata (5 fields vs 1)
 3	4376cf7	-	-	-	keep	Add file-based cache (7x speedup on hits)
-4	c807746	4.05	4.15	-0.40	revert-partial	networkidle2 hurt speed (19s blog timeout)
+4	c807746	4.05	4.15	-0.40	revert	networkidle2 hurt speed (19s blog timeout)
 5	c6c4ca1	4.05	4.35	-0.20	keep	Reverted networkidle default, added --wait-until flag
 6	73d2483	-	-	-	keep	Updated benchmark report
-7	aa8becc	4.05	4.45	+0.10	keep	Smart JS fallback (networkidle0+8s timeout, retry on fail)
-8	6696204	4.05	4.45	0	keep	Reduced timeout to 5s (blog 12s->7.6s)
+7	aa8becc	4.05	4.45	+0.10	keep	Smart JS fallback (networkidle0+5s timeout, retry on fail)
+8	6696204	4.05	4.45	0	keep	Reduced timeout to 5s
 9	b8a15d4	-	-	-	keep	httpx connection pooling (persistent session, HTTP/2)
 10	08feecc	-	-	-	keep	Fix blog known_text to "browser-rendering"
 11	5eb173a	-	-	-	keep	Enrich metadata to 11 fields
-12	round2	4.30	4.80	+0.35	keep	ROUND 2: content_accuracy 4→5, output_quality 4→5
+12	b989f3b	4.30	4.80	+0.35	keep	ROUND 2: content_accuracy 4→5, output_quality 4→5
+13	46ea8fe	-	-	-	revert	Remove JS fallback for speed — wrong trade-off
+14	1dd27d3	4.30	1.00	-3.80	revert	Parallel race broke (httpx not thread-safe)
+15	ec09af3	-	-	-	keep	Restored smart JS fallback from round 2
