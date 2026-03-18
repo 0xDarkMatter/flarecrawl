@@ -71,6 +71,30 @@ TEST_URLS = [
         "expected_headings": 3,
         "expected_links_min": 5,
     },
+    {
+        "url": "https://react.dev",
+        "category": "spa",
+        "known_text": "React",
+        "js_text": None,
+        "expected_headings": 2,
+        "expected_links_min": 10,
+    },
+    {
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+        "category": "heavy-docs",
+        "known_text": "JavaScript",
+        "js_text": None,
+        "expected_headings": 5,
+        "expected_links_min": 20,
+    },
+    {
+        "url": "https://github.com/trending",
+        "category": "dynamic-heavy",
+        "known_text": "Trending",
+        "js_text": None,
+        "expected_headings": 0,
+        "expected_links_min": 20,
+    },
 ]
 
 # Pricing models
