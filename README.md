@@ -34,17 +34,36 @@ uv venv && uv pip install -e .
 
 ## Setup
 
-1. **Create an API token** at https://dash.cloudflare.com/profile/api-tokens
-2. Add permission: **Account → Browser Rendering → Edit**
-3. Authenticate:
+### 1. Create an API token
+
+1. Go to https://dash.cloudflare.com/profile/api-tokens
+2. Click **Create Token**
+3. Select **Create Custom Token**
+4. Configure:
+   - **Token name:** `Flarecrawl` (or anything)
+   - **Permissions:** Account → Browser Rendering → Edit
+   - **Account Resources:** Include → your account
+5. Click **Continue to summary** → **Create Token**
+6. Copy the token (shown only once)
+
+### 2. Find your Account ID
+
+1. Go to https://dash.cloudflare.com
+2. Click any domain (or the account overview)
+3. Look in the right sidebar under **Account ID**
+4. Copy the 32-character hex string
+
+### 3. Authenticate
 
 ```bash
+# Interactive (prompts for account ID and token)
 flarecrawl auth login
-# Or non-interactive:
+
+# Non-interactive
 flarecrawl auth login --account-id YOUR_ACCOUNT_ID --token YOUR_TOKEN
 ```
 
-4. Verify:
+### 4. Verify
 
 ```bash
 flarecrawl auth status

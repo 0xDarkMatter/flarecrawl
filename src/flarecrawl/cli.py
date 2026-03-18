@@ -250,12 +250,25 @@ def auth_login(
     # Validate credentials with a lightweight test
     console.print("Validating credentials...", style="dim")
     try:
-        client = Client(account_id=account_id, api_token=token)
+        client = Client(account_id=account_id, api_token=token, cache_ttl=0)
         client.get_content(html="<h1>test</h1>")
         console.print("[green]Credentials valid[/green]")
     except FlareCrawlError as e:
-        console.print(f"[red]Validation failed:[/red] {e}")
-        console.print("Saving credentials anyway — they may work for other endpoints.")
+        code = getattr(e, "code", "")
+        status = getattr(e, "status_code", None)
+        if code == "AUTH_REQUIRED" or status == 401 or "authentication" in str(e).lower():
+            console.print("[red]Authentication failed:[/red] Invalid API token")
+            console.print("Check your token at: https://dash.cloudflare.com/profile/api-tokens")
+        elif code == "FORBIDDEN" or status == 403:
+            console.print("[red]Permission denied:[/red] Token missing 'Browser Rendering - Edit' permission")
+            console.print("Edit your token at: https://dash.cloudflare.com/profile/api-tokens")
+            console.print("Add: Account > Browser Rendering > Edit")
+        elif "route" in str(e).lower() or status == 404:
+            console.print("[red]Account not found:[/red] Check your account ID")
+            console.print("Find it at: https://dash.cloudflare.com > any domain > Overview > Account ID (right sidebar)")
+        else:
+            console.print(f"[yellow]Validation warning:[/yellow] {e}")
+            console.print("This may be a temporary issue. Credentials saved -- try a scrape to verify.")
 
     save_credentials(account_id, token)
     console.print("[green]Credentials saved[/green]")
