@@ -1,6 +1,0 @@
-Timing: {
-  "url": "https://httpbin.org",
-  "requestTime": "2026-03-18T10:53:47.516Z",
-  "duration": "904ms",
-  "status": "success"
-}

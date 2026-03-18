@@ -1,2 +1,7 @@
 iteration	commit	fc_total	fl_total	delta	status	description
 0	baseline	4.05	4.55	0	baseline	Initial benchmark scores
+1	b47567c	-	-	-	keep	networkidle0 default (httpbin 493->1292 chars)
+2	30f48b4	-	-	-	keep	Enrich metadata (5 fields vs 1)
+3	4376cf7	-	-	-	keep	Add file-based cache (7x speedup on hits)
+4	c807746	4.05	4.15	-0.40	revert-partial	networkidle2 hurt speed (19s blog timeout)
+5	c6c4ca1	4.05	4.35	-0.20	keep	Reverted networkidle default, added --wait-until flag
