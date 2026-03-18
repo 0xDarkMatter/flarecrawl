@@ -7,3 +7,4 @@ iteration	commit	fc_total	fl_total	delta	status	description
 5	c6c4ca1	4.05	4.35	-0.20	keep	Reverted networkidle default, added --wait-until flag
 6	73d2483	-	-	-	keep	Updated benchmark report
 7	aa8becc	4.05	4.45	+0.10	keep	Smart JS fallback (networkidle0+8s timeout, retry on fail)
+8	6696204	4.05	4.45	0	keep	Reduced timeout to 5s (blog 12s->7.6s, httpbin still works)
