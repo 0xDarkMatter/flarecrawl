@@ -233,12 +233,15 @@ def run_firecrawl(url: str, timeout: int = 60) -> dict:
     return result
 
 
-def run_flarecrawl(url: str, timeout: int = 60) -> dict:
+def run_flarecrawl(url: str, timeout: int = 60, js_mode: bool = False) -> dict:
     """Run flarecrawl scrape and return parsed result."""
+    cmd = ["flarecrawl", "scrape", url, "--json", "--timing", "--no-cache"]
+    if js_mode:
+        cmd.append("--js")
     start = time.perf_counter()
     try:
         proc = subprocess.run(
-            ["flarecrawl", "scrape", url, "--json", "--timing", "--no-cache"],
+            cmd,
             capture_output=True,
             timeout=timeout,
         )
@@ -325,7 +328,9 @@ def run_single(tool: str, url_config: dict, run_num: int) -> ScrapeResult:
     if tool == "firecrawl":
         raw = run_firecrawl(url)
     else:
-        raw = run_flarecrawl(url)
+        # Use --js mode for URLs that define js_text (need JS rendering)
+        needs_js = url_config.get("js_text") is not None
+        raw = run_flarecrawl(url, js_mode=needs_js)
 
     result.exit_code = raw.get("exit_code", -1)
     result.elapsed_s = raw.get("elapsed", 0.0)
