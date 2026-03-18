@@ -32,12 +32,12 @@ packages = ["src/flarecrawl"]
 # ============================================================
 # FABRIC METADATA (Required for registry)
 # ============================================================
-[tool.fabric]
+[tool.clique]
 description = "Cloudflare Browser Rendering - scrape, crawl, map, download, extract, screenshot, pdf, favicon"
 resources = ["scrape", "crawl", "map", "download", "extract", "screenshot", "pdf", "favicon"]
 auth = "api_key"
 status = "experimental"
-origin = "fabric"
+origin = "clique"
 env-key = "FLARECRAWL_API_TOKEN"
 api-url = "https://dash.cloudflare.com/"
 system-deps = []

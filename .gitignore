@@ -28,3 +28,4 @@ htmlcov/
 
 # Locks
 uv.lock
+.env
