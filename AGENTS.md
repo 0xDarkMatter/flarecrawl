@@ -26,8 +26,13 @@
 | PDF | `flarecrawl pdf URL -o file.pdf` |
 | Favicon (best) | `flarecrawl favicon URL` |
 | Favicon (all) | `flarecrawl favicon URL --all --json` |
+| Scrape with JS rendering | `flarecrawl scrape URL --js` |
+| Scrape (bypass cache) | `flarecrawl scrape URL --no-cache` |
+| Scrape (custom wait) | `flarecrawl scrape URL --wait-until networkidle2` |
 | Check usage | `flarecrawl usage --json` |
 | Auth status | `flarecrawl auth status --json` |
+| Cache status | `flarecrawl cache status --json` |
+| Clear cache | `flarecrawl cache clear` |
 
 ## Authentication
 
@@ -373,6 +378,11 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 10. **Map before crawling** — `flarecrawl map URL --json` shows what pages exist
 11. **Retry is automatic** — 429, 502, 503 errors retry 3 times with backoff
 12. **Free tier: `--workers 3`**, paid tier: up to `--workers 10`
+13. **Responses are cached** for 1 hour by default — use `--no-cache` for fresh data
+14. **Use `--js`** on JS-heavy pages (SPAs, Swagger UIs) — waits for networkidle0
+15. **Images/fonts/media/stylesheets skipped** by default for faster text extraction
+16. **Connection pooling + HTTP/2** — persistent session reuses TCP/TLS across requests
+17. **Batch mode fails fast** on auth/permission errors — won't retry 401/403
 
 ## Pricing Reference
 

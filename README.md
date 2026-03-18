@@ -92,6 +92,15 @@ flarecrawl scrape https://example.com --format links --json
 
 # Take screenshot via scrape
 flarecrawl scrape https://example.com --screenshot -o page.png
+
+# Wait for JS rendering (SPAs, Swagger UIs)
+flarecrawl scrape https://example.com --js
+
+# Bypass response cache
+flarecrawl scrape https://example.com --no-cache
+
+# Custom page load strategy
+flarecrawl scrape https://example.com --wait-until networkidle2
 ```
 
 **Formats:** `markdown` (default), `html`, `links`, `screenshot`, `json` (AI extraction)
@@ -268,6 +277,34 @@ flarecrawl auth status                   # Human-readable
 flarecrawl auth status --json            # Machine-readable
 flarecrawl auth logout                   # Clear credentials
 ```
+
+### cache — Response cache management
+
+```bash
+flarecrawl cache status                  # Show entries, size, path
+flarecrawl cache status --json           # Machine-readable
+flarecrawl cache clear                   # Remove all cached responses
+```
+
+Responses are cached for 1 hour by default. Use `--no-cache` on any command to bypass.
+
+### Performance features
+
+- **Response caching** — 1-hour TTL, saves redundant browser renders
+- **Connection pooling** — persistent httpx session with HTTP/2 support
+- **Resource rejection** — skips images/fonts/media/stylesheets for text extraction
+- **JS rendering** — opt-in via `--js` flag (waits for networkidle0)
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLARECRAWL_ACCOUNT_ID` | — | Cloudflare account ID |
+| `FLARECRAWL_API_TOKEN` | — | Cloudflare API token |
+| `FLARECRAWL_CACHE_TTL` | 3600 | Cache TTL in seconds |
+| `FLARECRAWL_MAX_RETRIES` | 3 | Max retry attempts |
+| `FLARECRAWL_MAX_WORKERS` | 10 | Max parallel workers |
+| `FLARECRAWL_TIMEOUT` | 120 | Request timeout in seconds |
 
 ## Firecrawl Compatibility
 
