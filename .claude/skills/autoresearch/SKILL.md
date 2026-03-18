@@ -6,7 +6,7 @@ allowed-tools: "Read Write Edit Bash Glob Grep Agent TaskCreate TaskUpdate TaskL
 
 # Autoresearch: Autonomous Improvement Loop
 
-Run a self-directed improvement loop on any measurable codebase metric. Inspired by [uditgoenka/autoresearch](https://github.com/uditgoenka/autoresearch).
+Run a self-directed improvement loop on any measurable codebase metric. Inspired by Andrej Karpathy's approach to systematic, measurable iteration.
 
 ## Core Protocol
 

@@ -357,29 +357,12 @@ class Client:
     def get_markdown(self, url: str, **kwargs) -> str:
         """Extract markdown from page. Returns markdown string.
 
-        Default strategy: try networkidle0 with 5s timeout for JS rendering.
-        If the page times out (analytics-heavy), retry with default waitUntil.
-        Override via wait_until kwarg.
+        Uses CF default waitUntil (load) for speed. For JS-heavy pages,
+        use --wait-until networkidle0 or networkidle2.
         """
-        user_specified_wait = "wait_until" in kwargs
-        if not user_specified_wait:
-            kwargs["wait_until"] = "networkidle0"
-            kwargs.setdefault("timeout", 5000)
-
         body = self._build_body(url=url, **kwargs)
-        try:
-            result = self._post_json("markdown", body)
-            return result.get("result", result)
-        except FlareCrawlError as e:
-            # If user specified wait_until, don't retry — respect their choice
-            if user_specified_wait or "timeout" not in str(e).lower():
-                raise
-            # Retry without networkidle0 (use CF default: load)
-            kwargs_retry = {k: v for k, v in kwargs.items()
-                           if k not in ("wait_until", "timeout")}
-            body = self._build_body(url=url, **kwargs_retry)
-            result = self._post_json("markdown", body)
-            return result.get("result", result)
+        result = self._post_json("markdown", body)
+        return result.get("result", result)
 
     def take_screenshot(self, url: str, **kwargs) -> bytes:
         """Capture screenshot. Returns binary PNG/JPEG."""
