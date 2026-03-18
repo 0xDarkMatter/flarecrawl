@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Iterator
+from collections.abc import Iterator
 
 import httpx
 
@@ -458,8 +458,7 @@ class Client:
         while True:
             result = self.crawl_get(job_id, limit=100, cursor=cursor, status=status)
             records = result.get("records", [])
-            for record in records:
-                yield record
+            yield from records
             cursor = result.get("cursor")
             if not cursor or not records:
                 break

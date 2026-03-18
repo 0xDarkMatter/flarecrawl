@@ -10,7 +10,7 @@ import re
 import sys
 import time as _time
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 from urllib.parse import urlparse
 
 import typer
@@ -202,11 +202,11 @@ def status_callback(value: bool):
 @app.callback()
 def main(
     version: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option("--version", "-V", callback=version_callback, is_eager=True),
     ] = None,
     status: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option("--status", callback=status_callback, is_eager=True,
                      help="Show version, auth status, and usage info"),
     ] = None,
@@ -225,10 +225,10 @@ app.add_typer(auth_app, name="auth")
 @auth_app.command("login")
 def auth_login(
     account_id: Annotated[
-        Optional[str], typer.Option("--account-id", help="Cloudflare account ID")
+        str | None, typer.Option("--account-id", help="Cloudflare account ID")
     ] = None,
     token: Annotated[
-        Optional[str], typer.Option("--token", help="Cloudflare API token")
+        str | None, typer.Option("--token", help="Cloudflare API token")
     ] = None,
 ):
     """Authenticate with Cloudflare Browser Rendering.
@@ -276,7 +276,7 @@ def auth_status(
         return
 
     if status.get("authenticated"):
-        console.print(f"Authenticated: [green]yes[/green]")
+        console.print("Authenticated: [green]yes[/green]")
         console.print(f"Source: [cyan]{status.get('source')}[/cyan]")
         console.print(f"Account: [cyan]{status.get('account_id')}[/cyan]")
     else:
@@ -383,21 +383,21 @@ def scrape(
         str,
         typer.Option("--format", "-f", help="Output format: markdown, html, links, screenshot, json"),
     ] = "markdown",
-    wait_for: Annotated[Optional[int], typer.Option("--wait-for", help="Wait time in ms")] = None,
-    wait_until: Annotated[Optional[str], typer.Option("--wait-until", help="Page load event: load, domcontentloaded, networkidle0, networkidle2")] = None,
+    wait_for: Annotated[int | None, typer.Option("--wait-for", help="Wait time in ms")] = None,
+    wait_until: Annotated[str | None, typer.Option("--wait-until", help="Page load event: load, domcontentloaded, networkidle0, networkidle2")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
     screenshot: Annotated[bool, typer.Option("--screenshot", help="Take screenshot")] = False,
     full_page_screenshot: Annotated[bool, typer.Option("--full-page-screenshot", help="Full page screenshot")] = False,
-    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file path")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file path")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     timing: Annotated[bool, typer.Option("--timing", help="Show timing info")] = False,
-    timeout: Annotated[Optional[int], typer.Option("--timeout", help="Request timeout in ms")] = None,
-    fields: Annotated[Optional[str], typer.Option("--fields", help="Comma-separated fields to include in JSON")] = None,
-    input_file: Annotated[Optional[Path], typer.Option("--input", "-i", help="File with URLs (one per line)")] = None,
-    batch: Annotated[Optional[Path], typer.Option("--batch", "-b", help="Batch input file (JSON array, NDJSON, or text)")] = None,
+    timeout: Annotated[int | None, typer.Option("--timeout", help="Request timeout in ms")] = None,
+    fields: Annotated[str | None, typer.Option("--fields", help="Comma-separated fields to include in JSON")] = None,
+    input_file: Annotated[Path | None, typer.Option("--input", "-i", help="File with URLs (one per line)")] = None,
+    batch: Annotated[Path | None, typer.Option("--batch", "-b", help="Batch input file (JSON array, NDJSON, or text)")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
     workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
-    body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body (overrides all flags)")] = None,
+    body: Annotated[str | None, typer.Option("--body", help="Raw JSON body (overrides all flags)")] = None,
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
-    js: Annotated[bool, typer.Option("--js", help="Wait for JS rendering (networkidle0, slower but captures dynamic content)")] = False,
+    js: Annotated[bool, typer.Option("--js", help="Wait for JS rendering (networkidle0, slower but captures dynamic content)")] = False,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -589,23 +589,23 @@ def crawl(
     url_or_job_id: Annotated[str, typer.Argument(help="URL to crawl or job ID to check")],
     wait: Annotated[bool, typer.Option("--wait", help="Wait for completion")] = False,
     poll_interval: Annotated[int, typer.Option("--poll-interval", help="Poll interval in seconds")] = 5,
-    timeout: Annotated[Optional[int], typer.Option("--timeout", help="Timeout in seconds")] = None,
+    timeout: Annotated[int | None, typer.Option("--timeout", help="Timeout in seconds")] = None,
     progress: Annotated[bool, typer.Option("--progress", help="Show progress")] = False,
-    limit: Annotated[Optional[int], typer.Option("--limit", help="Max pages to crawl")] = None,
-    max_depth: Annotated[Optional[int], typer.Option("--max-depth", help="Max crawl depth")] = None,
-    exclude_paths: Annotated[Optional[str], typer.Option("--exclude-paths", help="Comma-separated exclude patterns")] = None,
-    include_paths: Annotated[Optional[str], typer.Option("--include-paths", help="Comma-separated include patterns")] = None,
+    limit: Annotated[int | None, typer.Option("--limit", help="Max pages to crawl")] = None,
+    max_depth: Annotated[int | None, typer.Option("--max-depth", help="Max crawl depth")] = None,
+    exclude_paths: Annotated[str | None, typer.Option("--exclude-paths", help="Comma-separated exclude patterns")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
+    include_paths: Annotated[str | None, typer.Option("--include-paths", help="Comma-separated include patterns")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
     allow_external: Annotated[bool, typer.Option("--allow-external-links", help="Follow external links")] = False,
     allow_subdomains: Annotated[bool, typer.Option("--allow-subdomains", help="Follow subdomains")] = False,
     format: Annotated[str, typer.Option("--format", "-f", help="Output format: markdown, html, json")] = "markdown",
     no_render: Annotated[bool, typer.Option("--no-render", help="Skip JS rendering (faster)")] = False,
-    source: Annotated[Optional[str], typer.Option("--source", help="URL source: all, sitemaps, links")] = None,
-    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file")] = None,
+    source: Annotated[str | None, typer.Option("--source", help="URL source: all, sitemaps, links")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = True,
     ndjson: Annotated[bool, typer.Option("--ndjson", help="Stream one JSON record per line")] = False,
-    fields: Annotated[Optional[str], typer.Option("--fields", help="Comma-separated fields per record")] = None,
+    fields: Annotated[str | None, typer.Option("--fields", help="Comma-separated fields per record")] = None,
     status_check: Annotated[bool, typer.Option("--status", help="Check status of existing job")] = False,
-    body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body")] = None,
+    body: Annotated[str | None, typer.Option("--body", help="Raw JSON body")] = None,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -750,11 +750,11 @@ def crawl(
 @app.command("map")
 def map_urls(
     url: Annotated[str, typer.Argument(help="URL to map")],
-    limit: Annotated[Optional[int], typer.Option("--limit", help="Max URLs to discover")] = None,
+    limit: Annotated[int | None, typer.Option("--limit", help="Max URLs to discover")] = None,
     include_subdomains: Annotated[bool, typer.Option("--include-subdomains", help="Include subdomains")] = False,
-    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
-    body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body")] = None,
+    body: Annotated[str | None, typer.Option("--body", help="Raw JSON body")] = None,
 ):
     """Discover all URLs on a website.
 
@@ -811,9 +811,9 @@ def map_urls(
 @app.command()
 def download(
     url: Annotated[str, typer.Argument(help="URL to download")],
-    limit: Annotated[Optional[int], typer.Option("--limit", help="Max pages")] = None,
-    include_paths: Annotated[Optional[str], typer.Option("--include-paths", help="Include path patterns (comma-separated)")] = None,
-    exclude_paths: Annotated[Optional[str], typer.Option("--exclude-paths", help="Exclude path patterns (comma-separated)")] = None,
+    limit: Annotated[int | None, typer.Option("--limit", help="Max pages")] = None,
+    include_paths: Annotated[str | None, typer.Option("--include-paths", help="Include path patterns (comma-separated)")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
+    exclude_paths: Annotated[str | None, typer.Option("--exclude-paths", help="Exclude path patterns (comma-separated)")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
     allow_subdomains: Annotated[bool, typer.Option("--allow-subdomains", help="Include subdomains")] = False,
     format: Annotated[str, typer.Option("--format", "-f", help="Format: markdown, html")] = "markdown",
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation")] = False,
@@ -916,14 +916,14 @@ def download(
 @app.command()
 def extract(
     prompt: Annotated[str, typer.Argument(help="Natural language prompt for extraction")],
-    urls: Annotated[Optional[str], typer.Option("--urls", help="Comma-separated URLs")] = None,
-    schema: Annotated[Optional[str], typer.Option("--schema", help="JSON schema (inline string)")] = None,
-    schema_file: Annotated[Optional[Path], typer.Option("--schema-file", help="Path to JSON schema file")] = None,
-    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file")] = None,
+    urls: Annotated[str | None, typer.Option("--urls", help="Comma-separated URLs")] = None,
+    schema: Annotated[str | None, typer.Option("--schema", help="JSON schema (inline string)")] = None,
+    schema_file: Annotated[Path | None, typer.Option("--schema-file", help="Path to JSON schema file")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
-    batch: Annotated[Optional[Path], typer.Option("--batch", "-b", help="Batch input file with URLs")] = None,
+    batch: Annotated[Path | None, typer.Option("--batch", "-b", help="Batch input file with URLs")] = None,
     workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
-    body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body")] = None,
+    body: Annotated[str | None, typer.Option("--body", help="Raw JSON body")] = None,
 ):
     """AI-powered structured data extraction from web pages.
 
@@ -1049,13 +1049,13 @@ def screenshot(
     output: Annotated[Path, typer.Option("--output", "-o", help="Output file")] = Path("screenshot.png"),
     full_page: Annotated[bool, typer.Option("--full-page", help="Capture full page")] = False,
     format: Annotated[str, typer.Option("--format", help="Image format: png, jpeg")] = "png",
-    width: Annotated[Optional[int], typer.Option("--width", help="Viewport width")] = None,
-    height: Annotated[Optional[int], typer.Option("--height", help="Viewport height")] = None,
-    selector: Annotated[Optional[str], typer.Option("--selector", help="CSS selector to capture")] = None,
-    wait_for: Annotated[Optional[str], typer.Option("--wait-for", help="CSS selector to wait for")] = None,
-    timeout: Annotated[Optional[int], typer.Option("--timeout", help="Timeout in ms")] = None,
+    width: Annotated[int | None, typer.Option("--width", help="Viewport width")] = None,
+    height: Annotated[int | None, typer.Option("--height", help="Viewport height")] = None,
+    selector: Annotated[str | None, typer.Option("--selector", help="CSS selector to capture")] = None,
+    wait_for: Annotated[str | None, typer.Option("--wait-for", help="CSS selector to wait for")] = None,
+    timeout: Annotated[int | None, typer.Option("--timeout", help="Timeout in ms")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON (base64)")] = False,
-    body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body")] = None,
+    body: Annotated[str | None, typer.Option("--body", help="Raw JSON body")] = None,
 ):
     """Capture a screenshot of a web page.
 
@@ -1120,9 +1120,9 @@ def pdf(
     landscape: Annotated[bool, typer.Option("--landscape", help="Landscape orientation")] = False,
     format: Annotated[str, typer.Option("--format", help="Paper format: letter, a4")] = "letter",
     print_background: Annotated[bool, typer.Option("--print-background", help="Include background")] = True,
-    timeout: Annotated[Optional[int], typer.Option("--timeout", help="Timeout in ms")] = None,
+    timeout: Annotated[int | None, typer.Option("--timeout", help="Timeout in ms")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON (base64)")] = False,
-    body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body")] = None,
+    body: Annotated[str | None, typer.Option("--body", help="Raw JSON body")] = None,
 ):
     """Render a web page as PDF.
 
@@ -1219,7 +1219,7 @@ def favicon(
     url: Annotated[str, typer.Argument(help="URL to extract favicon from")],
     all_icons: Annotated[bool, typer.Option("--all", help="Show all found icons, not just the best")] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
-    timeout: Annotated[Optional[int], typer.Option("--timeout", help="Timeout in ms")] = None,
+    timeout: Annotated[int | None, typer.Option("--timeout", help="Timeout in ms")] = None,
 ):
     """Extract favicon URL from a web page.
 
@@ -1322,11 +1322,11 @@ def usage(
     console.print(f"  Browser time: [cyan]{today_ms / 1000:.1f}s[/cyan] / 600s free ({today_pct:.1f}%)")
 
     if today_pct < 50:
-        console.print(f"  Status: [green]well within free tier[/green]")
+        console.print("  Status: [green]well within free tier[/green]")
     elif today_pct < 90:
-        console.print(f"  Status: [yellow]approaching daily limit[/yellow]")
+        console.print("  Status: [yellow]approaching daily limit[/yellow]")
     else:
-        console.print(f"  Status: [red]at/over free tier limit[/red]")
+        console.print("  Status: [red]at/over free tier limit[/red]")
 
     if len(usage_data) > 1:
         console.print()
@@ -1343,7 +1343,7 @@ def usage(
 
     console.print()
     console.print(f"[dim]Total tracked: {total_ms / 1000:.1f}s | Est. cost: ${cost_estimate:.4f}[/dim]")
-    console.print(f"[dim]Pricing: Free 10 min/day, then $0.09/hr[/dim]")
+    console.print("[dim]Pricing: Free 10 min/day, then $0.09/hr[/dim]")
 
 
 if __name__ == "__main__":
