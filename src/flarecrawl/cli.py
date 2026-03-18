@@ -305,7 +305,8 @@ def auth_logout():
 
 def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    screenshot: bool, full_page_screenshot: bool,
-                   raw_body: dict | None, timeout_ms: int | None) -> dict:
+                   raw_body: dict | None, timeout_ms: int | None,
+                   wait_until: str | None = None) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
     kwargs = {}
@@ -313,6 +314,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         kwargs["timeout"] = wait_for
     if timeout_ms:
         kwargs["timeout"] = timeout_ms
+    if wait_until:
+        kwargs["wait_until"] = wait_until
 
     if raw_body:
         body_copy = {**raw_body, "url": url}
@@ -366,6 +369,7 @@ def scrape(
         typer.Option("--format", "-f", help="Output format: markdown, html, links, screenshot, json"),
     ] = "markdown",
     wait_for: Annotated[Optional[int], typer.Option("--wait-for", help="Wait time in ms")] = None,
+    wait_until: Annotated[Optional[str], typer.Option("--wait-until", help="Page load event: load, domcontentloaded, networkidle0, networkidle2")] = None,
     screenshot: Annotated[bool, typer.Option("--screenshot", help="Take screenshot")] = False,
     full_page_screenshot: Annotated[bool, typer.Option("--full-page-screenshot", help="Full page screenshot")] = False,
     output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file path")] = None,
@@ -437,6 +441,7 @@ def scrape(
             return await asyncio.to_thread(
                 _scrape_single, client, url, format, wait_for,
                 screenshot, full_page_screenshot, raw_body, timeout,
+                wait_until,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -491,6 +496,7 @@ def scrape(
                 pool.submit(
                     _scrape_single, client, url, format, wait_for,
                     screenshot, full_page_screenshot, raw_body, timeout,
+                    wait_until,
                 ): url
                 for url in all_urls
             }
@@ -512,7 +518,8 @@ def scrape(
         url = all_urls[0]
         try:
             result = _scrape_single(client, url, format, wait_for, screenshot,
-                                    full_page_screenshot, raw_body, timeout)
+                                    full_page_screenshot, raw_body, timeout,
+                                    wait_until=wait_until)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
