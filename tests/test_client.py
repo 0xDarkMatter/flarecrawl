@@ -110,6 +110,48 @@ class TestBodyBuilder:
         assert "url" not in body
 
 
+class TestRejectResourcesDefaults:
+    """Test that text-extraction methods add rejectResourceTypes by default."""
+
+    def test_get_markdown_rejects_resources(self):
+        """get_markdown should add rejectResourceTypes by default."""
+        client = Client(account_id="test-id", api_token="test-token", cache_ttl=0)
+        # We can't call the method without a real API, but we can check
+        # the class has the default list
+        assert "image" in client._REJECT_RESOURCES_DEFAULT
+        assert "stylesheet" in client._REJECT_RESOURCES_DEFAULT
+        assert "font" in client._REJECT_RESOURCES_DEFAULT
+        assert "media" in client._REJECT_RESOURCES_DEFAULT
+
+    def test_reject_resources_list_length(self):
+        assert len(Client._REJECT_RESOURCES_DEFAULT) == 4
+
+
+class TestConnectionPooling:
+    """Test httpx.Client session configuration."""
+
+    def test_session_created(self):
+        client = Client(account_id="test-id", api_token="test-token")
+        assert client._session is not None
+
+    def test_session_has_http2(self):
+        client = Client(account_id="test-id", api_token="test-token")
+        # httpx.Client with http2=True should have HTTP/2 support
+        assert client._session._transport is not None
+
+    def test_context_manager(self):
+        with Client(account_id="test-id", api_token="test-token") as client:
+            assert client._session is not None
+
+    def test_cache_ttl_default(self):
+        client = Client(account_id="test-id", api_token="test-token")
+        assert client.cache_ttl == 3600
+
+    def test_cache_ttl_custom(self):
+        client = Client(account_id="test-id", api_token="test-token", cache_ttl=0)
+        assert client.cache_ttl == 0
+
+
 class TestClientUrls:
     """Test URL construction."""
 

@@ -96,6 +96,18 @@ class TestHelp:
         result = runner.invoke(app, ["scrape", "--help"])
         assert "--only-main-content" not in result.output
 
+    def test_scrape_has_js_flag(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--js" in result.output
+
+    def test_scrape_has_no_cache_flag(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--no-cache" in result.output
+
+    def test_scrape_has_wait_until_flag(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--wait-until" in result.output
+
 
 class TestAuth:
     """Test auth commands."""
