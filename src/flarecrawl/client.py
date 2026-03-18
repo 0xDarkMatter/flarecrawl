@@ -26,12 +26,17 @@ class Client:
     TIMEOUT = 120  # Browser rendering can be slow
     MAX_RETRIES = 3
     RETRY_CODES = {429, 503, 502}
+    # Endpoints whose responses can be cached
+    CACHEABLE_ENDPOINTS = {"markdown", "content", "links", "json"}
 
-    def __init__(self, account_id: str | None = None, api_token: str | None = None):
+    def __init__(self, account_id: str | None = None, api_token: str | None = None,
+                 cache_ttl: int = 3600):
         self.account_id = account_id or get_account_id()
         self.api_token = api_token or get_api_token()
         # Track cumulative browser time (ms) from X-Browser-Ms-Used headers
         self.browser_ms_used = 0
+        # Cache TTL in seconds (0 = disabled)
+        self.cache_ttl = cache_ttl
 
     @property
     def _base(self) -> str:
@@ -108,7 +113,14 @@ class Client:
         raise FlareCrawlError("Max retries exceeded", "TIMEOUT") from last_exc
 
     def _post_json(self, endpoint: str, body: dict) -> dict:
-        """POST returning JSON response with retry."""
+        """POST returning JSON response with retry and optional caching."""
+        # Check cache for cacheable endpoints
+        if self.cache_ttl > 0 and endpoint in self.CACHEABLE_ENDPOINTS:
+            from . import cache
+            cached = cache.get(endpoint, body, ttl=self.cache_ttl)
+            if cached is not None:
+                return cached
+
         response = self._retry_request(
             "post",
             f"{self._base}/{endpoint}",
@@ -119,7 +131,14 @@ class Client:
         if response.status_code >= 400:
             self._handle_error(response)
         self._track_browser_time(response)
-        return response.json()
+        result = response.json()
+
+        # Store in cache
+        if self.cache_ttl > 0 and endpoint in self.CACHEABLE_ENDPOINTS:
+            from . import cache
+            cache.put(endpoint, body, result)
+
+        return result
 
     def _post_binary(self, endpoint: str, body: dict) -> tuple[bytes, dict]:
         """POST returning binary response (screenshot, pdf) with retry."""

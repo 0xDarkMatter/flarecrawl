@@ -165,10 +165,10 @@ def _sanitize_filename(url: str) -> str:
     return name or "index"
 
 
-def _get_client(as_json: bool = False) -> Client:
+def _get_client(as_json: bool = False, cache_ttl: int = 3600) -> Client:
     """Get authenticated client."""
     _require_auth(as_json)
-    return Client()
+    return Client(cache_ttl=cache_ttl)
 
 
 # ------------------------------------------------------------------
@@ -377,11 +377,13 @@ def scrape(
     batch: Annotated[Optional[Path], typer.Option("--batch", "-b", help="Batch input file (JSON array, NDJSON, or text)")] = None,
     workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
     body: Annotated[Optional[str], typer.Option("--body", help="Raw JSON body (overrides all flags)")] = None,
+    no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
     Multiple URLs are scraped concurrently. Use --batch for file input
-    with NDJSON output and configurable workers.
+    with NDJSON output and configurable workers. Responses are cached
+    for 1 hour by default (use --no-cache to bypass).
 
     Example:
         flarecrawl scrape https://example.com
@@ -401,7 +403,8 @@ def scrape(
     batch_file = batch or input_file
     is_batch_mode = batch is not None
 
-    client = _get_client(json_output or is_batch_mode)
+    cache_ttl = 0 if no_cache else 3600
+    client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
     raw_body = _parse_body(body, json_output or is_batch_mode)
 
     # Load URLs
