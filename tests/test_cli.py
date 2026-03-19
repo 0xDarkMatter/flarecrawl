@@ -675,3 +675,48 @@ class TestBackupDir:
     def test_download_has_backup_dir(self):
         result = runner.invoke(app, ["download", "--help"])
         assert "--backup-dir" in result.output
+
+
+class TestSanitizeFilename:
+    """Test URL to filename conversion edge cases."""
+
+    def test_basic_path(self):
+        from flarecrawl.cli import _sanitize_filename
+        assert _sanitize_filename("https://example.com/about") == "about"
+
+    def test_index(self):
+        from flarecrawl.cli import _sanitize_filename
+        assert _sanitize_filename("https://example.com/") == "index"
+        assert _sanitize_filename("https://example.com") == "index"
+
+    def test_query_params_preserved(self):
+        from flarecrawl.cli import _sanitize_filename
+        name = _sanitize_filename("https://example.com/search?q=test&page=2")
+        assert "search" in name
+        assert "q-test" in name
+        assert "page-2" in name
+
+    def test_different_queries_different_names(self):
+        from flarecrawl.cli import _sanitize_filename
+        name1 = _sanitize_filename("https://example.com/search?q=cats")
+        name2 = _sanitize_filename("https://example.com/search?q=dogs")
+        assert name1 != name2
+
+    def test_long_url_truncated(self):
+        from flarecrawl.cli import _sanitize_filename
+        long_url = "https://example.com/" + "a" * 300
+        name = _sanitize_filename(long_url)
+        assert len(name) <= 210  # 200 + hash suffix
+
+    def test_nested_path(self):
+        from flarecrawl.cli import _sanitize_filename
+        name = _sanitize_filename("https://example.com/blog/2024/my-post")
+        assert "blog" in name
+        assert "2024" in name
+        assert "my-post" in name
+
+    def test_special_chars(self):
+        from flarecrawl.cli import _sanitize_filename
+        name = _sanitize_filename("https://example.com/page?id=1&lang=en&sort=date")
+        assert "id-1" in name
+        assert "lang-en" in name

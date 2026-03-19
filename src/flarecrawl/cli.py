@@ -221,12 +221,21 @@ def _parse_headers(headers: list[str] | None, as_json: bool = False) -> dict | N
 
 
 def _sanitize_filename(url: str) -> str:
-    """Convert URL to safe filename."""
+    """Convert URL to safe filename, preserving query params for uniqueness."""
     parsed = urlparse(url)
     path = parsed.path.strip("/") or "index"
+    # Include query params in filename to avoid collisions
+    # /search?q=test&page=2 -> search--q-test-page-2
+    if parsed.query:
+        path = f"{path}--{parsed.query}"
     # Replace path separators and unsafe chars
     name = re.sub(r'[^\w\-.]', '-', path)
     name = re.sub(r'-+', '-', name).strip('-')
+    # Truncate to avoid filesystem path limits (255 chars max for filename)
+    if len(name) > 200:
+        import hashlib
+        suffix = hashlib.md5(name.encode()).hexdigest()[:8]
+        name = f"{name[:190]}--{suffix}"
     return name or "index"
 
 
