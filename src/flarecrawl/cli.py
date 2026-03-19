@@ -1884,7 +1884,6 @@ def discover(
         flarecrawl discover https://example.com --sitemap --no-feed --no-links
         flarecrawl discover https://example.com --limit 100
     """
-    import xml.etree.ElementTree as ET
     from urllib.parse import urljoin, urlparse
 
     cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
@@ -1909,51 +1908,60 @@ def discover(
     if user_agent:
         kwargs["user_agent"] = user_agent
 
+    def _extract_locs_from_xml(html_or_xml: str) -> tuple[list[str], list[str]]:
+        """Extract <loc> URLs from sitemap/feed XML (may be wrapped in HTML by CF).
+
+        Returns (page_urls, sub_sitemap_urls).
+        """
+        from bs4 import BeautifulSoup
+        # CF renders XML as HTML — use BS to extract text content of <loc> tags
+        soup = BeautifulSoup(html_or_xml, "lxml")
+        pages, sub_sitemaps = [], []
+        for loc in soup.find_all("loc"):
+            text = loc.get_text(strip=True)
+            if not text or not text.startswith("http"):
+                continue
+            if text.endswith(".xml") or "sitemap" in text.lower():
+                sub_sitemaps.append(text)
+            else:
+                pages.append(text)
+        return pages, sub_sitemaps
+
     # 1. XML Sitemap
     if sitemap:
         console.print("[dim]Checking sitemaps...[/dim]")
-        sitemap_urls_to_check = [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml"]
-        # Also check robots.txt for sitemap directives
+        sitemap_queue = [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml"]
+        visited_sitemaps: set[str] = set()
+
+        # Check robots.txt for sitemap directives
         try:
             robots_html = client.get_content(f"{base}/robots.txt", **kwargs)
             for line in robots_html.splitlines():
-                if line.lower().startswith("sitemap:"):
-                    sm_url = line.split(":", 1)[1].strip()
-                    if sm_url and sm_url not in sitemap_urls_to_check:
-                        sitemap_urls_to_check.append(sm_url)
+                stripped = line.strip()
+                if stripped.lower().startswith("sitemap:"):
+                    sm_url = stripped.split(":", 1)[1].strip()
+                    # robots.txt rendered by CF may have extra "Sitemap" prefix
+                    if sm_url.startswith("http") and sm_url not in sitemap_queue:
+                        sitemap_queue.append(sm_url)
         except FlareCrawlError:
             pass
 
-        for sm_url in sitemap_urls_to_check:
+        # Process sitemap queue (handles sitemap indexes recursively)
+        while sitemap_queue:
+            sm_url = sitemap_queue.pop(0)
+            if sm_url in visited_sitemaps:
+                continue
+            visited_sitemaps.add(sm_url)
             try:
                 sm_html = client.get_content(sm_url, **kwargs)
-                # Strip HTML wrapper if CF returned rendered version
-                if "<urlset" in sm_html or "<sitemapindex" in sm_html:
-                    # Extract XML from possible HTML wrapper
-                    xml_start = sm_html.find("<?xml")
-                    if xml_start == -1:
-                        xml_start = sm_html.find("<urlset")
-                    if xml_start == -1:
-                        xml_start = sm_html.find("<sitemapindex")
-                    if xml_start >= 0:
-                        xml_text = sm_html[xml_start:]
-                        # Remove any trailing HTML
-                        for end_tag in ("</urlset>", "</sitemapindex>"):
-                            end_pos = xml_text.find(end_tag)
-                            if end_pos >= 0:
-                                xml_text = xml_text[:end_pos + len(end_tag)]
-                        try:
-                            root = ET.fromstring(xml_text)
-                            ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-                            for loc in root.findall(".//sm:loc", ns):
-                                if loc.text:
-                                    discovered[loc.text.strip()] = "sitemap"
-                            # Also check for plain <loc> without namespace
-                            for loc in root.iter():
-                                if loc.tag.endswith("loc") and loc.text:
-                                    discovered.setdefault(loc.text.strip(), "sitemap")
-                        except ET.ParseError:
-                            pass
+                pages, sub_sitemaps = _extract_locs_from_xml(sm_html)
+                for page_url in pages:
+                    discovered[page_url] = "sitemap"
+                # Queue sub-sitemaps for recursive processing (limit depth)
+                if len(visited_sitemaps) < 20:
+                    for sub in sub_sitemaps:
+                        if sub not in visited_sitemaps:
+                            sitemap_queue.append(sub)
             except FlareCrawlError:
                 pass
         console.print(f"[dim]Sitemaps: {sum(1 for v in discovered.values() if v == 'sitemap')} URLs[/dim]")
@@ -1966,33 +1974,36 @@ def discover(
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html, "lxml")
             feed_urls = []
-            for link_tag in soup.find_all("link", attrs={"type": ["application/rss+xml", "application/atom+xml"]}):
-                href = link_tag.get("href")
-                if href:
-                    feed_urls.append(urljoin(url, href))
+            # Find <link> tags with RSS/Atom types
+            for link_tag in soup.find_all("link"):
+                link_type = (link_tag.get("type") or "").lower()
+                if "rss" in link_type or "atom" in link_type:
+                    href = link_tag.get("href")
+                    if href:
+                        feed_urls.append(urljoin(url, href))
             # Also try common feed paths
-            for feed_path in ["/feed", "/rss", "/atom.xml", "/feed.xml", "/rss.xml"]:
+            for feed_path in ["/feed", "/rss", "/atom.xml", "/feed.xml", "/rss.xml",
+                              "/feed/", "/rss/", "/index.xml"]:
                 feed_urls.append(f"{base}{feed_path}")
 
-            for feed_url in feed_urls[:5]:  # Limit feed checks
+            for feed_url in dict.fromkeys(feed_urls):  # dedupe, preserve order
                 try:
                     feed_html = client.get_content(feed_url, **kwargs)
-                    if "<item>" in feed_html or "<entry>" in feed_html:
-                        try:
-                            root = ET.fromstring(feed_html) if "<?xml" in feed_html[:100] else None
-                            if root is None:
-                                # Try extracting XML from rendered HTML
-                                xml_start = feed_html.find("<?xml")
-                                if xml_start >= 0:
-                                    root = ET.fromstring(feed_html[xml_start:])
-                            if root is not None:
-                                for link_el in root.iter():
-                                    if link_el.tag.endswith("link"):
-                                        href = link_el.get("href") or link_el.text
-                                        if href and href.startswith("http"):
-                                            discovered.setdefault(href.strip(), "feed")
-                        except ET.ParseError:
-                            pass
+                    # CF renders XML as HTML — use BS to find link elements
+                    feed_soup = BeautifulSoup(feed_html, "lxml")
+                    # RSS: <item><link>URL</link></item>
+                    for item in feed_soup.find_all("item"):
+                        link_el = item.find("link")
+                        if link_el:
+                            href = link_el.get_text(strip=True) or link_el.next_sibling
+                            if href and isinstance(href, str) and href.strip().startswith("http"):
+                                discovered.setdefault(href.strip(), "feed")
+                    # Atom: <entry><link href="URL"/></entry>
+                    for entry in feed_soup.find_all("entry"):
+                        for link_el in entry.find_all("link"):
+                            href = link_el.get("href")
+                            if href and href.startswith("http"):
+                                discovered.setdefault(href.strip(), "feed")
                 except FlareCrawlError:
                     pass
         except FlareCrawlError:
@@ -2006,6 +2017,8 @@ def discover(
             page_links = client.get_links(url, **kwargs)
             for link in page_links:
                 if isinstance(link, str):
+                    if not link.startswith("http"):
+                        link = urljoin(url, link)
                     discovered.setdefault(link, "links")
         except FlareCrawlError:
             pass
