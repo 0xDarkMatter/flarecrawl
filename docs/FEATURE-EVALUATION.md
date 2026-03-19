@@ -196,7 +196,7 @@
 
 ### 14. Internet Archive fallback — `--archived`
 
-**Status:** Evaluating | **Score:** 1.9 (Impact: 1, Effort: 2, Feasibility: 3)
+**Status:** Built (v0.7.0) | **Score:** 1.9 (Impact: 1, Effort: 2, Feasibility: 3)
 
 **The problem:** URLs go stale — pages get deleted, moved, or paywalled. When a scrape returns 404 or empty content, users have to manually check the Wayback Machine.
 
@@ -208,7 +208,7 @@
 
 ### 15. Language targeting — `--language de`
 
-**Status:** Evaluating | **Score:** 1.9 (Impact: 1, Effort: 2, Feasibility: 3)
+**Status:** Built (v0.7.0) | **Score:** 1.9 (Impact: 1, Effort: 2, Feasibility: 3)
 
 **The problem:** Multilingual sites serve different content per language. Crawls pick up all languages indiscriminately, wasting browser time on irrelevant translations.
 
@@ -244,7 +244,7 @@
 
 ### 18. Cookie banner / overlay removal — `--magic`
 
-**Status:** Evaluating | **Score:** 1.7 (Impact: 2, Effort: 1, Feasibility: 2)
+**Status:** Built (v0.7.0) | **Score:** 1.7 (Impact: 2, Effort: 1, Feasibility: 2)
 
 **The problem:** GDPR cookie banners, newsletter popups, and modal overlays cover page content and pollute extracted text. Users see "Accept all cookies" in their markdown output.
 
@@ -265,6 +265,9 @@
 | 2026-03-19 | 5 | `flarecrawl discover` | **Built (v0.6.0)** | Combines sitemap + RSS/Atom + page links discovery |
 | 2026-03-19 | 13 | `--har` | **Built (v0.6.0)** | Lightweight version — request metadata only (CF doesn't expose full HAR) |
 | 2026-03-19 | 16 | `--backup-dir` | **Built (v0.6.1)** | Saves raw HTML alongside extracted output for archival/reprocessing |
+| 2026-03-20 | 14 | `--archived` | **Built (v0.7.0)** | Wayback Machine fallback on 404/empty content |
+| 2026-03-20 | 15 | `--language` | **Built (v0.7.0)** | Sets Accept-Language header for multilingual sites |
+| 2026-03-20 | 18 | `--magic` | **Built (v0.7.0)** | CSS injection hides cookie banners, GDPR modals, popups |
 
 ---
 

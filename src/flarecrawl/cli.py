@@ -498,7 +498,9 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    user_agent: str | None = None,
                    wait_for_selector: str | None = None,
                    css_selector: str | None = None,
-                   js_expression: str | None = None) -> dict:
+                   js_expression: str | None = None,
+                   archived: bool = False,
+                   magic: bool = False) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
     kwargs = {}
@@ -516,6 +518,22 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         kwargs["user_agent"] = user_agent
     if wait_for_selector:
         kwargs["wait_for"] = wait_for_selector
+    if magic:
+        # Hide common cookie banners, GDPR modals, newsletter popups
+        kwargs["style_tag"] = (
+            "[class*='cookie'],[class*='Cookie'],[id*='cookie'],[id*='Cookie'],"
+            "[class*='consent'],[class*='Consent'],[id*='consent'],"
+            "[class*='gdpr'],[class*='GDPR'],"
+            "[class*='banner'],[id*='banner'],"
+            "[class*='modal'],[class*='overlay'],"
+            "[class*='popup'],[class*='Popup'],"
+            "[class*='newsletter'],[class*='Newsletter'],"
+            "[class*='onetrust'],[id*='onetrust'],"
+            "[class*='cc-window'],[class*='cc-banner'],"
+            "[id*='CybotCookiebotDialog'],"
+            "[aria-label*='cookie'],[aria-label*='consent']"
+            "{ display: none !important; visibility: hidden !important; }"
+        )
 
     # --selector: use CF /scrape endpoint for CSS element extraction
     if css_selector:
@@ -560,8 +578,12 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         elapsed = _time.time() - start
         return {"url": url, "content": content, "elapsed": round(elapsed, 2)}
 
+    # Archived fallback: wrap URL for Wayback Machine on failure
+    _fetch_url = url
+    _archive_attempted = False
+
     if raw_body:
-        body_copy = {**raw_body, "url": url}
+        body_copy = {**raw_body, "url": _fetch_url}
         endpoint = "markdown" if format == "markdown" else "content"
         result_data = client.post_raw(endpoint, body_copy)
         content = result_data.get("result", result_data)
@@ -615,6 +637,21 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         content = client.get_content(url, **kwargs)
     else:
         content = client.get_markdown(url, **kwargs)
+
+    # Archived fallback: if content is empty/error and --archived, try Wayback Machine
+    if archived and not _archive_attempted:
+        is_empty = (isinstance(content, str) and len(content.strip()) < 50)
+        is_404 = (isinstance(content, str) and "404" in content[:200] and "not found" in content[:500].lower())
+        if is_empty or is_404:
+            _archive_attempted = True
+            wb_url = f"https://web.archive.org/web/{url}"
+            try:
+                if format == "html":
+                    content = client.get_content(wb_url, **kwargs)
+                else:
+                    content = client.get_markdown(wb_url, **kwargs)
+            except FlareCrawlError:
+                pass  # Keep original content
 
     # Post-processing: main content extraction and tag filtering
     if isinstance(content, str) and (only_main_content or include_tags or exclude_tags):
@@ -710,6 +747,9 @@ def scrape(
     stdin_mode: Annotated[bool, typer.Option("--stdin", help="Read HTML from stdin (no API call)")] = False,
     har_output: Annotated[Path | None, typer.Option("--har", help="Save request metadata to HAR file")] = None,
     backup_dir: Annotated[Path | None, typer.Option("--backup-dir", help="Save raw HTML to this directory")] = None,
+    archived: Annotated[bool, typer.Option("--archived", help="Fallback to Internet Archive on 404/error")] = False,
+    language: Annotated[str | None, typer.Option("--language", help="Accept-Language header (e.g. de, fr, ja)")] = None,
+    magic: Annotated[bool, typer.Option("--magic", help="Remove cookie banners and overlays")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -797,6 +837,14 @@ def scrape(
         existing = auth_dict.get("extra_headers", {})
         auth_dict["extra_headers"] = {**custom_headers, **existing}
 
+    # Language: set Accept-Language header
+    if language:
+        if auth_dict is None:
+            auth_dict = {}
+        existing = auth_dict.get("extra_headers", {})
+        existing.setdefault("Accept-Language", language)
+        auth_dict["extra_headers"] = existing
+
     # Load URLs
     all_urls = list(urls or [])
     if batch_file:
@@ -830,6 +878,7 @@ def scrape(
                 wait_until, auth_dict, mobile,
                 only_main_content, _include, _exclude, user_agent,
                 wait_for_selector, selector, js_expression,
+                archived, magic,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -893,6 +942,7 @@ def scrape(
                     wait_until, auth_dict, mobile,
                     only_main_content, _include, _exclude, user_agent,
                 wait_for_selector, selector, js_expression,
+                archived, magic,
                 ): url
                 for url in all_urls
             }
@@ -924,7 +974,9 @@ def scrape(
                                     user_agent=user_agent,
                                     wait_for_selector=wait_for_selector,
                                     css_selector=selector,
-                                    js_expression=js_expression)
+                                    js_expression=js_expression,
+                                    archived=archived,
+                                    magic=magic)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)

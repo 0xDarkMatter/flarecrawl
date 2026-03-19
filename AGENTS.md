@@ -49,6 +49,9 @@
 | Save HAR | `flarecrawl scrape URL --har output.har` |
 | Discover URLs (sitemap+feed+links) | `flarecrawl discover URL --json` |
 | Backup raw HTML | `flarecrawl scrape URL --backup-dir ./backup` |
+| Remove cookie banners | `flarecrawl scrape URL --magic` |
+| Request language | `flarecrawl scrape URL --language de` |
+| Wayback fallback on 404 | `flarecrawl scrape URL --archived` |
 | Check usage | `flarecrawl usage --json` |
 | Auth status | `flarecrawl auth status --json` |
 | Cache status | `flarecrawl cache status --json` |

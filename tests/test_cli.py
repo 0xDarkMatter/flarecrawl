@@ -27,7 +27,7 @@ class TestHelp:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "flarecrawl 0.6.1" in result.output
+        assert "flarecrawl 0.7.0" in result.output
 
     def test_status_flag(self):
         result = runner.invoke(app, ["--status"])
@@ -720,3 +720,27 @@ class TestSanitizeFilename:
         name = _sanitize_filename("https://example.com/page?id=1&lang=en&sort=date")
         assert "id-1" in name
         assert "lang-en" in name
+
+
+class TestArchivedFlag:
+    """Test --archived Internet Archive fallback."""
+
+    def test_scrape_has_archived(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--archived" in result.output
+
+
+class TestLanguageFlag:
+    """Test --language flag."""
+
+    def test_scrape_has_language(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--language" in result.output
+
+
+class TestMagicFlag:
+    """Test --magic cookie banner removal."""
+
+    def test_scrape_has_magic(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--magic" in result.output

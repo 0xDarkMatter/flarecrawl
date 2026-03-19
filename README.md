@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.7.0** | 2026-03-20 | `--archived` (Wayback fallback), `--language`, `--magic` (cookie banner removal), filename collision fixes, 197 tests |
 | **v0.6.1** | 2026-03-19 | `--backup-dir` for raw HTML archival, discover edge case fixes, 187 tests |
 | **v0.6.0** | 2026-03-19 | `--selector`, `--js-eval`, `--wait-for-selector`, `--stdin`, `--har`, `flarecrawl discover` command, 185 tests |
 | **v0.5.4** | 2026-03-19 | `--user-agent` on all commands for custom crawler identity or paywall bypass |
@@ -248,6 +249,19 @@ flarecrawl discover https://example.com --no-feed --no-links --json
 
 # With limit
 flarecrawl discover https://example.com --limit 100 --json
+```
+
+### Cookie banner removal, language, archive fallback
+
+```bash
+# Remove cookie banners, GDPR modals, newsletter popups
+flarecrawl scrape https://eu-site.example.com --magic
+
+# Request content in a specific language
+flarecrawl scrape https://example.com --language de
+
+# Fallback to Internet Archive if page returns 404
+flarecrawl scrape https://dead-link.example.com --archived
 ```
 
 ### Change tracking
