@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.5.4** | 2026-03-19 | `--user-agent` on all commands for custom crawler identity or paywall bypass |
 | **v0.5.3** | 2026-03-19 | Guided `auth login` with browser auto-open for token setup |
 | **v0.5.2** | 2026-03-19 | Content filtering on crawl/download, `--webhook` on crawl, summary+main-content combo, 169 unit tests |
 | **v0.5.1** | 2026-03-19 | Feature test corpus (80 live tests across 8 sites), 158 unit tests, all green |
@@ -165,6 +166,10 @@ flarecrawl scrape https://example.com --exclude-tags "nav,footer,.sidebar"
 # Custom HTTP headers
 flarecrawl scrape https://example.com --headers "Accept-Language: fr"
 flarecrawl scrape https://example.com --headers '{"X-Api-Key": "abc123"}'
+
+# Custom User-Agent (identify your crawler, or try bypassing paywalls)
+flarecrawl scrape https://example.com --user-agent "MyBot/1.0 (contact@example.com)"
+flarecrawl scrape https://paywalled.example.com --user-agent "Googlebot/2.1"
 
 # Mobile device emulation (iPhone 14 Pro viewport)
 flarecrawl scrape https://example.com --mobile

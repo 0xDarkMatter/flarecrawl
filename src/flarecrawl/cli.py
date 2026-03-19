@@ -484,7 +484,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    mobile: bool = False,
                    only_main_content: bool = False,
                    include_tags: list[str] | None = None,
-                   exclude_tags: list[str] | None = None) -> dict:
+                   exclude_tags: list[str] | None = None,
+                   user_agent: str | None = None) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
     kwargs = {}
@@ -498,6 +499,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         kwargs.update(auth_kwargs)
     if mobile:
         kwargs.update(MOBILE_PRESET)
+    if user_agent:
+        kwargs["user_agent"] = user_agent
 
     if raw_body:
         body_copy = {**raw_body, "url": url}
@@ -642,6 +645,7 @@ def scrape(
     include_tags: Annotated[str | None, typer.Option("--include-tags", help="CSS selectors to keep")] = None,
     exclude_tags: Annotated[str | None, typer.Option("--exclude-tags", help="CSS selectors to remove")] = None,
     diff: Annotated[bool, typer.Option("--diff", help="Show diff against cached version")] = False,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -727,7 +731,7 @@ def scrape(
                 _scrape_single, client, url, format, wait_for,
                 screenshot, full_page_screenshot, raw_body, timeout,
                 wait_until, auth_dict, mobile,
-                only_main_content, _include, _exclude,
+                only_main_content, _include, _exclude, user_agent,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -766,6 +770,8 @@ def scrape(
             kwargs.update(MOBILE_PRESET)
         if auth_dict:
             kwargs.update(auth_dict)
+        if user_agent:
+            kwargs["user_agent"] = user_agent
         try:
             binary = client.take_screenshot(url, **kwargs)
         except FlareCrawlError as e:
@@ -787,7 +793,7 @@ def scrape(
                     _scrape_single, client, url, format, wait_for,
                     screenshot, full_page_screenshot, raw_body, timeout,
                     wait_until, auth_dict, mobile,
-                    only_main_content, _include, _exclude,
+                    only_main_content, _include, _exclude, user_agent,
                 ): url
                 for url in all_urls
             }
@@ -815,7 +821,8 @@ def scrape(
                                     mobile=mobile,
                                     only_main_content=only_main_content,
                                     include_tags=_include,
-                                    exclude_tags=_exclude)
+                                    exclude_tags=_exclude,
+                                    user_agent=user_agent)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
@@ -916,6 +923,7 @@ def crawl(
     include_tags: Annotated[str | None, typer.Option("--include-tags", help="CSS selectors to keep")] = None,
     webhook: Annotated[str | None, typer.Option("--webhook", help="POST results to this URL on completion")] = None,
     webhook_headers: Annotated[list[str] | None, typer.Option("--webhook-headers", help="Headers for webhook")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -989,6 +997,8 @@ def crawl(
             kwargs["exclude_patterns"] = [p.strip() for p in exclude_paths.split(",")]
         if auth_dict:
             kwargs.update(auth_dict)
+        if user_agent:
+            kwargs["user_agent"] = user_agent
 
         try:
             job_id = client.crawl_start(url_or_job_id, **kwargs)
@@ -1098,6 +1108,7 @@ def map_urls(
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Discover all URLs on a website.
 
@@ -1135,6 +1146,8 @@ def map_urls(
                 kwargs["internal_only"] = True
             if auth_dict:
                 kwargs.update(auth_dict)
+            if user_agent:
+                kwargs["user_agent"] = user_agent
             links = client.get_links(url, **kwargs)
     except FlareCrawlError as e:
         _handle_api_error(e, json_output)
@@ -1177,6 +1190,7 @@ def download(
     only_main_content: Annotated[bool, typer.Option("--only-main-content", help="Keep main content only")] = False,
     exclude_tags: Annotated[str | None, typer.Option("--exclude-tags", help="CSS selectors to remove")] = None,
     include_tags: Annotated[str | None, typer.Option("--include-tags", help="CSS selectors to keep")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Download a site into .flarecrawl/ as files.
 
@@ -1222,6 +1236,8 @@ def download(
         kwargs["exclude_patterns"] = [p.strip() for p in exclude_paths.split(",")]
     if auth_dict:
         kwargs.update(auth_dict)
+    if user_agent:
+        kwargs["user_agent"] = user_agent
 
     try:
         job_id = client.crawl_start(url, **kwargs)
@@ -1301,6 +1317,7 @@ def extract(
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """AI-powered structured data extraction from web pages.
 
@@ -1373,6 +1390,8 @@ def extract(
         extra_kwargs = {}
         if auth_dict:
             extra_kwargs.update(auth_dict)
+        if user_agent:
+            extra_kwargs["user_agent"] = user_agent
 
         async def _extract_one(url: str) -> dict:
             return await asyncio.to_thread(
@@ -1450,6 +1469,7 @@ def screenshot(
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
     mobile: Annotated[bool, typer.Option("--mobile", help="Emulate mobile device (iPhone 14 Pro viewport)")] = False,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Capture a screenshot of a web page.
 
@@ -1494,6 +1514,8 @@ def screenshot(
                 kwargs.update(MOBILE_PRESET)
             if auth_dict:
                 kwargs.update(auth_dict)
+            if user_agent:
+                kwargs["user_agent"] = user_agent
             data = client.take_screenshot(url, **kwargs)
     except FlareCrawlError as e:
         _handle_api_error(e, json_output)
@@ -1532,6 +1554,7 @@ def pdf(
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
     mobile: Annotated[bool, typer.Option("--mobile", help="Emulate mobile device (iPhone 14 Pro viewport)")] = False,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Render a web page as PDF.
 
@@ -1569,6 +1592,8 @@ def pdf(
                 kwargs.update(MOBILE_PRESET)
             if auth_dict:
                 kwargs.update(auth_dict)
+            if user_agent:
+                kwargs["user_agent"] = user_agent
             data = client.render_pdf(url, **kwargs)
     except FlareCrawlError as e:
         _handle_api_error(e, json_output)
@@ -1644,6 +1669,7 @@ def favicon(
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Extract favicon URL from a web page.
 
@@ -1673,6 +1699,8 @@ def favicon(
         kwargs["reject_resources"] = ["image", "media", "font", "stylesheet"]
         if auth_dict:
             kwargs.update(auth_dict)
+        if user_agent:
+            kwargs["user_agent"] = user_agent
         html = client.get_content(url, **kwargs)
     except FlareCrawlError as e:
         _handle_api_error(e, json_output)
@@ -1723,6 +1751,7 @@ def schema(
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
 ):
     """Extract structured data (LD+JSON, OpenGraph, Twitter Cards) from a page.
 
@@ -1754,6 +1783,8 @@ def schema(
         kwargs["reject_resources"] = ["image", "media", "font", "stylesheet"]
         if auth_dict:
             kwargs.update(auth_dict)
+        if user_agent:
+            kwargs["user_agent"] = user_agent
         html = client.get_content(url, **kwargs)
     except FlareCrawlError as e:
         _handle_api_error(e, json_output)

@@ -27,7 +27,7 @@ class TestHelp:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "flarecrawl 0.5.3" in result.output
+        assert "flarecrawl 0.5.4" in result.output
 
     def test_status_flag(self):
         result = runner.invoke(app, ["--status"])
@@ -564,3 +564,31 @@ class TestFilterRecordContent:
         result = _filter_record_content(record, exclude_tags=["nav"])
         assert "Content" in result["html"]
         assert "Nav" not in result["html"]
+
+
+class TestUserAgent:
+    """Test --user-agent flag."""
+
+    def test_user_agent_in_scrape_help(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--user-agent" in result.output
+
+    def test_user_agent_in_all_commands(self):
+        commands = ["scrape", "crawl", "map", "download", "extract",
+                    "screenshot", "pdf", "favicon", "schema"]
+        for cmd in commands:
+            result = runner.invoke(app, [cmd, "--help"])
+            assert "--user-agent" in result.output, f"--user-agent missing from {cmd} help"
+
+    def test_user_agent_in_body(self):
+        from flarecrawl.client import Client
+        body = Client._build_body(url="https://example.com", user_agent="Googlebot/2.1")
+        assert body["userAgent"] == "Googlebot/2.1"
+
+    def test_user_agent_overrides_mobile(self):
+        """In _scrape_single, mobile preset is applied first, then user_agent overwrites."""
+        from flarecrawl.client import Client, MOBILE_PRESET
+        preset = {k: v for k, v in MOBILE_PRESET.items() if k != "user_agent"}
+        body = Client._build_body(url="https://example.com",
+                                  user_agent="CustomBot/1.0", **preset)
+        assert body["userAgent"] == "CustomBot/1.0"
