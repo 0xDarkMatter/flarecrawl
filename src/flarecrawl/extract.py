@@ -375,7 +375,8 @@ def filter_by_query(text: str, query: str, top_k: int = 10) -> str:
     scored: list[tuple[int, float, str]] = []
     for i, para in enumerate(paragraphs):
         words = para.lower().split()
-        if not words:
+        # Skip very short paragraphs (likely nav items, list markers)
+        if len(words) < 5:
             continue
         word_counts = Counter(words)
         # TF-IDF-like: sum of (term_freq / doc_length) for query terms
@@ -387,6 +388,10 @@ def filter_by_query(text: str, query: str, top_k: int = 10) -> str:
         # Boost headings that match
         if para.startswith("#") and any(t in para.lower() for t in query_terms):
             score *= 2.0
+        # Penalize list-heavy paragraphs (mostly links/bullets)
+        link_ratio = para.count("[") / max(len(words), 1)
+        if link_ratio > 0.3:
+            score *= 0.3
         scored.append((i, score, para))
 
     # Keep paragraphs with score > 0, up to top_k, in original order
