@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.9.0** | 2026-03-26 | Markdown content negotiation (`Accept: text/markdown`) — auto-detects sites serving markdown natively, skips browser rendering for faster/cheaper/higher-quality extraction. Domain capability cache, `--no-negotiate`, `source` metadata on all results, `flarecrawl negotiate status/clear`, batch session reuse, 278 tests |
 | **v0.8.0** | 2026-03-20 | `--scroll`, `--query`, `--precision`/`--recall`, `--deduplicate`, `--session`, `flarecrawl batch`, `--format accessibility`, 215 tests |
 | **v0.7.0** | 2026-03-20 | `--archived` (Wayback fallback), `--language`, `--magic` (cookie banner removal), filename collision fixes, 197 tests |
 | **v0.6.1** | 2026-03-19 | `--backup-dir` for raw HTML archival, discover edge case fixes, 187 tests |
@@ -265,6 +266,32 @@ flarecrawl scrape https://example.com --language de
 flarecrawl scrape https://dead-link.example.com --archived
 ```
 
+### Markdown content negotiation
+
+Sites on Cloudflare (Pro+) can serve markdown directly via `Accept: text/markdown`
+content negotiation. Flarecrawl auto-detects this on every scrape — when a site
+supports it, content is fetched via a simple HTTP GET instead of headless Chromium.
+
+```bash
+# Auto-detect (default) — tries content negotiation first
+flarecrawl scrape https://blog.cloudflare.com/some-post
+
+# Force browser rendering (skip negotiation)
+flarecrawl scrape https://blog.cloudflare.com/some-post --no-negotiate
+
+# JSON output shows the source
+flarecrawl scrape https://blog.cloudflare.com/some-post --json
+# metadata.source: "content-negotiation" (no browser) or "browser-rendering"
+# metadata.markdownTokens: 1234 (from x-markdown-tokens header)
+# metadata.contentSignal: {"ai-train": "yes", ...}
+```
+
+Benefits when negotiation succeeds:
+- **Faster** — ~100-200ms vs 2-3s for browser rendering
+- **Cheaper** — zero browser time consumed
+- **Higher quality** — server-side conversion by the site owner
+- **Domain cached** — one probe per domain, batch-friendly
+
 ### Change tracking
 
 ```bash
@@ -455,6 +482,16 @@ flarecrawl cache clear                   # Remove all cached responses
 
 Responses are cached for 1 hour by default. Use `--no-cache` on any command to bypass.
 
+### negotiate — Domain capability cache
+
+```bash
+flarecrawl negotiate status              # Show domains that support text/markdown
+flarecrawl negotiate status --json       # Machine-readable
+flarecrawl negotiate clear               # Reset domain cache
+```
+
+Tracks which domains respond to `Accept: text/markdown`. Positive results cached 7 days, negative 24 hours.
+
 ### Performance features
 
 - **Response caching** — 1-hour TTL, saves redundant browser renders
@@ -643,7 +680,8 @@ flarecrawl/
 │   ├── cli.py                  # Typer CLI (all commands)
 │   ├── client.py               # CF Browser Rendering API client (httpx pooling, HTTP/2)
 │   ├── config.py               # Credentials, usage tracking, env-var config
-│   └── extract.py              # HTML extraction (main content, images, schema, tags)
+│   ├── extract.py              # HTML extraction (main content, images, schema, tags)
+│   └── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
 └── tests/
     ├── conftest.py             # Test fixtures
     ├── corpus.py               # Feature test corpus (80 live tests x 8 sites)

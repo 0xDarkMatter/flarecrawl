@@ -27,7 +27,7 @@ class TestHelp:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "flarecrawl 0.8.0" in result.output
+        assert "flarecrawl 0.9.0" in result.output
 
     def test_status_flag(self):
         result = runner.invoke(app, ["--status"])
@@ -866,3 +866,312 @@ class TestAccessibilityTree:
         tree = extract_accessibility_tree(html)
         assert any(n.get("role") == "textbox" for n in tree)
         assert any(n.get("role") == "button" for n in tree)
+
+
+class TestNegotiateCommands:
+    """Test negotiate subcommand group."""
+
+    def test_negotiate_status_help(self):
+        result = runner.invoke(app, ["negotiate", "status", "--help"])
+        assert result.exit_code == 0
+        assert "domain cache" in result.output.lower() or "negotiate" in result.output.lower()
+
+    def test_negotiate_clear_help(self):
+        result = runner.invoke(app, ["negotiate", "clear", "--help"])
+        assert result.exit_code == 0
+
+    def test_negotiate_status_runs(self):
+        result = runner.invoke(app, ["negotiate", "status"])
+        assert result.exit_code == 0
+        assert "Domains cached" in result.output or "domains" in result.output.lower()
+
+    def test_negotiate_clear_runs(self):
+        result = runner.invoke(app, ["negotiate", "clear"])
+        assert result.exit_code == 0
+        assert "Cleared" in result.output
+
+    def test_negotiate_status_json(self):
+        result = runner.invoke(app, ["negotiate", "status", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "data" in data
+        assert "total" in data["data"]
+        assert "supporting" in data["data"]
+
+
+class TestNegotiateFlag:
+    """Test --no-negotiate flag and negotiate CLI integration."""
+
+    def test_scrape_has_no_negotiate(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "--no-negotiate" in result.output
+
+    def test_no_negotiate_in_help_text(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert "content negotiation" in result.output.lower() or "browser rendering" in result.output.lower()
+
+    def test_negotiate_skipped_for_html_format(self):
+        """When format=html, negotiation should not be attempted."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.get_content.return_value = "<html><body>Hello</body></html>"
+        client.browser_ms_used = 100
+        # Should NOT call try_negotiate since format is html
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            # This will fail on client mock, but we're checking negotiate wasn't called
+            try:
+                _scrape_single(client, "https://example.com", "html",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None)
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_negotiate_skipped_with_js_flag(self):
+        """When wait_until is set (--js), negotiation should not be attempted."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.get_markdown.return_value = "# Hello"
+        client.browser_ms_used = 100
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None, wait_until="networkidle0")
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_negotiate_skipped_with_no_negotiate(self):
+        """When --no-negotiate is set, negotiation should not be attempted."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.get_markdown.return_value = "# Hello"
+        client.browser_ms_used = 100
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None, no_negotiate=True)
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_negotiate_attempted_for_default_scrape(self):
+        """Default markdown scrape should attempt negotiation."""
+        from flarecrawl.cli import _scrape_single
+        from flarecrawl.negotiate import NegotiationResult
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.browser_ms_used = 0
+        neg_result = NegotiationResult(
+            content="# Negotiated",
+            tokens=50,
+            content_signal={"ai-train": "yes"},
+            elapsed=0.1,
+        )
+        with patch("flarecrawl.negotiate.try_negotiate", return_value=neg_result) as mock_neg:
+            result = _scrape_single(client, "https://example.com", "markdown",
+                                   wait_for=None, screenshot=False,
+                                   full_page_screenshot=False, raw_body=None,
+                                   timeout_ms=None)
+            mock_neg.assert_called_once()
+            assert result["content"] == "# Negotiated"
+            assert result["metadata"]["source"] == "content-negotiation"
+            assert result["metadata"]["markdownTokens"] == 50
+            assert result["metadata"]["browserTimeMs"] == 0
+
+    def test_negotiate_fallback_to_browser(self):
+        """When negotiation returns None, should fall back to browser."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.get_markdown.return_value = "# Browser rendered"
+        client.browser_ms_used = 150
+        with patch("flarecrawl.negotiate.try_negotiate", return_value=None):
+            result = _scrape_single(client, "https://example.com", "markdown",
+                                   wait_for=None, screenshot=False,
+                                   full_page_screenshot=False, raw_body=None,
+                                   timeout_ms=None)
+            assert result["content"] == "# Browser rendered"
+            client.get_markdown.assert_called_once()
+
+    def test_negotiate_with_query_filter(self):
+        """Negotiated content should still be filtered by --query."""
+        from flarecrawl.cli import _scrape_single
+        from flarecrawl.negotiate import NegotiationResult
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.browser_ms_used = 0
+        long_content = (
+            "# Article About Pricing\n\n"
+            "The pricing model is based on usage tiers with volume discounts for enterprise customers.\n\n"
+            "## Unrelated Section\n\n"
+            "This section talks about something completely different and irrelevant to pricing."
+        )
+        neg_result = NegotiationResult(content=long_content, elapsed=0.1)
+        with patch("flarecrawl.negotiate.try_negotiate", return_value=neg_result):
+            result = _scrape_single(client, "https://example.com", "markdown",
+                                   wait_for=None, screenshot=False,
+                                   full_page_screenshot=False, raw_body=None,
+                                   timeout_ms=None, query="pricing")
+            assert "pricing" in result["content"].lower()
+            assert result["metadata"]["source"] == "content-negotiation"
+
+    def test_negotiate_metadata_fields(self):
+        """Negotiated results should have all expected metadata."""
+        from flarecrawl.cli import _scrape_single
+        from flarecrawl.negotiate import NegotiationResult
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.browser_ms_used = 0
+        neg_result = NegotiationResult(
+            content="# Test Title\n\nSome description text here that is long enough.",
+            tokens=100,
+            content_signal={"ai-train": "yes", "search": "yes"},
+            elapsed=0.05,
+        )
+        with patch("flarecrawl.negotiate.try_negotiate", return_value=neg_result):
+            result = _scrape_single(client, "https://example.com/page", "markdown",
+                                   wait_for=None, screenshot=False,
+                                   full_page_screenshot=False, raw_body=None,
+                                   timeout_ms=None)
+            meta = result["metadata"]
+            assert meta["source"] == "content-negotiation"
+            assert meta["browserTimeMs"] == 0
+            assert meta["markdownTokens"] == 100
+            assert meta["contentSignal"]["ai-train"] == "yes"
+            assert meta["format"] == "markdown"
+            assert meta["title"] == "Test Title"
+            assert "description" in meta
+            assert meta["wordCount"] > 0
+            assert meta["headingCount"] == 1
+            assert meta["cacheHit"] is False
+            assert meta["sourceURL"] == "https://example.com/page"
+
+    def test_negotiate_skipped_for_scroll(self):
+        """--scroll needs browser, should skip negotiation."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.browser_ms_used = 100
+        client._build_body.return_value = {"url": "https://example.com"}
+        client._post_json.return_value = {"result": "# Scrolled"}
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None, scroll=True)
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_negotiate_skipped_for_magic(self):
+        """--magic needs CSS injection, should skip negotiation."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.get_markdown.return_value = "# Magic"
+        client.browser_ms_used = 100
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None, magic=True)
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_browser_rendering_has_source_metadata(self):
+        """Browser-rendered results should have source: browser-rendering."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.get_markdown.return_value = "# Browser"
+        client.browser_ms_used = 200
+        with patch("flarecrawl.negotiate.try_negotiate", return_value=None):
+            result = _scrape_single(client, "https://example.com", "markdown",
+                                   wait_for=None, screenshot=False,
+                                   full_page_screenshot=False, raw_body=None,
+                                   timeout_ms=None)
+            assert result["metadata"]["source"] == "browser-rendering"
+            assert result["metadata"]["browserTimeMs"] == 200
+
+    def test_negotiate_skipped_for_screenshot(self):
+        """Screenshots need browser, should skip negotiation."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.take_screenshot.return_value = b"PNG"
+        client.browser_ms_used = 100
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=True,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None)
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_negotiate_session_passed(self):
+        """negotiate_session should be forwarded to try_negotiate."""
+        from flarecrawl.cli import _scrape_single
+        from flarecrawl.negotiate import NegotiationResult
+        from unittest.mock import MagicMock, patch
+        import httpx
+        client = MagicMock()
+        client.browser_ms_used = 0
+        fake_session = MagicMock(spec=httpx.Client)
+        neg_result = NegotiationResult(content="# Shared session", elapsed=0.05)
+        with patch("flarecrawl.negotiate.try_negotiate", return_value=neg_result) as mock_neg:
+            result = _scrape_single(client, "https://example.com", "markdown",
+                                   wait_for=None, screenshot=False,
+                                   full_page_screenshot=False, raw_body=None,
+                                   timeout_ms=None, negotiate_session=fake_session)
+            # Verify session was passed through
+            call_kwargs = mock_neg.call_args
+            assert call_kwargs.kwargs.get("session") is fake_session
+
+    def test_negotiate_skipped_for_selector(self):
+        """--selector needs CF /scrape endpoint, should skip negotiation."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.scrape.return_value = [{"text": "selected"}]
+        client.browser_ms_used = 100
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False, raw_body=None,
+                              timeout_ms=None, css_selector="main")
+            except Exception:
+                pass
+            mock_neg.assert_not_called()
+
+    def test_negotiate_skipped_for_raw_body(self):
+        """--body passthrough should skip negotiation."""
+        from flarecrawl.cli import _scrape_single
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.post_raw.return_value = {"result": "# Raw"}
+        client.browser_ms_used = 100
+        with patch("flarecrawl.negotiate.try_negotiate") as mock_neg:
+            try:
+                _scrape_single(client, "https://example.com", "markdown",
+                              wait_for=None, screenshot=False,
+                              full_page_screenshot=False,
+                              raw_body={"url": "https://example.com"},
+                              timeout_ms=None)
+            except Exception:
+                pass
+            mock_neg.assert_not_called()

@@ -482,6 +482,62 @@ def cache_status(
 
 
 # ------------------------------------------------------------------
+# negotiate — domain cache management
+# ------------------------------------------------------------------
+
+
+negotiate_app = typer.Typer(help="Markdown negotiate domain cache management")
+app.add_typer(negotiate_app, name="negotiate")
+
+
+@negotiate_app.command("status")
+def negotiate_status(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+):
+    """Show markdown negotiation domain cache.
+
+    Example:
+        flarecrawl negotiate status
+        flarecrawl negotiate status --json
+    """
+    from .negotiate import _cache_path, _load_domain_cache
+    cache = _load_domain_cache()
+    supporting = [d for d, v in cache.items() if v.get("supports")]
+    non_supporting = [d for d, v in cache.items() if not v.get("supports")]
+
+    data = {
+        "total": len(cache),
+        "supporting": len(supporting),
+        "non_supporting": len(non_supporting),
+        "domains_supporting": supporting,
+        "path": str(_cache_path()),
+    }
+
+    if json_output:
+        _output_json({"data": data, "meta": {}})
+        return
+
+    console.print(f"Domains cached: [cyan]{data['total']}[/cyan]")
+    console.print(f"Supporting markdown: [green]{data['supporting']}[/green]")
+    console.print(f"Not supporting: [dim]{data['non_supporting']}[/dim]")
+    if supporting:
+        console.print(f"Domains: [green]{', '.join(supporting)}[/green]")
+    console.print(f"Path: [dim]{data['path']}[/dim]")
+
+
+@negotiate_app.command("clear")
+def negotiate_clear():
+    """Clear the domain capability cache.
+
+    Example:
+        flarecrawl negotiate clear
+    """
+    from .negotiate import clear_domain_cache
+    count = clear_domain_cache()
+    console.print(f"Cleared {count} domain cache entr{'ies' if count != 1 else 'y'}")
+
+
+# ------------------------------------------------------------------
 # scrape — matches firecrawl scrape
 # ------------------------------------------------------------------
 
@@ -504,9 +560,82 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    scroll: bool = False,
                    query: str | None = None,
                    precision: bool = False,
-                   recall: bool = False) -> dict:
+                   recall: bool = False,
+                   no_negotiate: bool = False,
+                   negotiate_headers: dict | None = None,
+                   negotiate_session: "httpx.Client | None" = None) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
+
+    # ------------------------------------------------------------------
+    # Markdown content negotiation (fast path — no browser rendering)
+    # ------------------------------------------------------------------
+    # Try Accept: text/markdown before spinning up headless Chromium.
+    # Only for simple markdown scrapes with no browser-specific flags.
+    _browser_needed = any([
+        raw_body, screenshot, full_page_screenshot, css_selector,
+        js_expression, wait_for_selector, wait_until, scroll, magic,
+        format != "markdown",
+    ])
+    if not no_negotiate and not _browser_needed:
+        from .negotiate import try_negotiate
+        neg_headers = dict(negotiate_headers or {})
+        if user_agent:
+            neg_headers["User-Agent"] = user_agent
+        if auth_kwargs and "authenticate" in auth_kwargs:
+            import base64 as _b64
+            _creds = auth_kwargs["authenticate"]
+            _basic = _b64.b64encode(
+                f"{_creds['username']}:{_creds['password']}".encode()
+            ).decode()
+            neg_headers["Authorization"] = f"Basic {_basic}"
+
+        # NOTE: do NOT pass client._session — it carries CF API auth
+        # headers that must not leak to arbitrary target sites.
+        # Use negotiate_session if provided (batch mode reuse).
+        neg_result = try_negotiate(
+            url,
+            session=negotiate_session,
+            extra_headers=neg_headers or None,
+        )
+        if neg_result is not None:
+            content = neg_result.content
+            # Apply post-processing that works on markdown text
+            if query:
+                from .extract import filter_by_query
+                content = filter_by_query(content, query)
+
+            elapsed = _time.time() - start
+            result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
+
+            # Build metadata
+            metadata = {}
+            metadata["source"] = "content-negotiation"
+            metadata["browserTimeMs"] = 0
+            if neg_result.tokens is not None:
+                metadata["markdownTokens"] = neg_result.tokens
+            if neg_result.content_signal:
+                metadata["contentSignal"] = neg_result.content_signal
+            if isinstance(content, str):
+                metadata["contentLength"] = len(content)
+                metadata["wordCount"] = len(content.split())
+                metadata["headingCount"] = len(re.findall(r"^#{1,6}\s+", content, re.MULTILINE))
+                metadata["linkCount"] = len(re.findall(r"\[.*?\]\(.*?\)", content))
+                title_match = re.search(r"^#{1,2}\s+(.+?)$", content, re.MULTILINE)
+                if title_match:
+                    metadata["title"] = title_match.group(1).strip()
+                for line in content.split("\n"):
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and not stripped.startswith("[") and len(stripped) > 20:
+                        metadata["description"] = stripped[:200]
+                        break
+            metadata["sourceURL"] = url
+            metadata["format"] = format
+            metadata["elapsed"] = result["elapsed"]
+            metadata["cacheHit"] = False
+            result["metadata"] = metadata
+            return result
+
     kwargs = {}
     if wait_for:
         kwargs["timeout"] = wait_for
@@ -751,6 +880,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                 break
     elif isinstance(content, list):
         metadata["count"] = len(content)
+    metadata["source"] = "browser-rendering"
     metadata["sourceURL"] = url
     metadata["browserTimeMs"] = client.browser_ms_used
     metadata["format"] = format
@@ -805,6 +935,7 @@ def scrape(
     precision: Annotated[bool, typer.Option("--precision", help="Aggressive content extraction")] = False,
     recall: Annotated[bool, typer.Option("--recall", help="Conservative content extraction")] = False,
     session: Annotated[Path | None, typer.Option("--session", help="Load cookies from session file")] = None,
+    no_negotiate: Annotated[bool, typer.Option("--no-negotiate", help="Skip markdown content negotiation, force browser rendering")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -942,11 +1073,22 @@ def scrape(
     for url in all_urls:
         _validate_url(url, json_output or is_batch_mode)
 
+    # Build negotiate headers from auth/custom headers for content negotiation
+    _neg_headers = {}
+    if auth_dict and "extra_headers" in auth_dict:
+        _neg_headers.update(auth_dict["extra_headers"])
+    if language:
+        _neg_headers["Accept-Language"] = language
+
     # ------------------------------------------------------------------
     # Batch mode: asyncio + NDJSON output
     # ------------------------------------------------------------------
     if is_batch_mode:
         capped_workers = min(workers, DEFAULT_MAX_WORKERS)
+
+        # Shared negotiate session for batch mode (connection reuse)
+        from .negotiate import get_negotiate_session
+        _neg_session = get_negotiate_session() if not no_negotiate else None
 
         async def _scrape_one(url: str) -> dict:
             return await asyncio.to_thread(
@@ -956,15 +1098,20 @@ def scrape(
                 only_main_content, _include, _exclude, user_agent,
                 wait_for_selector, selector, js_expression,
                 archived, magic, scroll, query, precision, recall,
+                no_negotiate, _neg_headers or None, _neg_session,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
             console.print(f"[dim]{completed}/{total} (errors: {errors})[/dim]")
 
         console.print(f"[dim]Scraping {len(all_urls)} URLs with {capped_workers} workers...[/dim]")
-        results = asyncio.run(
-            process_batch(all_urls, _scrape_one, workers=capped_workers, on_progress=_on_progress)
-        )
+        try:
+            results = asyncio.run(
+                process_batch(all_urls, _scrape_one, workers=capped_workers, on_progress=_on_progress)
+            )
+        finally:
+            if _neg_session:
+                _neg_session.close()
 
         has_errors = any(r["status"] == "error" for r in results)
         for r in sorted(results, key=lambda x: x["index"]):
@@ -1018,8 +1165,9 @@ def scrape(
                     screenshot, full_page_screenshot, raw_body, timeout,
                     wait_until, auth_dict, mobile,
                     only_main_content, _include, _exclude, user_agent,
-                wait_for_selector, selector, js_expression,
-                archived, magic, scroll, query, precision, recall,
+                    wait_for_selector, selector, js_expression,
+                    archived, magic, scroll, query, precision, recall,
+                    no_negotiate, _neg_headers or None,
                 ): url
                 for url in all_urls
             }
@@ -1057,7 +1205,9 @@ def scrape(
                                     scroll=scroll,
                                     query=query,
                                     precision=precision,
-                                    recall=recall)
+                                    recall=recall,
+                                    no_negotiate=no_negotiate,
+                                    negotiate_headers=_neg_headers or None)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
