@@ -13,7 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`) — multi-strategy cascade with per-site optimisations, TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, works without auth, batch mode support, 333 tests |
+| **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`), stealth mode (`--stealth`), automatic content cleanup — multi-strategy cascade with per-site optimisations, browser TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, ad/cruft removal on all markdown output, works without auth, batch mode support, 343 tests |
 | **v0.9.0** | 2026-03-26 | Markdown content negotiation (`Accept: text/markdown`) — auto-detects sites serving markdown natively, skips browser rendering for faster/cheaper/higher-quality extraction. Domain capability cache, `--no-negotiate`, `source` metadata on all results, `flarecrawl negotiate status/clear`, batch session reuse, 278 tests |
 | **v0.8.0** | 2026-03-20 | `--scroll`, `--query`, `--precision`/`--recall`, `--deduplicate`, `--session`, `flarecrawl batch`, `--format accessibility`, 215 tests |
 | **v0.7.0** | 2026-03-20 | `--archived` (Wayback fallback), `--language`, `--magic` (cookie banner removal), filename collision fixes, 197 tests |
