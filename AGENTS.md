@@ -62,6 +62,8 @@
 | Accessibility tree | `flarecrawl scrape URL --format accessibility --json` |
 | Enhanced content extraction | `flarecrawl scrape URL --paywall --json` |
 | Batch enhanced extraction | `flarecrawl scrape --batch urls.txt --paywall --workers 5` |
+| Stealth mode (TLS impersonation) | `flarecrawl scrape URL --stealth` |
+| Stealth + enhanced extraction | `flarecrawl scrape URL --paywall --stealth --json` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |
 | Clear negotiate domain cache | `flarecrawl negotiate clear` |
@@ -426,6 +428,9 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 22. **Use `--paywall`** for enhanced content extraction — applies multi-strategy cascade with per-site optimisations before browser rendering. Zero browser time when direct strategies succeed. Check `metadata.source` for the strategy used
 23. **`--paywall` works without auth** — direct HTTP strategies run independently of Cloudflare credentials. With auth, per-site headers are also applied to browser rendering fallback
 24. **`--paywall` is opt-in** — does not affect normal scraping. Install `curl_cffi` for improved compatibility with bot-protected sites
+25. **Use `--stealth`** for browser TLS fingerprint impersonation on direct HTTP requests. Requires `curl_cffi`. Makes content negotiation and direct fetches appear as real Safari/Chrome browsers to bot detection systems (JA3/JA4 fingerprinting)
+26. **Content cleanup is automatic** — ad placeholders, share buttons, newsletter prompts, copyright lines, and nav chrome are stripped from all markdown output. No flag needed
+27. **Combine `--paywall --stealth`** for maximum extraction — stealth TLS fingerprint + multi-strategy cascade + per-site header rules + content cleanup
 
 ## Pricing Reference
 
@@ -451,7 +456,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (333 tests, no API calls)
+# Unit tests (343 tests, no API calls)
 pytest tests/ -v
 
 # Feature test corpus (80 live tests, requires auth)

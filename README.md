@@ -295,6 +295,35 @@ optimisations are also applied to browser rendering requests as a fallback.
 
 Optional dependency for improved compatibility: `pip install curl_cffi`
 
+### Stealth mode
+
+Opt-in browser TLS fingerprint impersonation for direct HTTP requests. Uses
+`curl_cffi` to send requests with a real Safari/Chrome TLS handshake, avoiding
+bot detection systems that fingerprint JA3/JA4 hashes.
+
+```bash
+# Stealth mode for content negotiation and direct fetches
+flarecrawl scrape https://example.com --stealth
+
+# Combine with paywall extraction
+flarecrawl scrape https://example.com --paywall --stealth --json
+
+# Batch mode
+flarecrawl scrape --batch urls.txt --stealth --workers 5
+```
+
+Requires: `pip install curl_cffi`
+
+Without `--stealth`, requests use Python's default TLS stack (httpx/OpenSSL)
+which is identifiable by bot detection systems. With `--stealth`, the TLS
+Client Hello is indistinguishable from a real Safari browser.
+
+### Content cleanup
+
+Markdown output is automatically cleaned of common ad placeholders, share
+buttons, newsletter prompts, copyright lines, and navigation chrome.
+No flag needed - applied to all markdown output by default.
+
 ### Markdown content negotiation
 
 Sites on Cloudflare (Pro+) can serve markdown directly via `Accept: text/markdown`
