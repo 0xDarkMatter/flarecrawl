@@ -160,6 +160,7 @@ def try_negotiate(
     session: httpx.Client | None = None,
     extra_headers: dict | None = None,
     timeout: int = _NEGOTIATE_TIMEOUT,
+    stealth: bool = False,
 ) -> NegotiationResult | None:
     """Attempt markdown content negotiation with the target URL.
 
@@ -201,6 +202,37 @@ def try_negotiate(
     own_session = session is None
 
     try:
+        # Stealth mode: use curl_cffi for real browser TLS fingerprint
+        if stealth:
+            from .stealth import stealth_get
+            sresp = stealth_get(url, headers=headers, timeout=timeout)
+            if sresp is None:
+                return None
+            elapsed = time.time() - start
+            content_type = sresp.headers.get("content-type", "")
+            if "text/markdown" in content_type and sresp.status_code == 200:
+                _cache_domain(domain, True)
+                tokens = None
+                tokens_header = sresp.headers.get("x-markdown-tokens")
+                if tokens_header:
+                    try:
+                        tokens = int(tokens_header)
+                    except (ValueError, TypeError):
+                        pass
+                content_signal = None
+                signal_header = sresp.headers.get("content-signal")
+                if signal_header:
+                    content_signal = _parse_content_signal(signal_header)
+                return NegotiationResult(
+                    content=sresp.text,
+                    tokens=tokens,
+                    content_signal=content_signal,
+                    elapsed=round(elapsed, 3),
+                    headers=sresp.headers,
+                )
+            _cache_domain(domain, False)
+            return None
+
         if own_session:
             session = httpx.Client(
                 timeout=httpx.Timeout(timeout),

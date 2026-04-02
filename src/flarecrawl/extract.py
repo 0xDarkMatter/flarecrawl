@@ -541,3 +541,78 @@ def extract_accessibility_tree(html: str) -> list[dict]:
     body = soup.find("body") or soup
     _walk_tree(body)
     return nodes
+
+
+# ------------------------------------------------------------------
+# Content cleanup (ad/nav cruft removal)
+# ------------------------------------------------------------------
+
+# Lines that are pure ad/UI cruft (exact match after stripping)
+_CRUFT_EXACT = {
+    "advertisement", "ad", "sponsored", "promoted",
+    "share this article", "share this", "share",
+    "sign up", "sign in", "log in", "subscribe",
+    "newsletter", "get the app", "open in app",
+    "read more", "continue reading", "see more",
+    "skip to content", "skip to main content",
+    "skip advertisement", "skip ad",
+    "recommended for you", "more from",
+    "follow us", "follow", "like", "comment",
+    "bookmark", "save", "print", "email",
+    "copy link", "copied", "link copied",
+}
+
+# Patterns for lines that are ad/UI cruft (substring match)
+_CRUFT_PATTERNS = re.compile(
+    r"^(advertisement|sponsored content|promoted|"
+    r"sign up for|subscribe to|get our|join our|"
+    r"download the app|open in app|"
+    r"share on (twitter|facebook|linkedin|email)|"
+    r"follow us on|connect with us|"
+    r"related articles?|trending now|"
+    r"most (read|popular|viewed)|"
+    r"you (may|might) (also )?like|"
+    r"more (stories|articles) from|"
+    r"this (article|story) (is|was)|"
+    r"©\s*\d{4}.*|all rights reserved|"
+    r"terms (of|and) (use|service)|privacy policy|cookie policy)$",
+    re.IGNORECASE,
+)
+
+
+def clean_content(text: str) -> str:
+    """Remove common ad placeholders, share buttons, and UI cruft from text.
+
+    Operates on markdown/plain text (not HTML). Removes lines that are
+    pure advertising or navigation chrome while preserving article content.
+    """
+    lines = text.split("\n")
+    cleaned = []
+
+    for line in lines:
+        stripped = line.strip()
+        lower = stripped.lower()
+
+        # Skip empty lines (preserve them for spacing)
+        if not stripped:
+            cleaned.append(line)
+            continue
+
+        # Skip exact cruft matches
+        if lower in _CRUFT_EXACT:
+            continue
+
+        # Skip pattern matches (short lines only - don't filter article text)
+        if len(stripped) < 80 and _CRUFT_PATTERNS.match(lower):
+            continue
+
+        # Skip standalone "Advertisement" with any capitalisation
+        if lower in ("advertisement", "advertisements"):
+            continue
+
+        cleaned.append(line)
+
+    # Clean up excessive blank lines from removals
+    result = "\n".join(cleaned)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()

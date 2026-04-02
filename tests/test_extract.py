@@ -1,6 +1,7 @@
 """Tests for HTML extraction utilities."""
 
 from flarecrawl.extract import (
+    clean_content,
     extract_images,
     extract_main_content,
     extract_structured_data,
@@ -283,3 +284,60 @@ class TestHtmlToMarkdown:
         html = "<blockquote>Quoted text</blockquote>"
         result = html_to_markdown(html)
         assert "> Quoted text" in result
+
+
+# ------------------------------------------------------------------
+# TestCleanContent
+# ------------------------------------------------------------------
+
+
+class TestCleanContent:
+    """Test ad/nav cruft removal from markdown text."""
+
+    def test_removes_advertisement(self):
+        text = "# Title\n\nAdvertisement\n\nThe actual article content here."
+        result = clean_content(text)
+        assert "Advertisement" not in result
+        assert "actual article content" in result
+
+    def test_removes_share_buttons(self):
+        text = "Article text.\n\nShare this article\n\nMore article text."
+        result = clean_content(text)
+        assert "Share this article" not in result
+        assert "Article text" in result
+
+    def test_removes_newsletter_prompts(self):
+        text = "Content.\n\nSign up\n\nNewsletter\n\nMore content."
+        result = clean_content(text)
+        assert "Sign up" not in result
+        assert "Newsletter" not in result
+
+    def test_preserves_article_content(self):
+        text = "# The Future of AI\n\nArtificial intelligence is changing how we work and live.\n\nResearchers at MIT published new findings."
+        result = clean_content(text)
+        assert result == text
+
+    def test_removes_copyright_lines(self):
+        text = "Article content.\n\n\u00a9 2026 All Rights Reserved\n\nMore text."
+        result = clean_content(text)
+        assert "All Rights Reserved" not in result
+
+    def test_preserves_long_lines_with_keywords(self):
+        # Long lines that happen to contain cruft words should be preserved
+        text = "The company decided to share this information with investors, noting that advertisement revenue was up 20% year over year."
+        result = clean_content(text)
+        assert "share this information" in result
+
+    def test_collapses_blank_lines(self):
+        text = "Title\n\nAdvertisement\n\n\n\nContent"
+        result = clean_content(text)
+        assert "\n\n\n" not in result
+
+    def test_empty_input(self):
+        assert clean_content("") == ""
+
+    def test_removes_open_in_app(self):
+        text = "Open in app\n\n# Article Title\n\nContent here."
+        result = clean_content(text)
+        assert "Open in app" not in result
+        assert "Article Title" in result

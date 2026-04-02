@@ -683,7 +683,7 @@ class TestPaywallSession:
 
 
 class TestPaywallCliFlag:
-    """Test --paywall flag appears in CLI help."""
+    """Test --paywall and --stealth flags appear in CLI help."""
 
     def test_scrape_has_paywall_flag(self):
         from typer.testing import CliRunner
@@ -692,6 +692,14 @@ class TestPaywallCliFlag:
         result = runner.invoke(app, ["scrape", "--help"])
         assert result.exit_code == 0
         assert "--paywall" in result.output
+
+    def test_scrape_has_stealth_flag(self):
+        from typer.testing import CliRunner
+        from flarecrawl.cli import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--stealth" in result.output
 
 
 import httpx  # noqa: E402 (needed for ConnectError in test)

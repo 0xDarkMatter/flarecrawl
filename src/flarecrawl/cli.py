@@ -565,7 +565,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    negotiate_headers: dict | None = None,
                    negotiate_session: "httpx.Client | None" = None,
                    paywall: bool = False,
-                   paywall_session: "httpx.Client | None" = None) -> dict:
+                   paywall_session: "httpx.Client | None" = None,
+                   stealth: bool = False) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
 
@@ -599,6 +600,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             url,
             session=negotiate_session,
             extra_headers=neg_headers or None,
+            stealth=stealth,
         )
         if neg_result is not None:
             content = neg_result.content
@@ -606,6 +608,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             if query:
                 from .extract import filter_by_query
                 content = filter_by_query(content, query)
+            from .extract import clean_content
+            content = clean_content(content)
 
             elapsed = _time.time() - start
             result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
@@ -675,6 +679,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             if query:
                 from .extract import filter_by_query
                 content = filter_by_query(content, query)
+            from .extract import clean_content
+            content = clean_content(content)
 
             elapsed = _time.time() - start
             result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
@@ -942,6 +948,11 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         from .extract import filter_by_query
         content = filter_by_query(content, query)
 
+    # Post-processing: clean ad/nav cruft from markdown output
+    if isinstance(content, str) and format == "markdown":
+        from .extract import clean_content
+        content = clean_content(content)
+
     elapsed = _time.time() - start
     result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
 
@@ -1024,6 +1035,7 @@ def scrape(
     session: Annotated[Path | None, typer.Option("--session", help="Load cookies from session file")] = None,
     no_negotiate: Annotated[bool, typer.Option("--no-negotiate", help="Skip markdown content negotiation, force browser rendering")] = False,
     paywall: Annotated[bool, typer.Option("--paywall", help="Attempt paywall bypass cascade before browser rendering")] = False,
+    stealth: Annotated[bool, typer.Option("--stealth", help="Use browser TLS fingerprint for direct HTTP requests (requires curl_cffi)")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1195,7 +1207,7 @@ def scrape(
                 wait_for_selector, selector, js_expression,
                 archived, magic, scroll, query, precision, recall,
                 no_negotiate, _neg_headers or None, _neg_session,
-                paywall, _pw_session,
+                paywall, _pw_session, stealth,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -1267,7 +1279,7 @@ def scrape(
                     wait_for_selector, selector, js_expression,
                     archived, magic, scroll, query, precision, recall,
                     no_negotiate, _neg_headers or None, None,
-                    paywall,
+                    paywall, None, stealth,
                 ): url
                 for url in all_urls
             }
@@ -1308,7 +1320,8 @@ def scrape(
                                     recall=recall,
                                     no_negotiate=no_negotiate,
                                     negotiate_headers=_neg_headers or None,
-                                    paywall=paywall)
+                                    paywall=paywall,
+                                    stealth=stealth)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
