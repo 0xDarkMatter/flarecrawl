@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`) — multi-strategy cascade with per-site optimisations, TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, works without auth, batch mode support, 333 tests |
 | **v0.9.0** | 2026-03-26 | Markdown content negotiation (`Accept: text/markdown`) — auto-detects sites serving markdown natively, skips browser rendering for faster/cheaper/higher-quality extraction. Domain capability cache, `--no-negotiate`, `source` metadata on all results, `flarecrawl negotiate status/clear`, batch session reuse, 278 tests |
 | **v0.8.0** | 2026-03-20 | `--scroll`, `--query`, `--precision`/`--recall`, `--deduplicate`, `--session`, `flarecrawl batch`, `--format accessibility`, 215 tests |
 | **v0.7.0** | 2026-03-20 | `--archived` (Wayback fallback), `--language`, `--magic` (cookie banner removal), filename collision fixes, 197 tests |
@@ -265,6 +266,34 @@ flarecrawl scrape https://example.com --language de
 # Fallback to Internet Archive if page returns 404
 flarecrawl scrape https://dead-link.example.com --archived
 ```
+
+### Enhanced content extraction
+
+Multi-strategy content extraction that applies per-site optimisations before
+falling back to standard browser rendering. Useful for sites that serve content
+in SSR HTML but hide it with client-side JavaScript, or sites behind bot
+detection that block default request patterns.
+
+```bash
+# Enhanced extraction with multi-strategy cascade
+flarecrawl scrape https://example.com/article --paywall
+
+# JSON output shows which extraction strategy worked
+flarecrawl scrape https://example.com/article --paywall --json
+# metadata.source indicates the strategy used
+
+# Batch mode
+flarecrawl scrape --batch urls.txt --paywall --workers 5
+
+# No Cloudflare auth required (direct HTTP strategies)
+# With auth: falls through to browser rendering if direct strategies fail
+```
+
+Strategies are tried in order of speed and cost. Direct HTTP strategies consume
+zero browser time. When Cloudflare auth is configured, per-site header
+optimisations are also applied to browser rendering requests as a fallback.
+
+Optional dependency for improved compatibility: `pip install curl_cffi`
 
 ### Markdown content negotiation
 
@@ -681,7 +710,8 @@ flarecrawl/
 │   ├── client.py               # CF Browser Rendering API client (httpx pooling, HTTP/2)
 │   ├── config.py               # Credentials, usage tracking, env-var config
 │   ├── extract.py              # HTML extraction (main content, images, schema, tags)
-│   └── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
+│   ├── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
+│   └── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
 └── tests/
     ├── conftest.py             # Test fixtures
     ├── corpus.py               # Feature test corpus (80 live tests x 8 sites)
@@ -689,7 +719,8 @@ flarecrawl/
     ├── test_cache.py           # Cache module tests
     ├── test_cli.py             # CLI tests
     ├── test_client.py          # Client tests
-    └── test_extract.py         # Extract module tests
+    ├── test_extract.py         # Extract module tests
+    └── test_paywall.py         # Paywall bypass tests
 ```
 
 ## Development

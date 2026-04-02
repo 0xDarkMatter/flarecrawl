@@ -60,6 +60,8 @@
 | Load session cookies | `flarecrawl scrape URL --session cookies.json` |
 | YAML batch config | `flarecrawl batch config.yml` |
 | Accessibility tree | `flarecrawl scrape URL --format accessibility --json` |
+| Enhanced content extraction | `flarecrawl scrape URL --paywall --json` |
+| Batch enhanced extraction | `flarecrawl scrape --batch urls.txt --paywall --workers 5` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |
 | Clear negotiate domain cache | `flarecrawl negotiate clear` |
@@ -421,6 +423,9 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 19. **Markdown content negotiation is automatic** — scrape tries `Accept: text/markdown` before browser rendering. If the site supports it (e.g. Cloudflare zones with Markdown for Agents), content is fetched directly (~100ms, zero browser time). Check `metadata.source` for `"content-negotiation"` vs `"browser-rendering"`
 20. **Use `--no-negotiate`** to force browser rendering when you need full HTML/JS (e.g. tech detection, Wappalyzer)
 21. **Domain capability is cached** — one probe per domain (24h negative, 7d positive). Batch scrapes of the same domain only probe once
+22. **Use `--paywall`** for enhanced content extraction — applies multi-strategy cascade with per-site optimisations before browser rendering. Zero browser time when direct strategies succeed. Check `metadata.source` for the strategy used
+23. **`--paywall` works without auth** — direct HTTP strategies run independently of Cloudflare credentials. With auth, per-site headers are also applied to browser rendering fallback
+24. **`--paywall` is opt-in** — does not affect normal scraping. Install `curl_cffi` for improved compatibility with bot-protected sites
 
 ## Pricing Reference
 
@@ -446,7 +451,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (241 tests, no API calls)
+# Unit tests (333 tests, no API calls)
 pytest tests/ -v
 
 # Feature test corpus (80 live tests, requires auth)

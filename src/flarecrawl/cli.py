@@ -563,7 +563,9 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    recall: bool = False,
                    no_negotiate: bool = False,
                    negotiate_headers: dict | None = None,
-                   negotiate_session: "httpx.Client | None" = None) -> dict:
+                   negotiate_session: "httpx.Client | None" = None,
+                   paywall: bool = False,
+                   paywall_session: "httpx.Client | None" = None) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
 
@@ -636,6 +638,80 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             result["metadata"] = metadata
             return result
 
+    # ------------------------------------------------------------------
+    # Paywall bypass cascade
+    # ------------------------------------------------------------------
+    # When CF auth is available, only run the stealth tier (curl_cffi with
+    # browser TLS fingerprint) — other tiers use the user's IP directly.
+    # When no CF auth, run the full cascade.
+    if paywall and not _browser_needed:
+        pw_headers = dict(negotiate_headers or {})
+        if user_agent:
+            pw_headers["User-Agent"] = user_agent
+        if auth_kwargs and "authenticate" in auth_kwargs:
+            import base64 as _b64pw
+            _creds_pw = auth_kwargs["authenticate"]
+            _basic_pw = _b64pw.b64encode(
+                f"{_creds_pw['username']}:{_creds_pw['password']}".encode()
+            ).decode()
+            pw_headers["Authorization"] = f"Basic {_basic_pw}"
+
+        if client is not None:
+            # CF auth available: only run stealth tier (curl_cffi) — other
+            # tiers would expose the user's IP. If stealth fails, fall
+            # through to browser rendering with site rules.
+            from .paywall import _try_stealth_fetch
+            pw_result = _try_stealth_fetch(url, None, pw_headers)
+        else:
+            # No CF auth: run full cascade (all tiers use user's IP anyway)
+            from .paywall import try_bypass
+            pw_result = try_bypass(
+                url,
+                session=paywall_session,
+                extra_headers=pw_headers or None,
+            )
+        if pw_result is not None:
+            content = pw_result.content
+            if query:
+                from .extract import filter_by_query
+                content = filter_by_query(content, query)
+
+            elapsed = _time.time() - start
+            result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
+
+            metadata = {}
+            metadata["source"] = f"paywall-bypass-{pw_result.tier}"
+            metadata["browserTimeMs"] = 0
+            if isinstance(content, str):
+                metadata["contentLength"] = len(content)
+                metadata["wordCount"] = len(content.split())
+                metadata["headingCount"] = len(re.findall(r"^#{1,6}\s+", content, re.MULTILINE))
+                metadata["linkCount"] = len(re.findall(r"\[.*?\]\(.*?\)", content))
+                title_match = re.search(r"^#{1,2}\s+(.+?)$", content, re.MULTILINE)
+                if title_match:
+                    metadata["title"] = title_match.group(1).strip()
+                for line in content.split("\n"):
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and not stripped.startswith("[") and len(stripped) > 20:
+                        metadata["description"] = stripped[:200]
+                        break
+            metadata["sourceURL"] = url
+            metadata["format"] = format
+            metadata["elapsed"] = result["elapsed"]
+            metadata["cacheHit"] = False
+            metadata.update(pw_result.metadata)
+            result["metadata"] = metadata
+            return result
+
+    # If paywall bypass was attempted but failed and we have no CF client,
+    # we can't fall through to browser rendering.
+    if client is None:
+        return {
+            "url": url,
+            "error": "Paywall bypass failed and no Cloudflare credentials configured. Run: flarecrawl auth login",
+            "elapsed": round(_time.time() - start, 2),
+        }
+
     kwargs = {}
     if wait_for:
         kwargs["timeout"] = wait_for
@@ -647,6 +723,17 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         kwargs.update(auth_kwargs)
     if mobile:
         kwargs.update(MOBILE_PRESET)
+    # --paywall: inject per-site headers into browser rendering request
+    # (Googlebot UA, cookie clearing, referer spoofing per publisher)
+    if paywall:
+        from .paywall import _get_site_headers
+        site_headers = _get_site_headers(url)
+        if site_headers:
+            existing = kwargs.get("extra_headers", {})
+            kwargs["extra_headers"] = {**site_headers, **existing}
+            # If site rules specify a User-Agent, use it for the browser too
+            if "User-Agent" in site_headers and not user_agent:
+                kwargs["user_agent"] = site_headers["User-Agent"]
     if user_agent:
         kwargs["user_agent"] = user_agent
     if wait_for_selector:
@@ -936,6 +1023,7 @@ def scrape(
     recall: Annotated[bool, typer.Option("--recall", help="Conservative content extraction")] = False,
     session: Annotated[Path | None, typer.Option("--session", help="Load cookies from session file")] = None,
     no_negotiate: Annotated[bool, typer.Option("--no-negotiate", help="Skip markdown content negotiation, force browser rendering")] = False,
+    paywall: Annotated[bool, typer.Option("--paywall", help="Attempt paywall bypass cascade before browser rendering")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1029,7 +1117,13 @@ def scrape(
         wait_until = "networkidle0"
 
     cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
-    client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
+    # Defer auth when --paywall is set: bypass uses direct HTTP, not CF API.
+    # Client is created only if credentials exist (needed as fallback).
+    if paywall:
+        _has_creds = get_account_id() and get_api_token()
+        client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl) if _has_creds else None
+    else:
+        client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
     raw_body = _parse_body(body, json_output or is_batch_mode)
     auth_dict = _parse_auth(auth, json_output or is_batch_mode)
     custom_headers = _parse_headers(headers, json_output or is_batch_mode)
@@ -1086,9 +1180,11 @@ def scrape(
     if is_batch_mode:
         capped_workers = min(workers, DEFAULT_MAX_WORKERS)
 
-        # Shared negotiate session for batch mode (connection reuse)
+        # Shared sessions for batch mode (connection reuse)
         from .negotiate import get_negotiate_session
         _neg_session = get_negotiate_session() if not no_negotiate else None
+        from .paywall import get_paywall_session
+        _pw_session = get_paywall_session() if paywall else None
 
         async def _scrape_one(url: str) -> dict:
             return await asyncio.to_thread(
@@ -1099,6 +1195,7 @@ def scrape(
                 wait_for_selector, selector, js_expression,
                 archived, magic, scroll, query, precision, recall,
                 no_negotiate, _neg_headers or None, _neg_session,
+                paywall, _pw_session,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -1112,6 +1209,8 @@ def scrape(
         finally:
             if _neg_session:
                 _neg_session.close()
+            if _pw_session:
+                _pw_session.close()
 
         has_errors = any(r["status"] == "error" for r in results)
         for r in sorted(results, key=lambda x: x["index"]):
@@ -1167,7 +1266,8 @@ def scrape(
                     only_main_content, _include, _exclude, user_agent,
                     wait_for_selector, selector, js_expression,
                     archived, magic, scroll, query, precision, recall,
-                    no_negotiate, _neg_headers or None,
+                    no_negotiate, _neg_headers or None, None,
+                    paywall,
                 ): url
                 for url in all_urls
             }
@@ -1207,7 +1307,8 @@ def scrape(
                                     precision=precision,
                                     recall=recall,
                                     no_negotiate=no_negotiate,
-                                    negotiate_headers=_neg_headers or None)
+                                    negotiate_headers=_neg_headers or None,
+                                    paywall=paywall)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
@@ -1216,7 +1317,7 @@ def scrape(
             return
 
     # Show browser time if timing enabled
-    if timing and client.browser_ms_used:
+    if timing and client and client.browser_ms_used:
         console.print(f"[dim]Browser time: {client.browser_ms_used}ms[/dim]")
 
     # Diff mode: compare against cached version
@@ -1247,7 +1348,7 @@ def scrape(
             _cache.put(endpoint + ":diff", cache_body, content_str)
 
     # Backup: save raw HTML alongside output
-    if backup_dir and results:
+    if backup_dir and results and client:
         backup_dir.mkdir(parents=True, exist_ok=True)
         for r in results:
             page_url = r.get("url", "")
@@ -1287,6 +1388,15 @@ def scrape(
         }
         har_output.write_text(json.dumps(har_data, indent=2), encoding="utf-8")
         console.print(f"[dim]HAR saved: {har_output} ({len(results)} entries)[/dim]")
+
+    # Handle paywall bypass failure (error dict instead of content)
+    if len(results) == 1 and "error" in results[0] and "content" not in results[0]:
+        err_msg = results[0]["error"]
+        if json_output:
+            _output_json({"error": {"code": "PAYWALL_BYPASS_FAILED", "message": err_msg}})
+        else:
+            console.print(f"[red]Error:[/red] {err_msg}")
+        raise typer.Exit(EXIT_ERROR)
 
     # Output
     if json_output:
