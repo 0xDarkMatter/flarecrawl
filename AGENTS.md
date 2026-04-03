@@ -64,6 +64,13 @@
 | Batch enhanced extraction | `flarecrawl scrape --batch urls.txt --paywall --workers 5` |
 | Stealth mode (TLS impersonation) | `flarecrawl scrape URL --stealth` |
 | Stealth + enhanced extraction | `flarecrawl scrape URL --paywall --stealth --json` |
+| Web search | `flarecrawl search "query" --json` |
+| Search + scrape pipeline | `flarecrawl search "topic" --scrape --limit 5 --json` |
+| Strip ads from HTML | `flarecrawl scrape URL --clean --format html --json` |
+| Proxy all requests | `flarecrawl scrape URL --proxy socks5://localhost:9050` |
+| List site rules | `flarecrawl rules list --json` |
+| Show rules for domain | `flarecrawl rules show www.nytimes.com` |
+| Add user rule | `flarecrawl rules add example.com --referer https://google.com/` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |
 | Clear negotiate domain cache | `flarecrawl negotiate clear` |
@@ -431,6 +438,10 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 25. **Use `--stealth`** for browser TLS fingerprint impersonation on direct HTTP requests. Requires `curl_cffi`. Makes content negotiation and direct fetches appear as real Safari/Chrome browsers to bot detection systems (JA3/JA4 fingerprinting)
 26. **Content cleanup is automatic** — ad placeholders, share buttons, newsletter prompts, copyright lines, and nav chrome are stripped from all markdown output. No flag needed
 27. **Combine `--paywall --stealth`** for maximum extraction — stealth TLS fingerprint + multi-strategy cascade + per-site header rules + content cleanup
+28. **Use `--clean`** to strip ad DOM elements from HTML output. Markdown cleanup is automatic; `--clean` extends it to HTML format
+29. **Use `--proxy`** to route all HTTP through a proxy (http/https/socks5). Also set via `FLARECRAWL_PROXY` env var. Affects CLI-to-CF and direct HTTP; does NOT affect CF browser-to-target
+30. **`search` command** uses Jina Search API — requires `JINA_API_KEY` env var (free at jina.ai). Use `--scrape` to also scrape each result URL through the normal pipeline
+31. **Per-site rules** are now in YAML — defaults ship with the package, user overrides at `~/.config/flarecrawl/rules.yaml`. Use `flarecrawl rules list/show/add/path` to manage
 
 ## Pricing Reference
 
@@ -456,7 +467,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (343 tests, no API calls)
+# Unit tests (378 tests, no API calls)
 pytest tests/ -v
 
 # Feature test corpus (80 live tests, requires auth)

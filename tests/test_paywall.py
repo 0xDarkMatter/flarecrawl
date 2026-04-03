@@ -173,9 +173,10 @@ class TestSiteRules:
 
     def test_nyt_headers(self):
         headers = _get_site_headers("https://www.nytimes.com/2026/04/01/article.html")
-        assert "Googlebot" in headers.get("User-Agent", "")
         assert "nyt-gdpr=0" in headers.get("Cookie", "")
         assert headers.get("Referer") == "https://www.google.com/"
+        # No Googlebot UA - triggers DataDome, stealth tier handles TLS instead
+        assert "Googlebot" not in headers.get("User-Agent", "")
 
     def test_medium_headers(self):
         headers = _get_site_headers("https://medium.com/some-article")

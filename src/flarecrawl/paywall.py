@@ -81,53 +81,14 @@ _JINA_PREFIX = "https://r.jina.ai/"
 # archive.today domains (try in order — availability varies by network/ISP)
 _ARCHIVE_TODAY_DOMAINS = ["archive.ph", "archive.today", "archive.is", "archive.li"]
 
-# Per-site header rules (derived from everywall/ladder + periscope rulesets).
-# Maps domain -> headers to inject for bypass. These are the known-working
-# header tricks for specific publishers.
-_SITE_RULES: dict[str, dict] = {
-    # NYT: Googlebot UA + cleared cookies + Google referer
-    "www.nytimes.com": {
-        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-        "Cookie": "nyt-a=; nyt-gdpr=0; nyt-geo=DE; nyt-privacy=1",
-        "Referer": "https://www.google.com/",
-    },
-    # Medium: Twitter referer + stripped cookies + CSP override
-    "medium.com": {
-        "Referer": "https://t.co/x?amp=1",
-        "Cookie": "",
-    },
-    # FT: Twitter referer
-    "www.ft.com": {
-        "Referer": "https://t.co/x?amp=1",
-    },
-    # Conde Nast (Wired, New Yorker, Vanity Fair, etc.)
-    "www.wired.com": {"Referer": "https://www.google.com/"},
-    "www.newyorker.com": {"Referer": "https://www.google.com/"},
-    "www.vanityfair.com": {"Referer": "https://www.google.com/"},
-    "www.vogue.com": {"Referer": "https://www.google.com/"},
-    "www.gq.com": {"Referer": "https://www.google.com/"},
-    "www.architecturaldigest.com": {"Referer": "https://www.google.com/"},
-    "www.bonappetit.com": {"Referer": "https://www.google.com/"},
-    "www.cntraveler.com": {"Referer": "https://www.google.com/"},
-    "www.epicurious.com": {"Referer": "https://www.google.com/"},
-    # WaPo
-    "www.washingtonpost.com": {"Referer": "https://www.google.com/"},
-    # Belgian/Dutch media (DPG Media)
-    "demorgen.be": {
-        "Cookie": "isBot=true; authId=1",
-        "User-Agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/121.0.6140.0 Safari/537.36",
-        "Referer": "https://news.google.com",
-    },
-}
-
-
 def _get_site_headers(url: str) -> dict:
-    """Look up per-site header overrides for a URL."""
-    try:
-        domain = urlparse(url).netloc
-        return dict(_SITE_RULES.get(domain, {}))
-    except Exception:
-        return {}
+    """Look up per-site header overrides for a URL.
+
+    Rules are loaded from default_rules.yaml (shipped) and user
+    overrides at ~/.config/flarecrawl/rules.yaml.
+    """
+    from .rules import get_site_headers
+    return get_site_headers(url)
 
 
 @dataclass
@@ -145,7 +106,7 @@ class PaywallResult:
 # ------------------------------------------------------------------
 
 
-def get_paywall_session(timeout: int = 15) -> httpx.Client:
+def get_paywall_session(timeout: int = 15, proxy: str | None = None) -> httpx.Client:
     """Create a reusable httpx session for paywall bypass attempts.
 
     Use in batch mode to avoid per-URL connection overhead.
@@ -155,6 +116,7 @@ def get_paywall_session(timeout: int = 15) -> httpx.Client:
         timeout=httpx.Timeout(timeout),
         http2=True,
         follow_redirects=True,
+        proxy=proxy,
     )
 
 

@@ -57,6 +57,7 @@ def stealth_get(
     headers: dict | None = None,
     timeout: int = 15,
     impersonate: str = "safari",
+    proxy: str | None = None,
 ) -> StealthResponse | None:
     """Make a GET request with browser TLS fingerprint.
 
@@ -73,6 +74,7 @@ def stealth_get(
             headers=headers or {},
             impersonate=impersonate,
             timeout=timeout,
+            proxies={"https": proxy, "http": proxy} if proxy else None,
         )
         return _to_response(resp)
     except Exception:
@@ -82,9 +84,10 @@ def stealth_get(
 class StealthSession:
     """Reusable stealth HTTP session for batch operations."""
 
-    def __init__(self, impersonate: str = "safari", timeout: int = 15):
+    def __init__(self, impersonate: str = "safari", timeout: int = 15, proxy: str | None = None):
         self._impersonate = impersonate
         self._timeout = timeout
+        self._proxy = proxy
         self._session = None
 
     def _ensure_session(self):
@@ -93,6 +96,7 @@ class StealthSession:
             self._session = cffi_requests.Session(
                 impersonate=self._impersonate,
                 timeout=self._timeout,
+                proxies={"https": self._proxy, "http": self._proxy} if self._proxy else None,
             )
 
     def get(self, url: str, *, headers: dict | None = None, **kwargs) -> StealthResponse | None:
@@ -116,9 +120,9 @@ class StealthSession:
 
 
 @contextmanager
-def stealth_session(impersonate: str = "safari", timeout: int = 15):
+def stealth_session(impersonate: str = "safari", timeout: int = 15, proxy: str | None = None):
     """Context manager for a reusable stealth session."""
-    session = StealthSession(impersonate=impersonate, timeout=timeout)
+    session = StealthSession(impersonate=impersonate, timeout=timeout, proxy=proxy)
     try:
         yield session
     finally:

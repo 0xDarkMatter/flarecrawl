@@ -547,6 +547,34 @@ def extract_accessibility_tree(html: str) -> list[dict]:
 # Content cleanup (ad/nav cruft removal)
 # ------------------------------------------------------------------
 
+# Ad/promo CSS selectors to strip from HTML DOM
+_AD_SELECTORS = [
+    "[class*='ad-']", "[class*='ad_']", "[id*='ad-']", "[id*='ad_']",
+    "[class*='advertisement']", "[class*='sponsored']", "[class*='promo']",
+    "[class*='banner-ad']", "[class*='dfp']", "[class*='gpt-ad']",
+    "[data-ad]", "[data-advertisement]", "[data-ad-slot]",
+    "[class*='social-share']", "[class*='share-buttons']", "[class*='share-bar']",
+    "[class*='newsletter-signup']", "[class*='subscribe-box']", "[class*='email-signup']",
+    "[class*='related-articles']", "[class*='recommended']", "[class*='recirculation']",
+    "[class*='cookie-banner']", "[class*='consent']", "[class*='onetrust']",
+]
+
+
+def clean_html(html: str) -> str:
+    """Strip ad/promo/social DOM elements from HTML.
+
+    Lighter than extract_main_content -- keeps page structure (nav,
+    footer, header) but removes ad containers, social share widgets,
+    newsletter signups, cookie banners, and recommendation blocks.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    for selector in _AD_SELECTORS:
+        for el in soup.select(selector):
+            el.decompose()
+    body = soup.find("body")
+    return str(body) if body else str(soup)
+
+
 # Lines that are pure ad/UI cruft (exact match after stripping)
 _CRUFT_EXACT = {
     "advertisement", "ad", "sponsored", "promoted",

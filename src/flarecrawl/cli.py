@@ -270,10 +270,10 @@ def _filter_record_content(
     return record
 
 
-def _get_client(as_json: bool = False, cache_ttl: int = 3600) -> Client:
+def _get_client(as_json: bool = False, cache_ttl: int = 3600, proxy: str | None = None) -> Client:
     """Get authenticated client."""
     _require_auth(as_json)
-    return Client(cache_ttl=cache_ttl)
+    return Client(cache_ttl=cache_ttl, proxy=proxy)
 
 
 # ------------------------------------------------------------------
@@ -538,6 +538,106 @@ def negotiate_clear():
 
 
 # ------------------------------------------------------------------
+# rules — per-site header rulesets
+# ------------------------------------------------------------------
+
+rules_app = typer.Typer(help="Per-site header rulesets for enhanced extraction")
+app.add_typer(rules_app, name="rules")
+
+
+@rules_app.command("list")
+def rules_list(
+    json_output: Annotated[bool, typer.Option("--json", help="JSON output")] = False,
+):
+    """List all loaded rules (defaults + user overrides)."""
+    from .rules import list_rules
+    rules = list_rules()
+    if json_output:
+        _output_json({"data": rules, "meta": {"count": len(rules)}})
+    else:
+        if not rules:
+            console.print("[dim]No rules loaded[/dim]")
+            return
+        for domain, headers in sorted(rules.items()):
+            console.print(f"[bold]{domain}[/bold]")
+            for k, v in headers.items():
+                console.print(f"  {k}: {v}")
+
+
+@rules_app.command("show")
+def rules_show(
+    domain: Annotated[str, typer.Argument(help="Domain to look up")],
+    json_output: Annotated[bool, typer.Option("--json", help="JSON output")] = False,
+):
+    """Show headers for a specific domain."""
+    from .rules import load_rules
+    rules = load_rules()
+    headers = rules.get(domain, {})
+    if json_output:
+        _output_json({"data": {"domain": domain, "headers": headers}})
+    elif headers:
+        console.print(f"[bold]{domain}[/bold]")
+        for k, v in headers.items():
+            console.print(f"  {k}: {v}")
+    else:
+        console.print(f"[dim]No rules for {domain}[/dim]")
+
+
+@rules_app.command("add")
+def rules_add(
+    domain: Annotated[str, typer.Argument(help="Domain (e.g. www.example.com)")],
+    referer: Annotated[str | None, typer.Option("--referer", help="Referer header")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="User-Agent header")] = None,
+    cookie: Annotated[str | None, typer.Option("--cookie", help="Cookie header")] = None,
+):
+    """Add or update a rule in user rules.yaml."""
+    from .rules import _user_rules_path, _parse_yaml, clear_cache
+
+    headers = {}
+    if referer:
+        headers["Referer"] = referer
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    if cookie is not None:
+        headers["Cookie"] = cookie
+
+    if not headers:
+        _error("Provide at least one header (--referer, --user-agent, --cookie)", "VALIDATION_ERROR", EXIT_VALIDATION)
+
+    path = _user_rules_path()
+    existing = _parse_yaml(path)
+
+    # Update existing or append
+    found = False
+    for entry in existing:
+        if entry.get("domain") == domain:
+            entry["headers"] = {**entry.get("headers", {}), **headers}
+            found = True
+            break
+
+    if not found:
+        existing.append({"domain": domain, "headers": headers})
+
+    import yaml
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.dump(existing, f, default_flow_style=False, sort_keys=False)
+
+    clear_cache()
+    console.print(f"[green]Rule saved[/green] for {domain}")
+    for k, v in headers.items():
+        console.print(f"  {k}: {v}")
+
+
+@rules_app.command("path")
+def rules_path():
+    """Show paths to default and user rules files."""
+    from .rules import _default_rules_path, _user_rules_path
+    console.print(f"Default: {_default_rules_path()}")
+    console.print(f"User:    {_user_rules_path()}")
+
+
+# ------------------------------------------------------------------
 # scrape — matches firecrawl scrape
 # ------------------------------------------------------------------
 
@@ -566,7 +666,9 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    negotiate_session: "httpx.Client | None" = None,
                    paywall: bool = False,
                    paywall_session: "httpx.Client | None" = None,
-                   stealth: bool = False) -> dict:
+                   stealth: bool = False,
+                   clean: bool = False,
+                   proxy: str | None = None) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
 
@@ -948,10 +1050,13 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         from .extract import filter_by_query
         content = filter_by_query(content, query)
 
-    # Post-processing: clean ad/nav cruft from markdown output
+    # Post-processing: clean ad/nav cruft
     if isinstance(content, str) and format == "markdown":
         from .extract import clean_content
         content = clean_content(content)
+    if clean and isinstance(content, str) and format in ("html",):
+        from .extract import clean_html
+        content = clean_html(content)
 
     elapsed = _time.time() - start
     result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
@@ -1036,6 +1141,8 @@ def scrape(
     no_negotiate: Annotated[bool, typer.Option("--no-negotiate", help="Skip markdown content negotiation, force browser rendering")] = False,
     paywall: Annotated[bool, typer.Option("--paywall", help="Attempt paywall bypass cascade before browser rendering")] = False,
     stealth: Annotated[bool, typer.Option("--stealth", help="Use browser TLS fingerprint for direct HTTP requests (requires curl_cffi)")] = False,
+    clean: Annotated[bool, typer.Option("--clean", help="Strip ads/promos from HTML output")] = False,
+    proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL (http/https/socks5)")] = None,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1129,13 +1236,15 @@ def scrape(
         wait_until = "networkidle0"
 
     cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
+    from .config import get_proxy
+    effective_proxy = proxy or get_proxy()
     # Defer auth when --paywall is set: bypass uses direct HTTP, not CF API.
     # Client is created only if credentials exist (needed as fallback).
     if paywall:
         _has_creds = get_account_id() and get_api_token()
-        client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl) if _has_creds else None
+        client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl, proxy=effective_proxy) if _has_creds else None
     else:
-        client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl)
+        client = _get_client(json_output or is_batch_mode, cache_ttl=cache_ttl, proxy=effective_proxy)
     raw_body = _parse_body(body, json_output or is_batch_mode)
     auth_dict = _parse_auth(auth, json_output or is_batch_mode)
     custom_headers = _parse_headers(headers, json_output or is_batch_mode)
@@ -1207,7 +1316,8 @@ def scrape(
                 wait_for_selector, selector, js_expression,
                 archived, magic, scroll, query, precision, recall,
                 no_negotiate, _neg_headers or None, _neg_session,
-                paywall, _pw_session, stealth,
+                paywall, _pw_session, stealth, clean,
+                effective_proxy,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -1279,7 +1389,8 @@ def scrape(
                     wait_for_selector, selector, js_expression,
                     archived, magic, scroll, query, precision, recall,
                     no_negotiate, _neg_headers or None, None,
-                    paywall, None, stealth,
+                    paywall, None, stealth, clean,
+                    effective_proxy,
                 ): url
                 for url in all_urls
             }
@@ -1321,7 +1432,9 @@ def scrape(
                                     no_negotiate=no_negotiate,
                                     negotiate_headers=_neg_headers or None,
                                     paywall=paywall,
-                                    stealth=stealth)
+                                    stealth=stealth,
+                                    clean=clean,
+                                    proxy=effective_proxy)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
@@ -1437,6 +1550,85 @@ def scrape(
                 _output_text(content)
             else:
                 _output_json(content)
+
+
+# ------------------------------------------------------------------
+# search — web search via Jina
+# ------------------------------------------------------------------
+
+
+@app.command()
+def search(
+    query: Annotated[str, typer.Argument(help="Search query")],
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Max results")] = 10,
+    scrape_results: Annotated[bool, typer.Option("--scrape", help="Also scrape each result URL")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="JSON output")] = False,
+    proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL")] = None,
+    paywall: Annotated[bool, typer.Option("--paywall", help="Paywall bypass for scraped URLs")] = False,
+    stealth: Annotated[bool, typer.Option("--stealth", help="Stealth mode for scraped URLs")] = False,
+    only_main_content: Annotated[bool, typer.Option("--only-main-content", help="Main content only")] = False,
+    clean: Annotated[bool, typer.Option("--clean", help="Strip ads from scraped HTML")] = False,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for --scrape")] = 3,
+):
+    """Search the web and optionally scrape results.
+
+    Uses Jina Search API (free, no auth required).
+
+    Example:
+        flarecrawl search "python web scraping" --json
+        flarecrawl search "topic" --scrape --limit 5 --json
+        flarecrawl search "query" --json | jq '.data[].url'
+    """
+    from .search import jina_search
+    from .config import get_proxy
+
+    effective_proxy = proxy or get_proxy()
+
+    try:
+        results = jina_search(query, limit=limit, proxy=effective_proxy)
+    except Exception as e:
+        _error(f"Search failed: {e}", "SEARCH_ERROR", EXIT_ERROR, as_json=json_output)
+        return
+
+    data = [{"url": r.url, "title": r.title, "snippet": r.snippet} for r in results]
+
+    if scrape_results and data:
+        cache_ttl = DEFAULT_CACHE_TTL
+        if paywall:
+            _has_creds = get_account_id() and get_api_token()
+            client = _get_client(True, cache_ttl=cache_ttl, proxy=effective_proxy) if _has_creds else None
+        else:
+            client = _get_client(True, cache_ttl=cache_ttl, proxy=effective_proxy)
+
+        for item in data:
+            try:
+                result = _scrape_single(
+                    client, item["url"], "markdown", None, False, False,
+                    None, None, paywall=paywall, stealth=stealth,
+                    only_main_content=only_main_content, clean=clean,
+                    proxy=effective_proxy,
+                )
+                item["content"] = result.get("content", "")
+                item["metadata"] = result.get("metadata", {})
+            except Exception as e:
+                item["content"] = ""
+                item["error"] = str(e)
+
+    meta = {"count": len(data), "query": query}
+
+    if json_output:
+        _output_json({"data": data, "meta": meta})
+    else:
+        for i, item in enumerate(data, 1):
+            console.print(f"\n[bold]{i}. {item['title']}[/bold]")
+            console.print(f"[dim]{item['url']}[/dim]")
+            console.print(item["snippet"])
+            if "content" in item and item["content"]:
+                console.print(f"\n{'─' * 60}")
+                content = item["content"]
+                if len(content) > 2000:
+                    content = content[:2000] + "\n\n[dim]... truncated[/dim]"
+                _output_text(content)
 
 
 # ------------------------------------------------------------------

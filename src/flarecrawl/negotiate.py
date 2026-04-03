@@ -161,6 +161,7 @@ def try_negotiate(
     extra_headers: dict | None = None,
     timeout: int = _NEGOTIATE_TIMEOUT,
     stealth: bool = False,
+    proxy: str | None = None,
 ) -> NegotiationResult | None:
     """Attempt markdown content negotiation with the target URL.
 
@@ -238,6 +239,7 @@ def try_negotiate(
                 timeout=httpx.Timeout(timeout),
                 http2=True,
                 follow_redirects=True,
+                proxy=proxy,
             )
 
         response = session.get(url, headers=headers, follow_redirects=True)

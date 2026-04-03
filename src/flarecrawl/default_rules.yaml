@@ -1,0 +1,58 @@
+# Default per-site header rules for enhanced content extraction.
+# Derived from everywall/ladder rulesets (MIT licensed).
+#
+# Format (Ladder-compatible):
+#   - domain: example.com        # single domain
+#     headers:
+#       Referer: "https://www.google.com/"
+#   - domains:                   # multiple domains
+#       - a.com
+#       - b.com
+#     headers:
+#       Referer: "https://www.google.com/"
+#
+# User overrides: ~/.config/flarecrawl/rules.yaml (same format)
+
+# NYT: cleared cookies + Google referer
+# NOTE: no Googlebot UA here - stealth tier handles TLS fingerprint
+- domain: www.nytimes.com
+  headers:
+    Cookie: "nyt-a=; nyt-gdpr=0; nyt-geo=DE; nyt-privacy=1"
+    Referer: "https://www.google.com/"
+
+# Medium: Twitter referer + cleared cookies
+- domain: medium.com
+  headers:
+    Referer: "https://t.co/x?amp=1"
+    Cookie: ""
+
+# FT: Twitter referer
+- domain: www.ft.com
+  headers:
+    Referer: "https://t.co/x?amp=1"
+
+# Conde Nast properties: Google referer
+- domains:
+    - www.wired.com
+    - www.newyorker.com
+    - www.vanityfair.com
+    - www.vogue.com
+    - www.gq.com
+    - www.architecturaldigest.com
+    - www.bonappetit.com
+    - www.cntraveler.com
+    - www.epicurious.com
+  headers:
+    Referer: "https://www.google.com/"
+
+# Washington Post: Google referer
+- domain: www.washingtonpost.com
+  headers:
+    Referer: "https://www.google.com/"
+
+# Belgian/Dutch media (DPG Media)
+- domain: demorgen.be
+  headers:
+    Cookie: "isBot=true; authId=1"
+    User-Agent: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/121.0.6140.0 Safari/537.36"
+    Referer: "https://news.google.com"

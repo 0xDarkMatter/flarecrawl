@@ -2,6 +2,7 @@
 
 from flarecrawl.extract import (
     clean_content,
+    clean_html,
     extract_images,
     extract_main_content,
     extract_structured_data,
@@ -289,6 +290,51 @@ class TestHtmlToMarkdown:
 # ------------------------------------------------------------------
 # TestCleanContent
 # ------------------------------------------------------------------
+
+
+class TestCleanHtml:
+    """Test ad/promo DOM element removal from HTML."""
+
+    def test_removes_ad_divs(self):
+        html = '<body><article><p>Content</p></article><div class="ad-container">Ad</div></body>'
+        result = clean_html(html)
+        assert "Content" in result
+        assert "ad-container" not in result
+
+    def test_removes_sponsored(self):
+        html = '<body><p>Article</p><div class="sponsored-content">Promo</div></body>'
+        result = clean_html(html)
+        assert "Article" in result
+        assert "Promo" not in result
+
+    def test_removes_social_share(self):
+        html = '<body><p>Text</p><div class="social-share-bar">Share on Twitter</div></body>'
+        result = clean_html(html)
+        assert "Text" in result
+        assert "Share on Twitter" not in result
+
+    def test_removes_newsletter_signup(self):
+        html = '<body><p>Article</p><div class="newsletter-signup"><input/><button>Subscribe</button></div></body>'
+        result = clean_html(html)
+        assert "Article" in result
+        assert "Subscribe" not in result
+
+    def test_preserves_article_content(self):
+        html = '<body><article><h1>Title</h1><p>Paragraph one.</p><p>Paragraph two.</p></article></body>'
+        result = clean_html(html)
+        assert "Title" in result
+        assert "Paragraph one" in result
+        assert "Paragraph two" in result
+
+    def test_removes_cookie_banner(self):
+        html = '<body><p>Content</p><div class="cookie-banner">Accept cookies</div></body>'
+        result = clean_html(html)
+        assert "Accept cookies" not in result
+
+    def test_removes_data_ad(self):
+        html = '<body><p>Text</p><div data-ad="true">Ad slot</div></body>'
+        result = clean_html(html)
+        assert "Ad slot" not in result
 
 
 class TestCleanContent:

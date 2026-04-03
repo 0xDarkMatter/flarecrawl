@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.11.0** | 2026-04-03 | `search` command (Jina Search), `--proxy` flag, `--clean` for HTML, per-site YAML rulesets (`flarecrawl rules`), `FLARECRAWL_PROXY` env var, 378 tests |
 | **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`), stealth mode (`--stealth`), automatic content cleanup — multi-strategy cascade with per-site optimisations, browser TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, ad/cruft removal on all markdown output, works without auth, batch mode support, 343 tests |
 | **v0.9.0** | 2026-03-26 | Markdown content negotiation (`Accept: text/markdown`) — auto-detects sites serving markdown natively, skips browser rendering for faster/cheaper/higher-quality extraction. Domain capability cache, `--no-negotiate`, `source` metadata on all results, `flarecrawl negotiate status/clear`, batch session reuse, 278 tests |
 | **v0.8.0** | 2026-03-20 | `--scroll`, `--query`, `--precision`/`--recall`, `--deduplicate`, `--session`, `flarecrawl batch`, `--format accessibility`, 215 tests |
@@ -740,7 +741,11 @@ flarecrawl/
 │   ├── config.py               # Credentials, usage tracking, env-var config
 │   ├── extract.py              # HTML extraction (main content, images, schema, tags)
 │   ├── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
-│   └── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
+│   ├── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
+│   ├── rules.py                # Per-site YAML rulesets (load, merge, cache)
+│   ├── search.py               # Web search via Jina Search API
+│   ├── stealth.py              # Stealth HTTP (curl_cffi TLS impersonation)
+│   └── default_rules.yaml      # Shipped per-site header rules
 └── tests/
     ├── conftest.py             # Test fixtures
     ├── corpus.py               # Feature test corpus (80 live tests x 8 sites)
@@ -749,7 +754,9 @@ flarecrawl/
     ├── test_cli.py             # CLI tests
     ├── test_client.py          # Client tests
     ├── test_extract.py         # Extract module tests
-    └── test_paywall.py         # Paywall bypass tests
+    ├── test_paywall.py         # Paywall bypass tests
+    ├── test_rules.py           # Per-site rules tests
+    └── test_search.py          # Search module tests
 ```
 
 ## Development

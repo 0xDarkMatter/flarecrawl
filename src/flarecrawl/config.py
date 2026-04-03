@@ -27,6 +27,19 @@ DEFAULT_MAX_WORKERS = get_env_int("FLARECRAWL_MAX_WORKERS", 10)
 DEFAULT_TIMEOUT = get_env_int("FLARECRAWL_TIMEOUT", 120)
 
 
+def get_proxy() -> str | None:
+    """Get proxy URL from env var or config file.
+
+    Checks FLARECRAWL_PROXY env var first, then config.json.
+    Supports http://, https://, socks5:// URLs.
+    """
+    env_val = os.environ.get("FLARECRAWL_PROXY", "").strip()
+    if env_val:
+        return env_val
+    config = load_config()
+    return config.get("proxy") or None
+
+
 def get_config_dir() -> Path:
     """Get platform-appropriate config directory."""
     system = platform.system()

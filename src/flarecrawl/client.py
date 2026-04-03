@@ -53,7 +53,7 @@ class Client:
     CACHEABLE_ENDPOINTS = {"markdown", "content", "links", "json"}
 
     def __init__(self, account_id: str | None = None, api_token: str | None = None,
-                 cache_ttl: int = 3600):
+                 cache_ttl: int = 3600, proxy: str | None = None):
         self.account_id = account_id or get_account_id()
         self.api_token = api_token or get_api_token()
         # Track cumulative browser time (ms) from X-Browser-Ms-Used headers
@@ -72,6 +72,7 @@ class Client:
             ),
             timeout=httpx.Timeout(self.TIMEOUT),
             http2=True,
+            proxy=proxy,
         )
 
     def close(self) -> None:
