@@ -397,7 +397,7 @@ flarecrawl scrape --batch urls.txt | jq 'select(.status == "ok") | .data.content
 | `firecrawl agent PROMPT` | `flarecrawl extract PROMPT` | Workers AI |
 | `firecrawl credit-usage` | `flarecrawl usage` | Local tracking |
 | `firecrawl --status` | `flarecrawl --status` | Same |
-| `firecrawl search QUERY` | **Not supported** | No CF equivalent |
+| `firecrawl search QUERY` | `flarecrawl search QUERY` | Via Jina Search API (needs `JINA_API_KEY`) |
 
 ## Raw API Passthrough
 
@@ -463,6 +463,8 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 | `FLARECRAWL_MAX_RETRIES` | 3 | Max retry attempts on 429/502/503 |
 | `FLARECRAWL_MAX_WORKERS` | 10 | Max parallel workers for batch mode |
 | `FLARECRAWL_TIMEOUT` | 120 | Request timeout in seconds |
+| `FLARECRAWL_PROXY` | - | Default proxy URL (http/https/socks5) |
+| `JINA_API_KEY` | - | Jina API key for `search` command (free at jina.ai) |
 
 ## Testing
 

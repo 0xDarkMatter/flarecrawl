@@ -325,6 +325,85 @@ Markdown output is automatically cleaned of common ad placeholders, share
 buttons, newsletter prompts, copyright lines, and navigation chrome.
 No flag needed - applied to all markdown output by default.
 
+For HTML output, use `--clean` to strip ad/promo DOM elements:
+
+```bash
+# Strip ad containers, social share widgets, cookie banners from HTML
+flarecrawl scrape https://example.com --format html --clean --json
+```
+
+### Web search
+
+Search the web and optionally scrape each result. Uses Jina Search API.
+
+```bash
+# Search and get results as JSON
+flarecrawl search "python web scraping" --json
+
+# Search and scrape each result through the normal pipeline
+flarecrawl search "topic" --scrape --limit 5 --paywall --json
+
+# Pipeline: search -> extract URLs -> batch scrape
+flarecrawl search "query" --json | jq -r '.data[].url' > urls.txt
+flarecrawl scrape --batch urls.txt --paywall --stealth --workers 5
+```
+
+Requires `JINA_API_KEY` env var (free at https://jina.ai/api-key).
+With `--scrape`, all scrape flags apply (`--paywall`, `--stealth`, `--only-main-content`, `--clean`).
+
+### Proxy support
+
+Route all HTTP requests through a proxy. Affects CLI-to-Cloudflare API
+connections and direct HTTP (stealth, negotiate, paywall). Does NOT affect the
+Cloudflare browser-to-target connection (CF's browser uses its own IP).
+
+```bash
+# HTTP proxy
+flarecrawl scrape https://example.com --proxy http://proxy:8080
+
+# SOCKS5 proxy
+flarecrawl scrape https://example.com --proxy socks5://localhost:9050
+
+# Set default via env var
+export FLARECRAWL_PROXY=socks5://localhost:9050
+flarecrawl scrape https://example.com   # uses env var proxy
+```
+
+Supported on all commands: `scrape`, `crawl`, `download`, `extract`, `search`.
+
+### Per-site rules
+
+Customisable per-site header rules for enhanced extraction. Default rules ship
+with the package; user overrides are loaded from `~/.config/flarecrawl/rules.yaml`.
+
+```bash
+# List all loaded rules
+flarecrawl rules list --json
+
+# Show rules for a domain
+flarecrawl rules show www.nytimes.com
+
+# Add a custom rule
+flarecrawl rules add example.com --referer https://www.google.com/ --cookie "auth=1"
+
+# Show file paths
+flarecrawl rules path
+```
+
+Rules use Ladder-compatible YAML format:
+
+```yaml
+- domain: www.example.com
+  headers:
+    Referer: "https://www.google.com/"
+    Cookie: "session=abc"
+- domains:
+    - a.com
+    - b.com
+  headers:
+    Referer: "https://t.co/x?amp=1"
+```
+
 ### Markdown content negotiation
 
 Sites on Cloudflare (Pro+) can serve markdown directly via `Accept: text/markdown`
@@ -568,6 +647,8 @@ Tracks which domains respond to `Accept: text/markdown`. Positive results cached
 | `FLARECRAWL_MAX_RETRIES` | 3 | Max retry attempts |
 | `FLARECRAWL_MAX_WORKERS` | 10 | Max parallel workers |
 | `FLARECRAWL_TIMEOUT` | 120 | Request timeout in seconds |
+| `FLARECRAWL_PROXY` | - | Default proxy URL (http/https/socks5) |
+| `JINA_API_KEY` | - | Jina API key for `search` command |
 
 ## Firecrawl Compatibility
 
@@ -582,12 +663,12 @@ Flarecrawl follows the same command structure as the `firecrawl` CLI:
 | `firecrawl download URL` | `flarecrawl download URL` | Saves to `.flarecrawl/` |
 | `firecrawl agent PROMPT` | `flarecrawl extract PROMPT` | Uses Workers AI |
 | `firecrawl credit-usage` | `flarecrawl usage` | Local tracking |
-| `firecrawl search QUERY` | **Not supported** | No CF equivalent |
+| `firecrawl search QUERY` | `flarecrawl search QUERY` | Via Jina Search API |
 | `firecrawl --status` | `flarecrawl --status` | Same |
 
 ### What's different
 
-- **No `search` command** — Cloudflare doesn't have a web search API
+- **`search` command** — uses Jina Search API (requires `JINA_API_KEY`), with `--scrape` to scrape results
 - **`extract` instead of `agent`** — same concept, different name to avoid confusion
 - **`favicon` command** — bonus: extract favicon/apple-touch-icon URLs from pages
 - **`schema` command** — bonus: extract LD+JSON, OpenGraph, Twitter Cards
