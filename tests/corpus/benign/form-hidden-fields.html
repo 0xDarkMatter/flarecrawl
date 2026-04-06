@@ -2,93 +2,193 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Checkout - BookHaven</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Complete your purchase securely">
+    <title>Checkout - GreenLeaf Market</title>
+    <link rel="stylesheet" href="/css/checkout.css">
 </head>
 <body>
     <header>
-        <h1>BookHaven</h1>
         <nav>
-            <a href="/">Home</a> |
-            <a href="/cart">Cart (3 items)</a> |
-            <a href="/account">My Account</a>
+            <a href="/" class="logo">GreenLeaf Market</a>
+            <a href="/products">Products</a>
+            <a href="/cart">Cart (3)</a>
+            <a href="/account">Account</a>
         </nav>
     </header>
 
     <main>
-        <h2>Checkout</h2>
-        <p>Please review your order and enter your shipping details below. All fields marked with an asterisk are required.</p>
+        <h1>Checkout</h1>
 
-        <section>
-            <h3>Order Summary</h3>
-            <table>
-                <tr><td>The Art of PostgreSQL</td><td>$49.99</td></tr>
-                <tr><td>Designing Data-Intensive Applications</td><td>$42.50</td></tr>
-                <tr><td>Database Internals</td><td>$39.99</td></tr>
-                <tr><td><strong>Total</strong></td><td><strong>$132.48</strong></td></tr>
-            </table>
-        </section>
+        <div class="checkout-layout">
+            <div class="checkout-form">
+                <form action="/checkout/process" method="POST" id="checkout-form">
+                    <input type="hidden" name="_csrf" value="a1b2c3d4e5">
+                    <input type="hidden" name="cart_id" value="cart_98765">
+                    <input type="hidden" name="session" value="sess_abc123xyz">
+                    <input type="hidden" name="return_url" value="/checkout/complete">
 
-        <form action="/checkout/process" method="POST">
-            <input type="hidden" name="_csrf" value="a1b2c3d4e5f6">
-            <input type="hidden" name="cart_id" value="cart_98765">
-            <input type="hidden" name="session" value="sess_abc123xyz">
-            <input type="hidden" name="return_url" value="/checkout/complete">
-            <input type="hidden" name="currency" value="USD">
-            <input type="hidden" name="store_id" value="bh_west_01">
+                    <section class="form-section">
+                        <h2>Contact Information</h2>
+                        <div class="form-group">
+                            <label for="email">Email Address</label>
+                            <input type="email" id="email" name="email" required placeholder="you@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="phone">Phone Number</label>
+                            <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567">
+                        </div>
+                    </section>
 
-            <fieldset>
-                <legend>Shipping Address</legend>
-                <label for="name">Full Name *</label>
-                <input type="text" id="name" name="name" required>
+                    <section class="form-section">
+                        <h2>Shipping Address</h2>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="first-name">First Name</label>
+                                <input type="text" id="first-name" name="first_name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="last-name">Last Name</label>
+                                <input type="text" id="last-name" name="last_name" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="address1">Street Address</label>
+                            <input type="text" id="address1" name="address1" required placeholder="123 Main Street">
+                        </div>
+                        <div class="form-group">
+                            <label for="address2">Apartment, Suite, etc. (optional)</label>
+                            <input type="text" id="address2" name="address2" placeholder="Apt 4B">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="city">City</label>
+                                <input type="text" id="city" name="city" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="state">State</label>
+                                <select id="state" name="state" required>
+                                    <option value="">Select state</option>
+                                    <option value="CA">California</option>
+                                    <option value="NY">New York</option>
+                                    <option value="TX">Texas</option>
+                                    <option value="FL">Florida</option>
+                                    <option value="WA">Washington</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="zip">ZIP Code</label>
+                                <input type="text" id="zip" name="zip" required pattern="[0-9]{5}" placeholder="12345">
+                            </div>
+                        </div>
+                    </section>
 
-                <label for="address">Street Address *</label>
-                <input type="text" id="address" name="address" required>
+                    <section class="form-section">
+                        <h2>Shipping Method</h2>
+                        <div class="shipping-options">
+                            <label class="shipping-option">
+                                <input type="radio" name="shipping" value="standard" checked>
+                                <span class="option-details">
+                                    <span class="option-name">Standard Shipping (5-7 business days)</span>
+                                    <span class="option-price">Free</span>
+                                </span>
+                            </label>
+                            <label class="shipping-option">
+                                <input type="radio" name="shipping" value="express">
+                                <span class="option-details">
+                                    <span class="option-name">Express Shipping (2-3 business days)</span>
+                                    <span class="option-price">$9.99</span>
+                                </span>
+                            </label>
+                            <label class="shipping-option">
+                                <input type="radio" name="shipping" value="overnight">
+                                <span class="option-details">
+                                    <span class="option-name">Overnight Shipping (next business day)</span>
+                                    <span class="option-price">$24.99</span>
+                                </span>
+                            </label>
+                        </div>
+                    </section>
 
-                <label for="city">City *</label>
-                <input type="text" id="city" name="city" required>
+                    <section class="form-section">
+                        <h2>Payment Information</h2>
+                        <div class="form-group">
+                            <label for="card-name">Name on Card</label>
+                            <input type="text" id="card-name" name="card_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="card-number">Card Number</label>
+                            <input type="text" id="card-number" name="card_number" required placeholder="1234 5678 9012 3456" maxlength="19">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="expiry">Expiration Date</label>
+                                <input type="text" id="expiry" name="expiry" required placeholder="MM/YY" maxlength="5">
+                            </div>
+                            <div class="form-group">
+                                <label for="cvv">CVV</label>
+                                <input type="text" id="cvv" name="cvv" required placeholder="123" maxlength="4">
+                            </div>
+                        </div>
+                    </section>
 
-                <label for="state">State/Province *</label>
-                <input type="text" id="state" name="state" required>
+                    <button type="submit" class="btn-checkout">Place Order</button>
+                </form>
+            </div>
 
-                <label for="zip">Postal Code *</label>
-                <input type="text" id="zip" name="zip" required>
+            <div class="order-summary">
+                <h2>Order Summary</h2>
+                <div class="summary-items">
+                    <div class="summary-item">
+                        <span>Organic Matcha Powder (100g) x 1</span>
+                        <span>$28.99</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Bamboo Whisk Set x 1</span>
+                        <span>$15.99</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Ceramic Tea Bowl x 2</span>
+                        <span>$39.98</span>
+                    </div>
+                </div>
+                <hr>
+                <div class="summary-line">
+                    <span>Subtotal</span>
+                    <span>$84.96</span>
+                </div>
+                <div class="summary-line">
+                    <span>Shipping</span>
+                    <span>Free</span>
+                </div>
+                <div class="summary-line">
+                    <span>Tax</span>
+                    <span>$7.22</span>
+                </div>
+                <hr>
+                <div class="summary-line total">
+                    <span>Total</span>
+                    <span>$92.18</span>
+                </div>
+            </div>
+        </div>
 
-                <label for="country">Country *</label>
-                <select id="country" name="country">
-                    <option value="US">United States</option>
-                    <option value="CA">Canada</option>
-                    <option value="GB">United Kingdom</option>
-                    <option value="AU">Australia</option>
-                </select>
-            </fieldset>
+        <div class="checkout-info">
+            <h3>Secure Checkout</h3>
+            <p>Your payment information is encrypted and processed securely. We never store your full credit card number on our servers. All transactions are protected with industry-standard SSL encryption. If you have any questions about your order, our customer service team is available Monday through Friday, 9 AM to 6 PM Eastern Time, at support@greenleafmarket.example.com or by phone at (555) 987-6543.</p>
 
-            <fieldset>
-                <legend>Payment Method</legend>
-                <label for="card">Card Number *</label>
-                <input type="text" id="card" name="card" required>
-
-                <label for="expiry">Expiration *</label>
-                <input type="text" id="expiry" name="expiry" placeholder="MM/YY" required>
-
-                <label for="cvv">CVV *</label>
-                <input type="text" id="cvv" name="cvv" required>
-            </fieldset>
-
-            <fieldset>
-                <legend>Shipping Method</legend>
-                <label><input type="radio" name="shipping" value="standard" checked> Standard (5-7 business days) - Free</label>
-                <label><input type="radio" name="shipping" value="express"> Express (2-3 business days) - $9.99</label>
-                <label><input type="radio" name="shipping" value="overnight"> Overnight - $24.99</label>
-            </fieldset>
-
-            <p>By placing this order, you agree to our terms of service and privacy policy. Your payment information is encrypted and processed securely.</p>
-
-            <button type="submit">Place Order - $132.48</button>
-        </form>
+            <h3>Return Policy</h3>
+            <p>We offer a 30-day return policy on all unopened items. If you are not satisfied with your purchase, you can return it for a full refund within 30 days of delivery. Opened food items cannot be returned for safety reasons, but we will work with you to resolve any quality concerns. Please contact our support team to initiate a return and receive a prepaid shipping label.</p>
+        </div>
     </main>
 
     <footer>
-        <p>&copy; 2026 BookHaven. All rights reserved.</p>
+        <p>&copy; 2025 GreenLeaf Market. All rights reserved.</p>
+        <nav>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/shipping">Shipping Policy</a>
+        </nav>
     </footer>
 </body>
 </html>

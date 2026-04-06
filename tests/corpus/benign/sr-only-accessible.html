@@ -2,104 +2,136 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>City Library - Online Catalogue</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Explore our curated collection of specialty teas from around the world">
+    <title>World Tea Collection - TeaHouse Online</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <style>
+        .sr-only, .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
 </head>
 <body>
     <a href="#main-content" class="sr-only">Skip to main content</a>
 
     <header>
-        <h1>City Public Library</h1>
         <nav aria-label="Main navigation">
+            <a href="/" class="logo">TeaHouse Online</a>
             <ul>
-                <li><a href="/" aria-current="page">Home <span class="sr-only">Current page</span></a></li>
-                <li><a href="/catalogue">Catalogue</a></li>
-                <li><a href="/events">Events</a></li>
-                <li><a href="/membership">Membership</a></li>
-                <li><a href="/help" target="_blank">Help <span class="sr-only">Opens in new tab</span></a></li>
+                <li><a href="/collections" aria-current="page">Collections <span class="sr-only">Current page</span></a></li>
+                <li><a href="/learn">Learn About Tea</a></li>
+                <li><a href="/blog">Blog</a></li>
+                <li><a href="/about">About Us</a></li>
+                <li><a href="https://instagram.com/teahouseonline" target="_blank">Instagram <span class="sr-only">Opens in new tab</span></a></li>
             </ul>
+            <div class="nav-actions">
+                <button type="button" aria-label="Search">
+                    <svg aria-hidden="true" width="20" height="20"><use href="#icon-search"></use></svg>
+                </button>
+                <a href="/cart">Cart <span class="sr-only">(2 items)</span></a>
+            </div>
         </nav>
-        <div class="d-none d-md-block">Desktop menu</div>
+
+        <div class="d-none d-md-block">Desktop navigation menu</div>
     </header>
 
     <main id="main-content">
-        <h2>Welcome to the City Public Library</h2>
-        <p>Our library serves over 50,000 registered members across four branches. With a collection of more than 200,000 physical items and access to over two million digital resources, we provide comprehensive information services to our community.</p>
+        <section class="hero">
+            <h1>World Tea Collection</h1>
+            <p>Discover exceptional teas sourced directly from the finest estates across Asia, Africa, and South America. Each tea in our collection has been carefully selected for its distinctive character, superior quality, and sustainable production practices.</p>
+        </section>
 
-        <section>
-            <h3>Search the Catalogue</h3>
-            <form role="search">
-                <label for="search">Search books, articles, and media</label>
-                <input type="search" id="search" name="q" placeholder="Title, author, or keyword">
-                <button type="submit">
-                    Search
-                    <span class="visually-hidden">the library catalogue</span>
-                </button>
+        <section class="collection-intro">
+            <h2>Our Philosophy</h2>
+            <p>At TeaHouse Online, we believe that great tea begins at the source. We travel to tea-growing regions around the world, visiting estates and cooperatives to find teas that represent the very best of their origin. We work directly with farmers who are committed to sustainable agriculture, fair labor practices, and exceptional quality. Every tea in our collection tells a story of place, tradition, and craftsmanship that spans generations.</p>
+
+            <p>Our sourcing team includes certified tea sommeliers and agronomists who evaluate hundreds of samples each season, selecting only those that meet our exacting standards for aroma, flavor, appearance, and consistency. We purchase in small batches to ensure freshness, and every lot is tested for purity and quality before it reaches our customers. From the misty mountains of Darjeeling to the volcanic soils of Japan's Kagoshima prefecture, each region imparts unique characteristics that make its teas truly distinctive.</p>
+        </section>
+
+        <section class="featured-collections">
+            <h2>Featured Collections</h2>
+
+            <div class="collection-grid">
+                <article class="collection-card">
+                    <img src="/images/japanese-green.jpg" alt="Selection of Japanese green teas including sencha and gyokuro">
+                    <h3>Japanese Green Teas</h3>
+                    <p>Our Japanese green tea collection showcases the remarkable diversity of teas produced in Japan. From the grassy sweetness of premium sencha to the rich umami of shade-grown gyokuro, these teas reflect centuries of Japanese tea cultivation expertise. We source from family-owned farms in Uji, Shizuoka, and Kagoshima that employ traditional processing methods passed down through generations. Each tea is steamed within hours of harvest to preserve the vibrant green color and fresh, vegetal flavors that distinguish Japanese green teas from their Chinese counterparts.</p>
+                    <a href="/collections/japanese-green">Explore Collection</a>
+                </article>
+
+                <article class="collection-card">
+                    <img src="/images/chinese-oolong.jpg" alt="Rolled oolong tea leaves from Taiwan and Fujian">
+                    <h3>Chinese and Taiwanese Oolongs</h3>
+                    <p>Oolong tea occupies the vast spectrum between green and black tea, and nowhere is this diversity more apparent than in the oolongs of China and Taiwan. Our collection includes lightly oxidized high-mountain oolongs from Taiwan's Ali Shan region, with their buttery floral character, as well as heavily roasted Wuyi rock oolongs from Fujian province, known for their mineral complexity and lingering finish. The craftsmanship involved in producing fine oolong tea is extraordinary, with master tea makers carefully controlling oxidation and roasting to coax out layers of flavor that unfold across multiple steepings.</p>
+                    <a href="/collections/oolong">Explore Collection</a>
+                </article>
+
+                <article class="collection-card">
+                    <img src="/images/indian-black.jpg" alt="First flush Darjeeling tea with distinctive muscatel character">
+                    <h3>Indian Black Teas</h3>
+                    <p>India produces some of the world's most celebrated black teas, and our collection highlights the distinctive terroir of its major growing regions. Darjeeling teas, grown in the cool Himalayan foothills, are prized for their delicate muscatel character and bright, complex flavors that vary dramatically between the first flush of spring and the later harvests. Assam teas, from the lowland river valleys of northeastern India, offer robust, malty richness that stands up beautifully to milk. Nilgiri teas from the Blue Mountains of southern India provide a fragrant, brisk cup that is equally enjoyable hot or iced.</p>
+                    <a href="/collections/indian-black">Explore Collection</a>
+                </article>
+            </div>
+        </section>
+
+        <section class="brewing-guide">
+            <h2>Brewing Guide</h2>
+            <p>Proper brewing is essential to experiencing each tea at its best. Water temperature and steeping time vary significantly between tea types. As a general guide, delicate green teas should be brewed with water that has cooled to around 160 to 175 degrees Fahrenheit for one to two minutes. Oolong teas benefit from slightly hotter water at 185 to 205 degrees and steeping times of two to four minutes. Black teas are typically brewed with fully boiling water for three to five minutes. However, these are starting points, and we encourage you to experiment to find the strength and character you prefer.</p>
+
+            <p>Water quality matters more than most people realize. Filtered or spring water generally produces the best results, as chlorine and excessive minerals in tap water can mask the subtle flavors of high-quality tea. The vessel you brew in also makes a difference. A simple ceramic or porcelain teapot or gaiwan allows you to appreciate the tea's true character without interference. For oolongs and pu-erh teas, Yixing clay teapots are traditional and can enhance the tea over time as the unglazed clay absorbs and releases flavors with each use.</p>
+        </section>
+
+        <section class="sustainability">
+            <h2>Our Commitment to Sustainability</h2>
+            <p>We are committed to supporting sustainable tea production practices that protect both the environment and the livelihoods of tea farming communities. All of our partner estates practice organic or biodynamic agriculture, avoiding synthetic pesticides and fertilizers that degrade soil health and pollute waterways. We pay premium prices that reflect the true cost of sustainable production, ensuring that farmers can invest in their land and their communities for the long term. Our packaging is fully recyclable, and we offset the carbon emissions associated with shipping through verified reforestation programs in tea-growing regions.</p>
+        </section>
+
+        <div role="dialog" aria-labelledby="newsletter-title" aria-hidden="true" class="newsletter-modal">
+            <h2 id="newsletter-title">Join Our Tea Community</h2>
+            <p>Subscribe to receive brewing tips, new arrival announcements, and exclusive member discounts.</p>
+            <form action="/newsletter/subscribe" method="POST">
+                <label for="newsletter-email">Email address</label>
+                <input type="email" id="newsletter-email" name="email" required>
+                <button type="submit">Subscribe</button>
             </form>
-        </section>
-
-        <section>
-            <h3>New Arrivals This Week</h3>
-            <p>We add hundreds of new titles to our collection every month. Browse our latest acquisitions across fiction, non-fiction, children's literature, and audiovisual materials.</p>
-
-            <ul>
-                <li>
-                    <a href="/book/12345">The Memory Garden by Sarah Chen</a>
-                    <span class="sr-only">Available at all branches</span>
-                    <span class="badge">New</span>
-                </li>
-                <li>
-                    <a href="/book/12346">Quantum Computing Explained by Marcus Webb</a>
-                    <span class="sr-only">Available at Central branch only</span>
-                    <span class="badge">New</span>
-                </li>
-                <li>
-                    <a href="/book/12347">Cooking with Seasonal Vegetables</a>
-                    <span class="sr-only">Available as ebook and audiobook</span>
-                </li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Upcoming Events</h3>
-            <p>Our branches host regular events for all ages, from toddler story time to adult book clubs and author visits. All events are free for library members.</p>
-
-            <div class="event">
-                <h4>Author Talk: Sarah Chen</h4>
-                <p>Join us for a reading and signing of "The Memory Garden" at the Central Branch.</p>
-                <p>Saturday, April 12 at 2:00 PM</p>
-                <a href="/events/author-chen">
-                    Register
-                    <span class="visually-hidden">for Author Talk: Sarah Chen on April 12</span>
-                </a>
-            </div>
-
-            <div class="event">
-                <h4>Children's Story Hour</h4>
-                <p>Interactive storytelling for ages 3-6 with crafts and activities.</p>
-                <p>Every Wednesday at 10:30 AM</p>
-                <a href="/events/story-hour">
-                    Details
-                    <span class="visually-hidden">about Children's Story Hour</span>
-                </a>
-            </div>
-        </section>
-
-        <section>
-            <h3>Digital Resources</h3>
-            <p>Your library card gives you free access to ebooks, audiobooks, streaming films, language learning tools, and academic databases. Access these resources from anywhere with your library card number and PIN.</p>
-        </section>
+            <button type="button" aria-label="Close dialog">
+                <span class="visually-hidden">Close dialog</span>
+                <svg aria-hidden="true" width="16" height="16"><use href="#icon-close"></use></svg>
+            </button>
+        </div>
     </main>
 
     <footer>
-        <p>&copy; 2026 City Public Library. All rights reserved.</p>
-        <nav aria-label="Footer navigation">
-            <a href="/privacy">Privacy Policy</a> |
-            <a href="/accessibility">
-                Accessibility
-                <span class="sr-only">statement</span>
-            </a> |
-            <a href="/contact">Contact Us</a>
-        </nav>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>Customer Service</h3>
+                <ul>
+                    <li><a href="/shipping">Shipping Information</a></li>
+                    <li><a href="/returns">Returns and Exchanges</a></li>
+                    <li><a href="/faq">Frequently Asked Questions</a></li>
+                    <li><a href="/contact">Contact Us</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Connect</h3>
+                <ul>
+                    <li><a href="https://instagram.com/teahouseonline" target="_blank">Instagram <span class="sr-only">Opens in new tab</span></a></li>
+                    <li><a href="https://twitter.com/teahouseonline" target="_blank">Twitter <span class="sr-only">Opens in new tab</span></a></li>
+                    <li><a href="/blog">Blog</a></li>
+                </ul>
+            </div>
+        </div>
+        <p class="copyright">&copy; 2025 TeaHouse Online. All rights reserved.</p>
     </footer>
 </body>
 </html>
