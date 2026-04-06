@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>City Library - Online Catalogue</title>
+</head>
+<body>
+    <a href="#main-content" class="sr-only">Skip to main content</a>
+
+    <header>
+        <h1>City Public Library</h1>
+        <nav aria-label="Main navigation">
+            <ul>
+                <li><a href="/" aria-current="page">Home <span class="sr-only">Current page</span></a></li>
+                <li><a href="/catalogue">Catalogue</a></li>
+                <li><a href="/events">Events</a></li>
+                <li><a href="/membership">Membership</a></li>
+                <li><a href="/help" target="_blank">Help <span class="sr-only">Opens in new tab</span></a></li>
+            </ul>
+        </nav>
+        <div class="d-none d-md-block">Desktop menu</div>
+    </header>
+
+    <main id="main-content">
+        <h2>Welcome to the City Public Library</h2>
+        <p>Our library serves over 50,000 registered members across four branches. With a collection of more than 200,000 physical items and access to over two million digital resources, we provide comprehensive information services to our community.</p>
+
+        <section>
+            <h3>Search the Catalogue</h3>
+            <form role="search">
+                <label for="search">Search books, articles, and media</label>
+                <input type="search" id="search" name="q" placeholder="Title, author, or keyword">
+                <button type="submit">
+                    Search
+                    <span class="visually-hidden">the library catalogue</span>
+                </button>
+            </form>
+        </section>
+
+        <section>
+            <h3>New Arrivals This Week</h3>
+            <p>We add hundreds of new titles to our collection every month. Browse our latest acquisitions across fiction, non-fiction, children's literature, and audiovisual materials.</p>
+
+            <ul>
+                <li>
+                    <a href="/book/12345">The Memory Garden by Sarah Chen</a>
+                    <span class="sr-only">Available at all branches</span>
+                    <span class="badge">New</span>
+                </li>
+                <li>
+                    <a href="/book/12346">Quantum Computing Explained by Marcus Webb</a>
+                    <span class="sr-only">Available at Central branch only</span>
+                    <span class="badge">New</span>
+                </li>
+                <li>
+                    <a href="/book/12347">Cooking with Seasonal Vegetables</a>
+                    <span class="sr-only">Available as ebook and audiobook</span>
+                </li>
+            </ul>
+        </section>
+
+        <section>
+            <h3>Upcoming Events</h3>
+            <p>Our branches host regular events for all ages, from toddler story time to adult book clubs and author visits. All events are free for library members.</p>
+
+            <div class="event">
+                <h4>Author Talk: Sarah Chen</h4>
+                <p>Join us for a reading and signing of "The Memory Garden" at the Central Branch.</p>
+                <p>Saturday, April 12 at 2:00 PM</p>
+                <a href="/events/author-chen">
+                    Register
+                    <span class="visually-hidden">for Author Talk: Sarah Chen on April 12</span>
+                </a>
+            </div>
+
+            <div class="event">
+                <h4>Children's Story Hour</h4>
+                <p>Interactive storytelling for ages 3-6 with crafts and activities.</p>
+                <p>Every Wednesday at 10:30 AM</p>
+                <a href="/events/story-hour">
+                    Details
+                    <span class="visually-hidden">about Children's Story Hour</span>
+                </a>
+            </div>
+        </section>
+
+        <section>
+            <h3>Digital Resources</h3>
+            <p>Your library card gives you free access to ebooks, audiobooks, streaming films, language learning tools, and academic databases. Access these resources from anywhere with your library card number and PIN.</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 City Public Library. All rights reserved.</p>
+        <nav aria-label="Footer navigation">
+            <a href="/privacy">Privacy Policy</a> |
+            <a href="/accessibility">
+                Accessibility
+                <span class="sr-only">statement</span>
+            </a> |
+            <a href="/contact">Contact Us</a>
+        </nav>
+    </footer>
+</body>
+</html>

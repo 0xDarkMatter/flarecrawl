@@ -494,7 +494,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (506 tests, no API calls)
+# Unit tests (564 tests, no API calls)
 pytest tests/ -v
 
 # Agent-safety tests only (137 tests including corpus validation)

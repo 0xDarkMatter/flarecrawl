@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.12.1** | 2026-04-06 | Extended attack vector coverage: hidden iframes, hidden form inputs, CSS class hiding (.d-none, [hidden]), meta tag injection, homoglyph evasion (Cyrillic/Greek), markdown exfiltration detection, HTML entity evasion. 61-file corpus, 564 tests |
 | **v0.12.0** | 2026-04-06 | `--agent-safe` flag for adversarial content sanitisation, two-phase pipeline (HTML + text), 48-file attack/benign test corpus, prompt injection detection, semantic manipulation flagging, 506 tests |
 | **v0.11.0** | 2026-04-03 | `search` command (Jina Search), `--proxy` flag, `--clean` for HTML, per-site YAML rulesets (`flarecrawl rules`), `FLARECRAWL_PROXY` env var, 378 tests |
 | **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`), stealth mode (`--stealth`), automatic content cleanup — multi-strategy cascade with per-site optimisations, browser TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, ad/cruft removal on all markdown output, works without auth, batch mode support, 343 tests |

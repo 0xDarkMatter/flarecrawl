@@ -26,6 +26,7 @@ Extensibility:
 
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -221,6 +222,58 @@ _UNICODE_TRICKS = re.compile(
     "]"
 )
 
+# CSS class-based hiding patterns.
+_HIDING_CLASSES = re.compile(
+    r"(?:^|\s)(?:d-none|hidden|invisible|visually-hidden|sr-only)(?:\s|$)",
+    re.IGNORECASE,
+)
+
+# Accessibility hiding classes that need injection-pattern check before removal.
+_ACCESSIBILITY_CLASSES = re.compile(
+    r"(?:^|\s)(?:sr-only|visually-hidden)(?:\s|$)",
+    re.IGNORECASE,
+)
+
+# Standard meta tag names to skip (never sanitise these).
+_STANDARD_META_NAMES = frozenset({
+    "description", "keywords", "author", "robots", "viewport", "generator",
+    "theme-color", "color-scheme", "format-detection",
+})
+_STANDARD_META_PROPERTY_PREFIXES = (
+    "og:", "twitter:", "fb:", "article:", "music:", "video:", "book:", "profile:",
+)
+
+# Homoglyph mapping: Cyrillic/Greek characters visually similar to Latin.
+_HOMOGLYPH_MAP: dict[str, str] = {
+    # Cyrillic -> Latin
+    "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p",
+    "\u0441": "c", "\u0443": "y", "\u0445": "x", "\u0456": "i",
+    "\u0410": "A", "\u0415": "E", "\u041e": "O", "\u0420": "P",
+    "\u0421": "C", "\u0422": "T", "\u041d": "H", "\u041c": "M",
+    "\u0412": "B", "\u041a": "K",
+    # Greek -> Latin
+    "\u03b1": "a", "\u03b5": "e", "\u03bf": "o", "\u03c1": "p",
+    "\u0391": "A", "\u0395": "E", "\u039f": "O", "\u0392": "B",
+    "\u039a": "K", "\u039c": "M", "\u039d": "N", "\u03a4": "T",
+}
+_HOMOGLYPH_CHARS = re.compile(
+    "[" + "".join(re.escape(c) for c in _HOMOGLYPH_MAP) + "]"
+)
+
+# Markdown image/link pattern for exfiltration detection.
+_MD_IMAGE_LINK = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+_SUSPICIOUS_URL = re.compile(
+    r"(?:"
+    r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|[?&](?:secret|token|key|api[_-]?key|password|auth|session|data|exfil)="
+    r"|\.(?:php|cgi)\?.*="
+    r")",
+    re.IGNORECASE,
+)
+
+# HTML entity pattern for evasion detection.
+_HTML_ENTITY = re.compile(r"&(?:#(?:x[0-9a-fA-F]+|\d+)|[a-zA-Z]+);")
+
 
 # ---------------------------------------------------------------------------
 # HTML-level sanitisers (Phase 1)
@@ -392,6 +445,177 @@ def sanitise_unicode_tricks(soup: BeautifulSoup) -> list[Finding]:
     return findings
 
 
+@register_html
+def sanitise_hidden_iframes(soup: BeautifulSoup) -> list[Finding]:
+    """Remove iframe elements with external sources.
+
+    Iframes load external content that could contain adversarial injections.
+    The html_to_markdown converter doesn't handle iframes, and extract.py's
+    _STRIP_TAGS already removes them. This provides defence-in-depth.
+    """
+    findings: list[Finding] = []
+    removed_count = 0
+
+    for el in soup.find_all("iframe"):
+        if not isinstance(el, Tag):
+            continue
+        has_src = el.get("src")
+        has_zero_dim = (
+            el.get("width") in ("0", "0px")
+            or el.get("height") in ("0", "0px")
+        )
+        has_hiding_style = False
+        style = el.get("style", "")
+        if style:
+            for _, pattern in _HIDING_PATTERNS:
+                if pattern and pattern.search(style):
+                    has_hiding_style = True
+                    break
+
+        if has_src or has_zero_dim or has_hiding_style:
+            el.decompose()
+            removed_count += 1
+
+    if removed_count:
+        findings.append(Finding(
+            category="content_injection",
+            severity="medium",
+            description=f"Hidden/external iframes removed ({removed_count})",
+            action="removed",
+            count=removed_count,
+        ))
+    return findings
+
+
+@register_html
+def sanitise_hidden_inputs(soup: BeautifulSoup) -> list[Finding]:
+    """Clear value attributes on hidden form inputs containing instructions.
+
+    Hidden inputs carry form state (CSRF tokens, session IDs) but can also
+    smuggle adversarial payloads in their value attributes.
+    """
+    findings: list[Finding] = []
+    cleared_count = 0
+
+    for el in soup.find_all("input", attrs={"type": "hidden"}):
+        if not isinstance(el, Tag):
+            continue
+        value = el.get("value", "")
+        if not isinstance(value, str):
+            continue
+        if len(value) > 50 and _ATTR_INSTRUCTION_PATTERN.search(value):
+            el["value"] = ""
+            cleared_count += 1
+
+    if cleared_count:
+        findings.append(Finding(
+            category="content_injection",
+            severity="high",
+            description=f"Hidden input values cleared ({cleared_count})",
+            action="removed",
+            count=cleared_count,
+        ))
+    return findings
+
+
+@register_html
+def sanitise_css_class_hiding(soup: BeautifulSoup) -> list[Finding]:
+    """Remove elements hidden via CSS classes or the hidden HTML attribute.
+
+    Targets: .d-none, .hidden, .invisible, .visually-hidden, .sr-only,
+    and the [hidden] attribute.
+
+    Accessibility classes (.sr-only, .visually-hidden) are only removed if
+    their text content matches injection patterns - legitimate screen reader
+    text is preserved.
+    """
+    findings: list[Finding] = []
+    removed_count = 0
+
+    for el in soup.find_all(True):
+        if not isinstance(el, Tag):
+            continue
+        # Skip already-decomposed elements
+        if el.parent is None:
+            continue
+
+        cls = el.get("class", [])
+        cls_str = " ".join(cls) if isinstance(cls, list) else str(cls)
+        has_hiding_class = bool(_HIDING_CLASSES.search(cls_str))
+        has_hidden_attr = el.has_attr("hidden")
+
+        if not has_hiding_class and not has_hidden_attr:
+            continue
+
+        text = el.get_text(strip=True)
+        if len(text) < _HIDDEN_TEXT_MIN_CHARS:
+            continue
+
+        # Accessibility classes: only remove if text matches injection patterns
+        is_a11y = bool(_ACCESSIBILITY_CLASSES.search(cls_str))
+        if is_a11y and not has_hidden_attr:
+            if not (_INJECTION_PATTERNS.search(text) or _ATTR_INSTRUCTION_PATTERN.search(text)):
+                continue
+
+        el.decompose()
+        removed_count += 1
+
+    if removed_count:
+        findings.append(Finding(
+            category="content_injection",
+            severity="high",
+            description=f"CSS class-hidden elements removed ({removed_count})",
+            action="removed",
+            count=removed_count,
+        ))
+    return findings
+
+
+@register_html
+def sanitise_meta_injection(soup: BeautifulSoup) -> list[Finding]:
+    """Clear custom meta tags containing instruction-like content.
+
+    Standard meta tags (description, og:*, twitter:*, charset, http-equiv)
+    are always preserved. Custom meta tags with long content matching
+    instruction patterns are cleared.
+    """
+    findings: list[Finding] = []
+    cleared_count = 0
+
+    for el in soup.find_all("meta"):
+        if not isinstance(el, Tag):
+            continue
+
+        # Skip standard meta tags
+        name = el.get("name", "")
+        if isinstance(name, str) and name.lower() in _STANDARD_META_NAMES:
+            continue
+        prop = el.get("property", "")
+        if isinstance(prop, str) and any(
+            prop.lower().startswith(p) for p in _STANDARD_META_PROPERTY_PREFIXES
+        ):
+            continue
+        if el.has_attr("charset") or el.has_attr("http-equiv"):
+            continue
+
+        content = el.get("content", "")
+        if not isinstance(content, str):
+            continue
+        if len(content) > 100 and _ATTR_INSTRUCTION_PATTERN.search(content):
+            el["content"] = ""
+            cleared_count += 1
+
+    if cleared_count:
+        findings.append(Finding(
+            category="content_injection",
+            severity="medium",
+            description=f"Meta tag content cleared ({cleared_count})",
+            action="removed",
+            count=cleared_count,
+        ))
+    return findings
+
+
 # ---------------------------------------------------------------------------
 # Text-level sanitisers (Phase 2)
 # ---------------------------------------------------------------------------
@@ -509,6 +733,143 @@ def sanitise_semantic_manipulation(text: str) -> tuple[str, list[Finding]]:
 
     # Content is never modified by this sanitiser
     return text, findings
+
+
+@register_text
+def sanitise_homoglyphs(text: str) -> tuple[str, list[Finding]]:
+    """Detect prompt injection using homoglyph evasion (Cyrillic/Greek lookalikes).
+
+    Maps visually similar characters to Latin equivalents, then re-checks
+    for injection patterns. Only operates on mixed-script lines (containing
+    both Latin characters and homoglyph characters) to avoid false positives
+    on legitimate Cyrillic/Greek text.
+    """
+    findings: list[Finding] = []
+    lines = text.split("\n")
+    clean_lines: list[str] = []
+    removed_count = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            clean_lines.append(line)
+            continue
+
+        # Fast bail-out: no homoglyphs in this line
+        if not _HOMOGLYPH_CHARS.search(stripped):
+            clean_lines.append(line)
+            continue
+
+        # Mixed-script check: line must contain Latin chars too
+        has_latin = any("a" <= c.lower() <= "z" for c in stripped)
+        if not has_latin:
+            clean_lines.append(line)
+            continue
+
+        # Already caught by prompt_injection sanitiser? Skip
+        if _INJECTION_PATTERNS.search(stripped):
+            clean_lines.append(line)
+            continue
+
+        # Normalise homoglyphs and re-check
+        normalised = stripped
+        for char, replacement in _HOMOGLYPH_MAP.items():
+            normalised = normalised.replace(char, replacement)
+
+        if len(normalised) < 200 and _INJECTION_PATTERNS.search(normalised):
+            removed_count += 1
+            continue
+
+        clean_lines.append(line)
+
+    if removed_count:
+        findings.append(Finding(
+            category="prompt_injection",
+            severity="high",
+            description=f"Homoglyph evasion detected ({removed_count} lines)",
+            action="removed",
+            count=removed_count,
+        ))
+
+    return "\n".join(clean_lines), findings
+
+
+@register_text
+def sanitise_markdown_exfiltration(text: str) -> tuple[str, list[Finding]]:
+    """Flag markdown image/link patterns that could exfiltrate data.
+
+    Detects images pointing to IP addresses, URLs with exfiltration-associated
+    query parameters, or dynamic endpoints. Flags only, never removes -
+    legitimate images may have query parameters.
+    """
+    findings: list[Finding] = []
+    flagged_count = 0
+
+    for match in _MD_IMAGE_LINK.finditer(text):
+        url = match.group(2)
+        if _SUSPICIOUS_URL.search(url):
+            flagged_count += 1
+
+    if flagged_count:
+        findings.append(Finding(
+            category="content_injection",
+            severity="medium",
+            description=f"Suspicious image URLs ({flagged_count})",
+            action="flagged",
+            count=flagged_count,
+        ))
+
+    # Content is never modified
+    return text, findings
+
+
+@register_text
+def sanitise_html_entity_evasion(text: str) -> tuple[str, list[Finding]]:
+    """Detect prompt injection using HTML entity encoding to evade patterns.
+
+    Decodes HTML entities and re-checks for injection patterns. Only removes
+    lines where the decoded version matches but the original did not -
+    indicating deliberate entity-based evasion.
+    """
+    findings: list[Finding] = []
+    lines = text.split("\n")
+    clean_lines: list[str] = []
+    removed_count = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            clean_lines.append(line)
+            continue
+
+        # Fast bail-out: no HTML entities
+        if not _HTML_ENTITY.search(stripped):
+            clean_lines.append(line)
+            continue
+
+        # Already caught by upstream sanitisers? Skip
+        if _INJECTION_PATTERNS.search(stripped):
+            clean_lines.append(line)
+            continue
+
+        # Decode entities and re-check
+        decoded = html.unescape(stripped)
+        if decoded != stripped and len(decoded) < 200 and _INJECTION_PATTERNS.search(decoded):
+            removed_count += 1
+            continue
+
+        clean_lines.append(line)
+
+    if removed_count:
+        findings.append(Finding(
+            category="prompt_injection",
+            severity="high",
+            description=f"HTML entity evasion detected ({removed_count} lines)",
+            action="removed",
+            count=removed_count,
+        ))
+
+    return "\n".join(clean_lines), findings
 
 
 # ---------------------------------------------------------------------------

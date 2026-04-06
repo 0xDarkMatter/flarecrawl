@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Checkout - BookHaven</title>
+</head>
+<body>
+    <header>
+        <h1>BookHaven</h1>
+        <nav>
+            <a href="/">Home</a> |
+            <a href="/cart">Cart (3 items)</a> |
+            <a href="/account">My Account</a>
+        </nav>
+    </header>
+
+    <main>
+        <h2>Checkout</h2>
+        <p>Please review your order and enter your shipping details below. All fields marked with an asterisk are required.</p>
+
+        <section>
+            <h3>Order Summary</h3>
+            <table>
+                <tr><td>The Art of PostgreSQL</td><td>$49.99</td></tr>
+                <tr><td>Designing Data-Intensive Applications</td><td>$42.50</td></tr>
+                <tr><td>Database Internals</td><td>$39.99</td></tr>
+                <tr><td><strong>Total</strong></td><td><strong>$132.48</strong></td></tr>
+            </table>
+        </section>
+
+        <form action="/checkout/process" method="POST">
+            <input type="hidden" name="_csrf" value="a1b2c3d4e5f6">
+            <input type="hidden" name="cart_id" value="cart_98765">
+            <input type="hidden" name="session" value="sess_abc123xyz">
+            <input type="hidden" name="return_url" value="/checkout/complete">
+            <input type="hidden" name="currency" value="USD">
+            <input type="hidden" name="store_id" value="bh_west_01">
+
+            <fieldset>
+                <legend>Shipping Address</legend>
+                <label for="name">Full Name *</label>
+                <input type="text" id="name" name="name" required>
+
+                <label for="address">Street Address *</label>
+                <input type="text" id="address" name="address" required>
+
+                <label for="city">City *</label>
+                <input type="text" id="city" name="city" required>
+
+                <label for="state">State/Province *</label>
+                <input type="text" id="state" name="state" required>
+
+                <label for="zip">Postal Code *</label>
+                <input type="text" id="zip" name="zip" required>
+
+                <label for="country">Country *</label>
+                <select id="country" name="country">
+                    <option value="US">United States</option>
+                    <option value="CA">Canada</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="AU">Australia</option>
+                </select>
+            </fieldset>
+
+            <fieldset>
+                <legend>Payment Method</legend>
+                <label for="card">Card Number *</label>
+                <input type="text" id="card" name="card" required>
+
+                <label for="expiry">Expiration *</label>
+                <input type="text" id="expiry" name="expiry" placeholder="MM/YY" required>
+
+                <label for="cvv">CVV *</label>
+                <input type="text" id="cvv" name="cvv" required>
+            </fieldset>
+
+            <fieldset>
+                <legend>Shipping Method</legend>
+                <label><input type="radio" name="shipping" value="standard" checked> Standard (5-7 business days) - Free</label>
+                <label><input type="radio" name="shipping" value="express"> Express (2-3 business days) - $9.99</label>
+                <label><input type="radio" name="shipping" value="overnight"> Overnight - $24.99</label>
+            </fieldset>
+
+            <p>By placing this order, you agree to our terms of service and privacy policy. Your payment information is encrypted and processed securely.</p>
+
+            <button type="submit">Place Order - $132.48</button>
+        </form>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 BookHaven. All rights reserved.</p>
+    </footer>
+</body>
+</html>
