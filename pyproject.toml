@@ -5,7 +5,7 @@ description = "Cloudflare Browser Rendering CLI - Firecrawl-compatible, cost-eff
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "Fabric Team" }
+    { name = "0xDarkMatter" }
 ]
 dependencies = [
     "typer>=0.9.0",
