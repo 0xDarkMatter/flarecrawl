@@ -1,0 +1,113 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ShopWell - Online Marketplace</title>
+</head>
+<body>
+  <header role="banner">
+    <h1>ShopWell Marketplace</h1>
+    <nav role="navigation" aria-label="Main site navigation">
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="/categories">Categories</a></li>
+        <li><a href="/deals">Today's Deals</a></li>
+        <li><a href="/account">My Account</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main role="main">
+    <section aria-labelledby="search-heading">
+      <h2 id="search-heading">Find Products</h2>
+      <form role="search" aria-label="Search for products by name, category, or brand">
+        <label for="search-input">Search</label>
+        <input
+          type="search"
+          id="search-input"
+          name="q"
+          placeholder="What are you looking for?"
+          aria-label="Enter a product name, category, or brand"
+          aria-describedby="search-help"
+        >
+        <span id="search-help" class="sr-only">Type at least three characters to see suggestions</span>
+        <button type="submit" aria-label="Submit search query">Search</button>
+      </form>
+    </section>
+
+    <section aria-labelledby="filters-heading">
+      <h2 id="filters-heading">Refine Your Results</h2>
+      <form aria-label="Product search filters">
+        <fieldset>
+          <legend>Price Range</legend>
+          <label for="price-min">Minimum price</label>
+          <input type="number" id="price-min" name="price_min" min="0" aria-label="Minimum price in dollars">
+          <label for="price-max">Maximum price</label>
+          <input type="number" id="price-max" name="price_max" min="0" aria-label="Maximum price in dollars">
+        </fieldset>
+        <fieldset>
+          <legend>Customer Rating</legend>
+          <label>
+            <input type="radio" name="rating" value="4" aria-label="Four stars and above">
+            4 stars &amp; up
+          </label>
+          <label>
+            <input type="radio" name="rating" value="3" aria-label="Three stars and above">
+            3 stars &amp; up
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Availability</legend>
+          <label>
+            <input type="checkbox" name="in_stock" aria-label="Show only items currently in stock">
+            In Stock Only
+          </label>
+          <label>
+            <input type="checkbox" name="free_shipping" aria-label="Show only items with free shipping">
+            Free Shipping
+          </label>
+        </fieldset>
+        <button type="submit" aria-label="Apply selected filters to results">Apply Filters</button>
+      </form>
+    </section>
+
+    <section aria-labelledby="results-heading">
+      <h2 id="results-heading">Featured Products</h2>
+      <div role="list" aria-label="Product listing grid">
+        <div role="listitem">
+          <h3>Ergonomic Office Chair</h3>
+          <p>Adjustable lumbar support with breathable mesh back. Five-year warranty included.</p>
+          <p aria-label="Price: two hundred forty-nine dollars">$249.00</p>
+          <button aria-label="Add Ergonomic Office Chair to shopping cart">Add to Cart</button>
+        </div>
+        <div role="listitem">
+          <h3>Wireless Noise-Cancelling Headphones</h3>
+          <p>40-hour battery life with adaptive noise cancellation and multipoint Bluetooth connectivity.</p>
+          <p aria-label="Price: one hundred seventy-nine dollars">$179.00</p>
+          <button aria-label="Add Wireless Noise-Cancelling Headphones to cart">Add to Cart</button>
+        </div>
+        <div role="listitem">
+          <h3>Stainless Steel Water Bottle</h3>
+          <p>Triple-insulated, keeps drinks cold for 24 hours or hot for 12 hours. BPA-free lid.</p>
+          <p aria-label="Price: thirty-four dollars">$34.00</p>
+          <button aria-label="Add Stainless Steel Water Bottle to cart">Add to Cart</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside role="complementary" aria-label="Shopping assistance and customer support">
+    <h2>Need Help?</h2>
+    <p>Our customer support team is available Monday through Friday, 8am to 8pm Eastern Time. You can reach us by phone, email, or live chat.</p>
+    <a href="/support" aria-label="Visit our customer support page">Contact Support</a>
+  </aside>
+
+  <footer role="contentinfo">
+    <p>&copy; 2026 ShopWell Inc. All rights reserved.</p>
+    <nav aria-label="Footer navigation links">
+      <a href="/privacy">Privacy Policy</a> |
+      <a href="/terms">Terms of Service</a> |
+      <a href="/accessibility">Accessibility Statement</a>
+    </nav>
+  </footer>
+</body>
+</html>

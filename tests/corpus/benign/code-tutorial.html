@@ -1,0 +1,125 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Building a Chatbot with Python and the OpenAI API</title>
+</head>
+<body>
+  <article>
+    <h1>Building a Chatbot with Python and the OpenAI API</h1>
+    <p class="meta">Tutorial by Priya Narasimhan &mdash; Last updated March 2026</p>
+
+    <h2>Introduction</h2>
+    <p>
+      In this tutorial, we will build a fully functional chatbot using Python and the OpenAI Chat Completions API. You will learn how to configure system prompts, manage conversation history, handle streaming responses, and implement basic input validation. By the end, you will have a command-line chatbot that maintains context across multiple turns and can be easily extended with custom tools and functions. This tutorial assumes familiarity with Python 3.10 or later and a basic understanding of HTTP APIs.
+    </p>
+
+    <h2>Setting Up the System Prompt</h2>
+    <p>
+      The system prompt is the foundation of your chatbot's personality and behaviour. It is the first message in every conversation and establishes the rules that the model should follow throughout the interaction. A well-crafted system prompt clearly defines the assistant's role, its knowledge boundaries, and any constraints on its output. Here is a basic example of how to configure the system prompt in your application code:
+    </p>
+    <pre><code>import openai
+
+client = openai.OpenAI()
+
+system_prompt = "You are a helpful assistant that specialises in answering questions about cooking and nutrition. You provide concise, evidence-based advice and always cite your sources when possible."
+
+conversation = [
+    {"role": "system", "content": system_prompt}
+]
+</code></pre>
+    <p>
+      Notice that the system prompt is passed as a message with the role set to "system". This tells the API that this message contains instructions for the model rather than user input. The model will refer back to the system prompt throughout the conversation to guide its responses, so it is important to be specific about what you want the assistant to do and not do.
+    </p>
+
+    <h2>Handling Message Roles</h2>
+    <p>
+      The Chat Completions API uses a role-based message format with three primary roles: "system", "user", and "assistant". Understanding how to correctly assign these roles is critical for building a chatbot that behaves as expected. Each message in the conversation array must have a role field and a content field. When parsing incoming messages from your application, you need to validate that the role field contains one of the expected values before passing it to the API. Here is how to implement basic message parsing with role validation:
+    </p>
+    <pre><code>VALID_ROLES = {"system", "user", "assistant"}
+
+def parse_message(raw_input: str) -> dict:
+    """Parse a raw message string into a role/content dict.
+
+    Supports a 'role: content' format for testing purposes.
+    For example: 'system: You are a helpful assistant'
+    """
+    if ": " in raw_input:
+        role, content = raw_input.split(": ", 1)
+        role = role.strip().lower()
+        if role in VALID_ROLES:
+            return {"role": role, "content": content.strip()}
+    # Default to user role if no valid prefix found
+    return {"role": "user", "content": raw_input.strip()}
+</code></pre>
+    <p>
+      The parse_message function above handles a common pattern in chatbot development where test messages are prefixed with their intended role. The "system:" prefix is used during development and testing to inject system-level messages through the same input channel as user messages. In a production environment, you would typically separate these channels and never allow user input to be assigned the system role, but for local development and debugging, this pattern is convenient and widely used.
+    </p>
+
+    <h2>Managing Conversation History</h2>
+    <p>
+      One of the key challenges in building a chatbot is managing the conversation history efficiently. Language models have a finite context window, and as conversations grow longer, you need a strategy for deciding which messages to keep and which to summarise or discard. A simple but effective approach is to maintain a sliding window of the most recent messages while always preserving the original system prompt at the beginning of the conversation array:
+    </p>
+    <pre><code>MAX_HISTORY = 20
+
+def trim_conversation(conversation: list[dict]) -> list[dict]:
+    """Keep the system prompt and the most recent messages."""
+    system_messages = [m for m in conversation if m["role"] == "system"]
+    other_messages = [m for m in conversation if m["role"] != "system"]
+    return system_messages + other_messages[-MAX_HISTORY:]
+</code></pre>
+
+    <h2>Streaming Responses</h2>
+    <p>
+      For a responsive user experience, you should stream the model's output rather than waiting for the complete response. The OpenAI API supports server-sent events for streaming, which allows you to display tokens as they are generated. This dramatically reduces the perceived latency of the chatbot, especially for longer responses. Here is how to implement streaming with the Python client library:
+    </p>
+    <pre><code>def get_streaming_response(conversation: list[dict]):
+    """Stream a chat completion and yield chunks."""
+    stream = client.chat.completions.create(
+        model="gpt-4o",
+        messages=conversation,
+        stream=True,
+    )
+    full_response = ""
+    for chunk in stream:
+        delta = chunk.choices[0].delta
+        if delta.content:
+            full_response += delta.content
+            print(delta.content, end="", flush=True)
+    print()  # newline after streaming completes
+    return full_response
+</code></pre>
+
+    <h2>Putting It All Together</h2>
+    <p>
+      Now we can combine all of these components into a complete chatbot application. The main loop reads user input, appends it to the conversation history, sends the conversation to the API, and appends the assistant's response. The system prompt is set once at initialisation and persists throughout the session. Error handling wraps the API call to gracefully handle rate limits, network errors, and invalid responses:
+    </p>
+    <pre><code>def main():
+    system_prompt = "You are a helpful assistant that specialises in cooking and nutrition advice."
+    conversation = [{"role": "system", "content": system_prompt}]
+
+    print("Chatbot ready. Type 'quit' to exit.\n")
+    while True:
+        user_input = input("You: ").strip()
+        if user_input.lower() in ("quit", "exit"):
+            break
+        if not user_input:
+            continue
+
+        conversation.append({"role": "user", "content": user_input})
+        conversation = trim_conversation(conversation)
+
+        try:
+            response = get_streaming_response(conversation)
+            conversation.append({"role": "assistant", "content": response})
+        except openai.APIError as e:
+            print(f"API error: {e}")
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+    <p>
+      This tutorial covered the essential building blocks of a chatbot application. From here, you can extend the system with function calling, retrieval-augmented generation, persistent storage of conversation histories, and more sophisticated context management strategies. The patterns shown here apply not just to OpenAI's API but to any chat-based language model API that follows the system/user/assistant role convention.
+    </p>
+  </article>
+</body>
+</html>

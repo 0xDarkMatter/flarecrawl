@@ -71,6 +71,8 @@
 | List site rules | `flarecrawl rules list --json` |
 | Show rules for domain | `flarecrawl rules show www.nytimes.com` |
 | Add user rule | `flarecrawl rules add example.com --referer https://google.com/` |
+| Agent-safe sanitisation | `flarecrawl scrape URL --agent-safe --json` |
+| Agent-safe + stealth + paywall | `flarecrawl scrape URL --agent-safe --paywall --stealth --json` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |
 | Clear negotiate domain cache | `flarecrawl negotiate clear` |
@@ -134,7 +136,7 @@ flarecrawl scrape URL --format json --json        # AI extraction via /json endp
 flarecrawl scrape URL --json --fields url,content
 ```
 
-**Key flags:** `--format`, `--json`, `--output`, `--timing`, `--timeout`, `--fields`, `--batch`, `--workers`, `--input`, `--wait-for`, `--body`
+**Key flags:** `--format`, `--json`, `--output`, `--timing`, `--timeout`, `--fields`, `--batch`, `--workers`, `--input`, `--wait-for`, `--body`, `--agent-safe`
 
 ### crawl
 
@@ -170,7 +172,7 @@ flarecrawl crawl URL --wait --format markdown   # default
 flarecrawl crawl URL --wait --format html
 ```
 
-**Key flags:** `--wait`, `--progress`, `--limit`, `--max-depth`, `--format`, `--include-paths`, `--exclude-paths`, `--allow-external-links`, `--allow-subdomains`, `--no-render`, `--source`, `--ndjson`, `--fields`, `--json`, `--body`
+**Key flags:** `--wait`, `--progress`, `--limit`, `--max-depth`, `--format`, `--include-paths`, `--exclude-paths`, `--allow-external-links`, `--allow-subdomains`, `--no-render`, `--source`, `--ndjson`, `--fields`, `--json`, `--body`, `--agent-safe`
 
 **Record statuses:** `completed`, `queued`, `skipped`, `errored`, `disallowed`, `cancelled`
 
@@ -311,6 +313,25 @@ flarecrawl usage --json
 {"data": {"url": "https://example.com/apple-touch-icon.png", "rel": "apple-touch-icon", "sizes": "180x180", "type": null}, "meta": {"url": "...", "count": 3}}
 ```
 
+### Agent-safe metadata (with `--agent-safe --json`)
+```json
+{"data": {"url": "...", "content": "...", "metadata": {
+  "agentSafety": {
+    "sanitised": true,
+    "findings": [
+      {"category": "content_injection", "severity": "high", "description": "Hidden text via CSS (2 elements)", "action": "removed", "count": 2},
+      {"category": "prompt_injection", "severity": "high", "description": "Prompt injection patterns removed (1 lines)", "action": "removed", "count": 1},
+      {"category": "semantic_manipulation", "severity": "medium", "description": "Urgency language clusters (1 lines)", "action": "flagged", "count": 1}
+    ],
+    "stats": {"removed": 3, "flagged": 1, "byCategory": {"content_injection": 2, "prompt_injection": 1, "semantic_manipulation": 1}}
+  }
+}}}
+```
+
+**Categories:** `content_injection` (hidden text, comments, attrs, unicode), `prompt_injection` (instruction patterns), `semantic_manipulation` (urgency/authority)
+
+**Actions:** `removed` (content stripped) or `flagged` (content preserved, finding reported)
+
 ### Error
 ```json
 {"error": {"code": "AUTH_REQUIRED", "message": "Not authenticated. Run: flarecrawl auth login"}}
@@ -442,6 +463,10 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 29. **Use `--proxy`** to route all HTTP through a proxy (http/https/socks5). Also set via `FLARECRAWL_PROXY` env var. Affects CLI-to-CF and direct HTTP; does NOT affect CF browser-to-target
 30. **`search` command** uses Jina Search API — requires `JINA_API_KEY` env var (free at jina.ai). Use `--scrape` to also scrape each result URL through the normal pipeline
 31. **Per-site rules** are now in YAML — defaults ship with the package, user overrides at `~/.config/flarecrawl/rules.yaml`. Use `flarecrawl rules list/show/add/path` to manage
+32. **Use `--agent-safe`** to sanitise content against adversarial AI agent traps (DeepMind "AI Agent Traps" taxonomy). Two-phase pipeline: HTML-level (hidden text, comments, suspicious attributes, unicode tricks) + text-level (prompt injection removal, semantic manipulation flagging). JSON output includes `metadata.agentSafety` with findings and stats. Semantic manipulation is flagged only (never removed). Works on `scrape`, `crawl`, `download`, and `extract` commands. Also works with `--stdin`
+33. **`--agent-safe` is opt-in** — does not affect normal scraping. When enabled, content is sanitised on all paths (browser rendering, content negotiation, paywall bypass, stdin, crawl records). Combine with `--paywall --stealth` for maximum extraction + safety
+34. **`--agent-safe` uses short-line bias** for prompt injection detection — only removes lines <200 chars to avoid stripping legitimate articles about prompt injection. Articles discussing "ignore previous instructions" in long analytical paragraphs are preserved
+35. **Agent-safe findings are structured** — each finding has `category`, `severity`, `description`, `action` (removed/flagged), and `count`. Use `metadata.agentSafety.stats.byCategory` to quickly check what was detected without parsing individual findings
 
 ## Pricing Reference
 
@@ -469,8 +494,14 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (378 tests, no API calls)
+# Unit tests (506 tests, no API calls)
 pytest tests/ -v
+
+# Agent-safety tests only (137 tests including corpus validation)
+pytest tests/test_sanitise.py -v
+
+# Agent-safety corpus only (attack detection + benign false-positive checks)
+pytest tests/test_sanitise.py::TestCorpus -v
 
 # Feature test corpus (80 live tests, requires auth)
 python tests/corpus.py

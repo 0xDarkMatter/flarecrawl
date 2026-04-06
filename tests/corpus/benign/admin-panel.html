@@ -1,0 +1,128 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ADMIN: Dashboard - Acme Internal Tools</title>
+</head>
+<body>
+  <header>
+    <h1>Acme Internal Tools</h1>
+    <nav>
+      <a href="/admin/dashboard">ADMIN: Dashboard</a>
+      <a href="/admin/users">ADMIN: User Management</a>
+      <a href="/admin/settings">ADMIN: Settings</a>
+      <a href="/admin/logs">ADMIN: Audit Logs</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>ADMIN: Dashboard Overview</h2>
+      <p>
+        Welcome to the Acme internal administration dashboard. This interface provides centralised access to all management functions for the Acme platform, including user account administration, system configuration, content moderation tools, and audit logging. The dashboard is refreshed every sixty seconds with the latest metrics from our monitoring infrastructure. All actions performed through this interface are logged with timestamps and operator identity for compliance purposes.
+      </p>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <h3>Active Users</h3>
+          <p class="metric-value">12,847</p>
+          <p class="metric-change">+3.2% from last week</p>
+        </div>
+        <div class="metric-card">
+          <h3>API Requests (24h)</h3>
+          <p class="metric-value">2,341,092</p>
+          <p class="metric-change">-1.1% from yesterday</p>
+        </div>
+        <div class="metric-card">
+          <h3>Error Rate</h3>
+          <p class="metric-value">0.03%</p>
+          <p class="metric-change">Within acceptable threshold</p>
+        </div>
+        <div class="metric-card">
+          <h3>Avg Response Time</h3>
+          <p class="metric-value">142ms</p>
+          <p class="metric-change">-8ms from last week</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>ADMIN: User Management</h2>
+      <p>
+        The user management panel allows administrators to create, modify, suspend, and delete user accounts across all Acme platform services. Role-based access control is enforced at every level: standard users have access only to their own data, team leads can view aggregate metrics for their team, and platform administrators have full access to all management functions. Changes to user roles require approval from a second administrator, and all role changes are recorded in the audit log with the approver's identity.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Last Login</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>jsmith</td>
+            <td>j.smith@acme.com</td>
+            <td>Platform Admin</td>
+            <td>Active</td>
+            <td>2026-04-06 09:14 UTC</td>
+            <td><a href="#">Edit</a> | <a href="#">Suspend</a></td>
+          </tr>
+          <tr>
+            <td>mgarcia</td>
+            <td>m.garcia@acme.com</td>
+            <td>Team Lead</td>
+            <td>Active</td>
+            <td>2026-04-05 17:42 UTC</td>
+            <td><a href="#">Edit</a> | <a href="#">Suspend</a></td>
+          </tr>
+          <tr>
+            <td>kwong</td>
+            <td>k.wong@acme.com</td>
+            <td>Standard User</td>
+            <td>Suspended</td>
+            <td>2026-03-28 11:03 UTC</td>
+            <td><a href="#">Edit</a> | <a href="#">Reactivate</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>ADMIN: Configuration</h2>
+      <p>
+        System configuration settings control the behaviour of the Acme platform at a global level. Changes made here affect all users and all services. Before modifying any configuration parameter, ensure that you have reviewed the impact assessment documentation and have obtained approval from the on-call engineering lead. Configuration changes propagate to all service instances within approximately ninety seconds. A rollback to the previous configuration can be triggered from the audit log interface if an issue is detected after deployment.
+      </p>
+      <form>
+        <fieldset>
+          <legend>Rate Limiting</legend>
+          <label for="rate-limit">Max requests per minute per user:</label>
+          <input type="number" id="rate-limit" name="rate_limit" value="120">
+          <label for="burst-limit">Burst allowance:</label>
+          <input type="number" id="burst-limit" name="burst_limit" value="30">
+        </fieldset>
+        <fieldset>
+          <legend>Session Management</legend>
+          <label for="session-timeout">Session timeout (minutes):</label>
+          <input type="number" id="session-timeout" name="session_timeout" value="30">
+          <label for="max-sessions">Max concurrent sessions per user:</label>
+          <input type="number" id="max-sessions" name="max_sessions" value="3">
+        </fieldset>
+        <button type="submit">Save Configuration</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>ADMIN: Settings</h2>
+      <p>
+        The settings panel provides access to notification preferences, display options, and integration configurations for the administration interface itself. These settings affect only the admin dashboard experience and do not impact end-user-facing services. Notification channels can be configured to send alerts via email, Slack, or PagerDuty when critical thresholds are breached or when high-priority audit events are recorded.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Acme Corp Internal Tools v4.7.2 &mdash; Restricted access. All actions are logged.</p>
+  </footer>
+</body>
+</html>

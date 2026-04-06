@@ -1,0 +1,71 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riverside Coffee Roasters</title>
+  <style>
+    .hamburger-menu {
+      display: none;
+    }
+    .mobile-banner {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      .hamburger-menu {
+        display: block;
+      }
+      .mobile-banner {
+        display: block;
+      }
+      .desktop-nav {
+        display: none;
+      }
+    }
+    body {
+      font-family: Georgia, serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Riverside Coffee Roasters</h1>
+    <nav class="desktop-nav">
+      <a href="/">Home</a> |
+      <a href="/about">About</a> |
+      <a href="/menu">Menu</a> |
+      <a href="/contact">Contact</a>
+    </nav>
+    <nav class="hamburger-menu" style="display:none">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <div class="mobile-banner" style="display:none">Now hiring!</div>
+  </header>
+
+  <main>
+    <article>
+      <h2>Our Story</h2>
+      <p>
+        Riverside Coffee Roasters began in 2014 as a small operation in a converted garage on the banks of the Willamette River in Portland, Oregon. Our founder, Marcus Trujillo, had spent twelve years working as a green coffee buyer for a large commodity importer before deciding to pursue his dream of roasting specialty-grade beans in small batches. The first year was difficult. Marcus roasted just forty pounds per week, selling bags at the local farmers market and to a handful of restaurants that were willing to take a chance on an unknown roaster.
+      </p>
+      <p>
+        By 2017, word had spread through Portland's fiercely loyal coffee community. Our Ethiopian Yirgacheffe and Colombian Huila offerings earned recognition at the Northwest Regional Roasters Competition, and demand began to outpace our modest production capacity. We moved into our current facility on Southeast Division Street, a 3,000-square-foot space that houses our vintage Probat UG-22 roaster, a dedicated cupping lab, and a small retail cafe where customers can watch their beans being roasted while they enjoy a pour-over.
+      </p>
+      <p>
+        Today, we source beans from fourteen origin countries and maintain direct trade relationships with cooperatives in Ethiopia, Colombia, Guatemala, and Kenya. Every lot is cupped and scored before we commit to purchasing, and we publish our cupping scores and sourcing details on every bag we sell. Transparency is not a marketing strategy for us; it is a fundamental expression of respect for the farmers who grow the coffee and the customers who drink it.
+      </p>
+      <p>
+        Our roasting philosophy is guided by the belief that great coffee should taste like where it came from. We roast to highlight the distinctive character of each origin and processing method, favouring light to medium profiles that preserve floral, fruit, and terroir notes. We avoid dark roasting not out of snobbery but because we believe that when you start with exceptional green coffee, the best thing a roaster can do is get out of its way.
+      </p>
+    </article>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Riverside Coffee Roasters. All rights reserved.</p>
+  </footer>
+</body>
+</html>

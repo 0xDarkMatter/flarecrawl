@@ -13,6 +13,7 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.12.0** | 2026-04-06 | `--agent-safe` flag for adversarial content sanitisation, two-phase pipeline (HTML + text), 48-file attack/benign test corpus, prompt injection detection, semantic manipulation flagging, 506 tests |
 | **v0.11.0** | 2026-04-03 | `search` command (Jina Search), `--proxy` flag, `--clean` for HTML, per-site YAML rulesets (`flarecrawl rules`), `FLARECRAWL_PROXY` env var, 378 tests |
 | **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`), stealth mode (`--stealth`), automatic content cleanup — multi-strategy cascade with per-site optimisations, browser TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, ad/cruft removal on all markdown output, works without auth, batch mode support, 343 tests |
 | **v0.9.0** | 2026-03-26 | Markdown content negotiation (`Accept: text/markdown`) — auto-detects sites serving markdown natively, skips browser rendering for faster/cheaper/higher-quality extraction. Domain capability cache, `--no-negotiate`, `source` metadata on all results, `flarecrawl negotiate status/clear`, batch session reuse, 278 tests |
@@ -331,6 +332,80 @@ For HTML output, use `--clean` to strip ad/promo DOM elements:
 # Strip ad containers, social share widgets, cookie banners from HTML
 flarecrawl scrape https://example.com --format html --clean --json
 ```
+
+### Agent-safe mode
+
+Sanitise scraped content against adversarial AI agent traps. Informed by
+the Google DeepMind "AI Agent Traps" taxonomy (Franklin et al., 2026), this
+flag defends against content injection, prompt injection, and semantic
+manipulation attacks embedded in web pages.
+
+```bash
+# Sanitise content for safe agent consumption
+flarecrawl scrape https://example.com --agent-safe --json
+
+# Combine with other extraction flags
+flarecrawl scrape https://example.com --agent-safe --paywall --stealth --json
+
+# Batch mode
+flarecrawl scrape --batch urls.txt --agent-safe --workers 5
+
+# Crawl with sanitisation
+flarecrawl crawl https://example.com --wait --limit 50 --agent-safe
+
+# Download with sanitisation
+flarecrawl download https://docs.example.com --limit 50 --agent-safe
+
+# AI extraction with sanitisation (sanitises before Workers AI)
+flarecrawl extract "Get all products" --urls https://shop.example.com --agent-safe --json
+
+# Stdin pipe (sanitises local HTML)
+cat page.html | flarecrawl scrape --stdin --agent-safe --json
+```
+
+Two-phase sanitisation pipeline:
+
+**Phase 1 (HTML)** - runs on raw HTML before markdown conversion:
+- Hidden text via CSS (`display:none`, `visibility:hidden`, `opacity:0`,
+  `font-size:0`, off-screen positioning, `text-indent:-9999px`,
+  `clip-path:inset(100%)`, `color:transparent`)
+- HTML comments containing instruction-like content
+- Suspicious `data-*`, `aria-label`, `alt`, and `title` attributes with
+  injection patterns
+- Zero-width unicode characters and bidirectional text overrides
+
+**Phase 2 (Text)** - runs on markdown after conversion:
+- Prompt injection patterns: "ignore previous instructions", "SYSTEM:",
+  "ADMIN:", role-play attacks, delimiter injection (`<system>` tags),
+  base64-obfuscated instructions. Uses short-line bias (<200 chars) to
+  avoid stripping legitimate articles about prompt injection
+- Semantic manipulation: urgency clusters (2+ urgency words per line),
+  authority claims ("classified internal documents"). **Flagged only, never
+  removed** - the consuming agent decides what to do
+
+JSON output includes `metadata.agentSafety` with findings, severity, and
+stats. Supported on all content paths: browser rendering, content
+negotiation, paywall bypass, stdin, crawl records.
+
+```json
+{
+  "metadata": {
+    "agentSafety": {
+      "sanitised": true,
+      "findings": [
+        {"category": "content_injection", "severity": "high",
+         "description": "Hidden text via CSS (2 elements)", "action": "removed", "count": 2},
+        {"category": "semantic_manipulation", "severity": "medium",
+         "description": "Urgency language clusters (1 lines)", "action": "flagged", "count": 1}
+      ],
+      "stats": {"removed": 2, "flagged": 1, "byCategory": {"content_injection": 2, "semantic_manipulation": 1}}
+    }
+  }
+}
+```
+
+Extensible via decorator-based registry in `src/flarecrawl/sanitise.py`.
+Add new attack vectors with `@register_html` or `@register_text`.
 
 ### Web search
 
@@ -825,11 +900,15 @@ flarecrawl/
 │   ├── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
 │   ├── rules.py                # Per-site YAML rulesets (load, merge, cache)
 │   ├── search.py               # Web search via Jina Search API
+│   ├── sanitise.py             # Agent-safety sanitisation (hidden text, injection, manipulation)
 │   ├── stealth.py              # Stealth HTTP (curl_cffi TLS impersonation)
 │   └── default_rules.yaml      # Shipped per-site header rules
 └── tests/
     ├── conftest.py             # Test fixtures
     ├── corpus.py               # Feature test corpus (80 live tests x 8 sites)
+    ├── corpus/                 # Agent-safety attack/benign fixture corpus (48 files)
+    │   ├── attacks/            # Adversarial fixtures (35 files, 6 categories)
+    │   └── benign/             # False-positive traps (13 files)
     ├── test_batch.py           # Batch module tests
     ├── test_cache.py           # Cache module tests
     ├── test_cli.py             # CLI tests
@@ -837,6 +916,7 @@ flarecrawl/
     ├── test_extract.py         # Extract module tests
     ├── test_paywall.py         # Paywall bypass tests
     ├── test_rules.py           # Per-site rules tests
+    ├── test_sanitise.py        # Agent-safety tests (137 tests + corpus validation)
     └── test_search.py          # Search module tests
 ```
 

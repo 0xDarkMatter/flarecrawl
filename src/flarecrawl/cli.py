@@ -244,10 +244,12 @@ def _filter_record_content(
     only_main_content: bool = False,
     include_tags: list[str] | None = None,
     exclude_tags: list[str] | None = None,
+    agent_safe: bool = False,
 ) -> dict:
     """Apply content filtering to a crawl/download record in-place."""
-    if not (only_main_content or include_tags or exclude_tags):
+    if not (only_main_content or include_tags or exclude_tags or agent_safe):
         return record
+    _record_findings: list = []
     for key in ("markdown", "html"):
         content = record.get(key)
         if not content or not isinstance(content, str):
@@ -263,10 +265,27 @@ def _filter_record_content(
                 html = filter_tags(html, include=include_tags)
             if exclude_tags:
                 html = filter_tags(html, exclude=exclude_tags)
+            if agent_safe:
+                from .sanitise import sanitise_html
+                _html_san = sanitise_html(html)
+                html = _html_san.content
+                _record_findings.extend(_html_san.findings)
             if key == "html":
                 record[key] = html
             else:
                 record[key] = html_to_markdown(html)
+        if agent_safe and key == "markdown":
+            md_content = record.get(key)
+            if md_content and isinstance(md_content, str):
+                from .sanitise import sanitise_text, SanitiseResult
+                _text_san = sanitise_text(md_content)
+                record[key] = _text_san.content
+                _record_findings.extend(_text_san.findings)
+        if agent_safe and _record_findings:
+            _combined = SanitiseResult(content="", findings=_record_findings)
+            meta = record.get("metadata") or {}
+            meta["agentSafety"] = _combined.to_metadata()
+            record["metadata"] = meta
     return record
 
 
@@ -668,7 +687,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    paywall_session: "httpx.Client | None" = None,
                    stealth: bool = False,
                    clean: bool = False,
-                   proxy: str | None = None) -> dict:
+                   proxy: str | None = None,
+                   agent_safe: bool = False) -> dict:
     """Scrape a single URL. Returns result dict. Used for concurrent scraping."""
     start = _time.time()
 
@@ -712,6 +732,12 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                 content = filter_by_query(content, query)
             from .extract import clean_content
             content = clean_content(content)
+            _agent_safety_meta = None
+            if agent_safe:
+                from .sanitise import sanitise_text as _sanitise_text
+                _san = _sanitise_text(content)
+                content = _san.content
+                _agent_safety_meta = _san.to_metadata()
 
             elapsed = _time.time() - start
             result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
@@ -741,6 +767,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             metadata["format"] = format
             metadata["elapsed"] = result["elapsed"]
             metadata["cacheHit"] = False
+            if agent_safe and _agent_safety_meta:
+                metadata["agentSafety"] = _agent_safety_meta
             result["metadata"] = metadata
             return result
 
@@ -783,6 +811,12 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                 content = filter_by_query(content, query)
             from .extract import clean_content
             content = clean_content(content)
+            _agent_safety_meta_pw = None
+            if agent_safe:
+                from .sanitise import sanitise_text as _sanitise_text_pw
+                _san_pw = _sanitise_text_pw(content)
+                content = _san_pw.content
+                _agent_safety_meta_pw = _san_pw.to_metadata()
 
             elapsed = _time.time() - start
             result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
@@ -808,6 +842,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             metadata["elapsed"] = result["elapsed"]
             metadata["cacheHit"] = False
             metadata.update(pw_result.metadata)
+            if agent_safe and _agent_safety_meta_pw:
+                metadata["agentSafety"] = _agent_safety_meta_pw
             result["metadata"] = metadata
             return result
 
@@ -1019,7 +1055,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                 pass  # Keep original content
 
     # Post-processing: main content extraction and tag filtering
-    if isinstance(content, str) and (only_main_content or precision or recall or include_tags or exclude_tags):
+    _agent_findings: list = []
+    if isinstance(content, str) and (only_main_content or precision or recall or include_tags or exclude_tags or agent_safe):
         from .extract import extract_main_content as _extract_main
         from .extract import extract_main_content_precision as _prec
         from .extract import extract_main_content_recall as _rec
@@ -1043,7 +1080,19 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
         if exclude_tags:
             html = _filter(html, exclude=exclude_tags)
 
+        if agent_safe:
+            from .sanitise import sanitise_html as _sanitise_html
+            _html_san = _sanitise_html(html)
+            html = _html_san.content
+            _agent_findings = list(_html_san.findings)
+
         content = _h2m(html) if format == "markdown" else html
+    elif agent_safe and isinstance(content, str) and format == "html":
+        # No extraction block ran, but we have HTML — sanitise it directly
+        from .sanitise import sanitise_html as _sanitise_html_raw
+        _html_san_raw = _sanitise_html_raw(content)
+        content = _html_san_raw.content
+        _agent_findings = list(_html_san_raw.findings)
 
     # Post-processing: relevance filter
     if query and isinstance(content, str):
@@ -1057,6 +1106,17 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
     if clean and isinstance(content, str) and format in ("html",):
         from .extract import clean_html
         content = clean_html(content)
+
+    # Agent safety: text-level sanitisation (phase 2)
+    _agent_safety_meta_br = None
+    if agent_safe and isinstance(content, str):
+        from .sanitise import SanitiseResult as _SanitiseResult
+        from .sanitise import sanitise_text as _sanitise_text_br
+        _text_san = _sanitise_text_br(content)
+        content = _text_san.content
+        _all_findings = _agent_findings + _text_san.findings
+        _combined = _SanitiseResult(content=content, findings=_all_findings)
+        _agent_safety_meta_br = _combined.to_metadata()
 
     elapsed = _time.time() - start
     result = {"url": url, "content": content, "elapsed": round(elapsed, 2)}
@@ -1089,6 +1149,8 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
     metadata["format"] = format
     metadata["elapsed"] = result["elapsed"]
     metadata["cacheHit"] = client.browser_ms_used == 0 and result["elapsed"] < 2
+    if agent_safe and _agent_safety_meta_br:
+        metadata["agentSafety"] = _agent_safety_meta_br
     result["metadata"] = metadata
 
     return result
@@ -1143,6 +1205,7 @@ def scrape(
     stealth: Annotated[bool, typer.Option("--stealth", help="Use browser TLS fingerprint for direct HTTP requests (requires curl_cffi)")] = False,
     clean: Annotated[bool, typer.Option("--clean", help="Strip ads/promos from HTML output")] = False,
     proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL (http/https/socks5)")] = None,
+    agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1170,6 +1233,12 @@ def scrape(
             html_to_markdown,
         )
         html = sys.stdin.read()
+        _stdin_findings: list = []
+        if agent_safe:
+            from .sanitise import sanitise_html
+            _san = sanitise_html(html)
+            html = _san.content
+            _stdin_findings = _san.findings
         if only_main_content:
             html = extract_main_content(html)
         if include_tags:
@@ -1184,9 +1253,18 @@ def scrape(
             content = html
         else:
             content = html_to_markdown(html)
+        if agent_safe and isinstance(content, str):
+            from .sanitise import sanitise_text, SanitiseResult
+            _text_san = sanitise_text(content)
+            content = _text_san.content
+            _all_findings = _stdin_findings + _text_san.findings
+            _combined = SanitiseResult(content=content, findings=_all_findings)
         result = {"url": "(stdin)", "content": content}
         if json_output:
-            _output_json({"data": result, "meta": {"format": format, "source": "stdin"}})
+            meta = {"format": format, "source": "stdin"}
+            if agent_safe and isinstance(content, str):
+                meta["agentSafety"] = _combined.to_metadata()
+            _output_json({"data": result, "meta": meta})
         elif isinstance(content, str):
             _output_text(content)
         else:
@@ -1317,7 +1395,7 @@ def scrape(
                 archived, magic, scroll, query, precision, recall,
                 no_negotiate, _neg_headers or None, _neg_session,
                 paywall, _pw_session, stealth, clean,
-                effective_proxy,
+                effective_proxy, agent_safe,
             )
 
         def _on_progress(completed: int, total: int, errors: int):
@@ -1390,7 +1468,7 @@ def scrape(
                     archived, magic, scroll, query, precision, recall,
                     no_negotiate, _neg_headers or None, None,
                     paywall, None, stealth, clean,
-                    effective_proxy,
+                    effective_proxy, agent_safe,
                 ): url
                 for url in all_urls
             }
@@ -1434,7 +1512,8 @@ def scrape(
                                     paywall=paywall,
                                     stealth=stealth,
                                     clean=clean,
-                                    proxy=effective_proxy)
+                                    proxy=effective_proxy,
+                                    agent_safe=agent_safe)
             if timing:
                 console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
@@ -1667,6 +1746,7 @@ def crawl(
     webhook_headers: Annotated[list[str] | None, typer.Option("--webhook-headers", help="Headers for webhook")] = None,
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     deduplicate: Annotated[bool, typer.Option("--deduplicate", help="Skip duplicate content")] = False,
+    agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -1787,7 +1867,7 @@ def crawl(
             count = 0
             _ndjson_hashes: set[str] = set()
             for record in client.crawl_get_all(job_id):
-                record = _filter_record_content(record, only_main_content, _inc, _exc)
+                record = _filter_record_content(record, only_main_content, _inc, _exc, agent_safe=agent_safe)
                 if deduplicate:
                     import hashlib
                     ct = record.get("markdown", "") or record.get("html", "")
@@ -1806,7 +1886,7 @@ def crawl(
         _seen_hashes: set[str] = set()
         records = []
         for r in client.crawl_get_all(job_id):
-            r = _filter_record_content(r, only_main_content, _inc, _exc)
+            r = _filter_record_content(r, only_main_content, _inc, _exc, agent_safe=agent_safe)
             if deduplicate:
                 import hashlib
                 content_text = r.get("markdown", "") or r.get("html", "")
@@ -1951,6 +2031,7 @@ def download(
     include_tags: Annotated[str | None, typer.Option("--include-tags", help="CSS selectors to keep")] = None,
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     backup_dir: Annotated[Path | None, typer.Option("--backup-dir", help="Save raw HTML to this directory")] = None,
+    agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
 ):
     """Download a site into .flarecrawl/ as files.
 
@@ -2029,7 +2110,7 @@ def download(
     errors = 0
 
     for record in client.crawl_get_all(job_id, status="completed"):
-        record = _filter_record_content(record, only_main_content, _inc, _exc)
+        record = _filter_record_content(record, only_main_content, _inc, _exc, agent_safe=agent_safe)
         page_url = record.get("url", "")
         content_key = format  # "markdown" or "html"
         content = record.get(content_key, "")
@@ -2087,6 +2168,7 @@ def extract(
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
+    agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
 ):
     """AI-powered structured data extraction from web pages.
 
@@ -2176,6 +2258,17 @@ def extract(
         )
 
         has_errors = any(r["status"] == "error" for r in results)
+        if agent_safe:
+            from .sanitise import sanitise_text
+            for r in results:
+                if r.get("status") == "ok" and "data" in r:
+                    d = r["data"]
+                    if isinstance(d, dict):
+                        for k, v in d.items():
+                            if isinstance(v, str):
+                                d[k] = sanitise_text(v).content
+                    elif isinstance(d, str):
+                        r["data"] = sanitise_text(d).content
         for r in sorted(results, key=lambda x: x["index"]):
             _output_ndjson(r)
 
@@ -2198,6 +2291,14 @@ def extract(
             else:
                 extra = auth_dict if auth_dict else {}
                 extracted = client.extract_json(url, prompt, response_format, **extra)
+            if agent_safe:
+                from .sanitise import sanitise_text
+                if isinstance(extracted, dict):
+                    for k, v in extracted.items():
+                        if isinstance(v, str):
+                            extracted[k] = sanitise_text(v).content
+                elif isinstance(extracted, str):
+                    extracted = sanitise_text(extracted).content
             results.append({"url": url, "data": extracted})
         except FlareCrawlError as e:
             if len(target_urls) == 1:
