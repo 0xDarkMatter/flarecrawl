@@ -173,6 +173,12 @@ _DELIMITER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Pre-compiled XML-like delimiter tag for prompt injection detection.
+_DELIMITER_XML_TAG = re.compile(
+    r"</?(?:system|instructions?|context|prompt|user|assistant|message|task)>",
+    re.IGNORECASE,
+)
+
 # Suspicious attribute content patterns.
 _ATTR_INSTRUCTION_PATTERN = re.compile(
     r"(?:ignore|forget|disregard|override|system|instructions?|prompt|"
@@ -186,6 +192,11 @@ _URGENCY_WORDS = {
     "must act now", "time-sensitive", "expires", "deadline",
     "act now", "right now", "without delay", "asap",
 }
+# Compiled regex for urgency - matches individual words for counting.
+_URGENCY_PATTERN = re.compile(
+    r"(?:" + "|".join(re.escape(w) for w in sorted(_URGENCY_WORDS, key=len, reverse=True)) + r")",
+    re.IGNORECASE,
+)
 
 # Authority claim patterns.
 _AUTHORITY_PATTERNS = re.compile(
@@ -308,6 +319,14 @@ def sanitise_hidden_text(soup: BeautifulSoup) -> list[Finding]:
         if len(text) < _HIDDEN_TEXT_MIN_CHARS:
             continue
 
+        # Fast pre-check: skip regex loop if no hiding keywords present
+        style_lower = style.lower()
+        if not ("none" in style_lower or "hidden" in style_lower or "0" in style_lower
+                or "absolute" in style_lower or "fixed" in style_lower
+                or "clip" in style_lower or "transparent" in style_lower
+                or "indent" in style_lower):
+            continue
+
         for name, pattern in _HIDING_PATTERNS:
             if pattern and pattern.search(style):
                 el.decompose()
@@ -423,8 +442,13 @@ def sanitise_unicode_tricks(soup: BeautifulSoup) -> list[Finding]:
     U+2066-2069 (bidi isolate), U+FEFF (BOM).
     """
     findings: list[Finding] = []
-    total_removed = 0
 
+    # Fast bail-out: check entire document text for any trick characters
+    full_text = soup.get_text()
+    if not _UNICODE_TRICKS.search(full_text):
+        return findings
+
+    total_removed = 0
     for text_node in soup.find_all(string=True):
         if isinstance(text_node, Comment):
             continue
@@ -551,9 +575,10 @@ def sanitise_css_class_hiding(soup: BeautifulSoup) -> list[Finding]:
         if len(text) < _HIDDEN_TEXT_MIN_CHARS:
             continue
 
-        # Accessibility classes: only remove if text matches injection patterns
-        is_a11y = bool(_ACCESSIBILITY_CLASSES.search(cls_str))
-        if is_a11y and not has_hidden_attr:
+        # All class-hidden elements: only remove if text matches injection patterns.
+        # This is conservative but avoids false positives on responsive CSS (e.g.
+        # Bootstrap d-none for desktop/mobile toggles, sr-only for screen readers).
+        if not has_hidden_attr:
             if not (_INJECTION_PATTERNS.search(text) or _ATTR_INSTRUCTION_PATTERN.search(text)):
                 continue
 
@@ -647,22 +672,23 @@ def sanitise_prompt_injection(text: str) -> tuple[str, list[Finding]]:
             continue
 
         # Check for prompt injection patterns (short-line bias)
-        if len(stripped) < 200 and _INJECTION_PATTERNS.search(stripped):
-            removed_count += 1
-            continue
+        # Fast pre-check: skip expensive regex if no trigger words present
+        if len(stripped) < 200:
+            s_lower = stripped.lower()
+            if ("ignore" in s_lower or "forget" in s_lower or "disregard" in s_lower
+                    or "override" in s_lower or "system" in s_lower or "admin" in s_lower
+                    or "you are now" in s_lower or "act as" in s_lower
+                    or "pretend" in s_lower or "obey" in s_lower or "enter" in s_lower
+                    or "decode" in s_lower or "execute" in s_lower
+                    or "new instructions" in s_lower):
+                if _INJECTION_PATTERNS.search(stripped):
+                    removed_count += 1
+                    continue
 
-        # Check for delimiter injection
-        if len(stripped) < 80 and _DELIMITER_PATTERN.fullmatch(stripped):
-            # Only strip if surrounded by suspicious context.
-            # Isolated delimiters in normal content are fine.
-            # We'll strip XML-like system/instruction tags always.
-            if re.match(
-                r"</?(?:system|instructions?|context|prompt)>",
-                stripped,
-                re.IGNORECASE,
-            ):
-                delimiter_count += 1
-                continue
+        # Check for delimiter injection (XML-like system/instruction tags)
+        if len(stripped) < 80 and _DELIMITER_XML_TAG.match(stripped):
+            delimiter_count += 1
+            continue
 
         clean_lines.append(line)
 
@@ -701,18 +727,23 @@ def sanitise_semantic_manipulation(text: str) -> tuple[str, list[Finding]]:
     authority_count = 0
 
     for line in text.split("\n"):
-        stripped = line.strip().lower()
+        stripped = line.strip()
         if not stripped:
             continue
 
-        # Urgency cluster detection (2+ urgency words in one line)
-        urgency_hits = sum(1 for word in _URGENCY_WORDS if word in stripped)
-        if urgency_hits >= 2:
-            urgency_count += 1
+        stripped_lower = stripped.lower()
 
-        # Authority claim detection
-        if _AUTHORITY_PATTERNS.search(line):
-            authority_count += 1
+        # Urgency cluster detection - fast pre-check before counting
+        # Most lines have zero urgency words; skip the full count
+        if "urgent" in stripped_lower or "critical" in stripped_lower or "immediately" in stripped_lower or "act now" in stripped_lower:
+            urgency_hits = sum(1 for word in _URGENCY_WORDS if word in stripped_lower)
+            if urgency_hits >= 2:
+                urgency_count += 1
+
+        # Authority claim detection - fast pre-check
+        if "confirmed" in stripped_lower or "classified" in stripped_lower or "confidential" in stripped_lower or "leaked" in stripped_lower or "internal" in stripped_lower or "official" in stripped_lower:
+            if _AUTHORITY_PATTERNS.search(stripped):
+                authority_count += 1
 
     if urgency_count:
         findings.append(Finding(

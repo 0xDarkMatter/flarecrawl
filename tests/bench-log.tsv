@@ -1,23 +1,7 @@
-iteration	commit	fc_total	fl_total	delta	status	description
-0	baseline	4.05	4.55	0	baseline	Initial benchmark scores
-1	b47567c	-	-	-	keep	networkidle0 default (httpbin 493->1292 chars)
-2	30f48b4	-	-	-	keep	Enrich metadata (5 fields vs 1)
-3	4376cf7	-	-	-	keep	Add file-based cache (7x speedup on hits)
-4	c807746	4.05	4.15	-0.40	revert	networkidle2 hurt speed (19s blog timeout)
-5	c6c4ca1	4.05	4.35	-0.20	keep	Reverted networkidle default, added --wait-until flag
-6	73d2483	-	-	-	keep	Updated benchmark report
-7	aa8becc	4.05	4.45	+0.10	keep	Smart JS fallback (networkidle0+5s timeout, retry on fail)
-8	6696204	4.05	4.45	0	keep	Reduced timeout to 5s
-9	b8a15d4	-	-	-	keep	httpx connection pooling (persistent session, HTTP/2)
-10	08feecc	-	-	-	keep	Fix blog known_text to "browser-rendering"
-11	5eb173a	-	-	-	keep	Enrich metadata to 11 fields
-12	b989f3b	4.30	4.80	+0.35	keep	ROUND 2: content_accuracy 4→5, output_quality 4→5
-13	46ea8fe	-	-	-	revert	Remove JS fallback for speed — wrong trade-off
-14	1dd27d3	4.30	1.00	-3.80	revert	Parallel race broke (httpx not thread-safe)
-15	ec09af3	-	-	-	keep	Restored smart JS fallback from round 2
-16	ceee186	-	-	-	keep	rejectResourceTypes (skip images/fonts/media/stylesheets)
-17	04e79c0	-	-	-	keep	--js flag (opt-in JS rendering, fast by default)
-18	8ee91bf	-	-	-	keep	Expand benchmark to 8 URLs
-19	r3-check	4.30	4.70	-0.10	keep	R3 checkpoint: speed still 4, JS dropped to 4 (trade-off)
-20	r3-final	4.30	4.90	+0.20	keep	R3 FINAL: speed 5! rejectResources+pooling+8URLs. FL wins 5/6 dimensions
-21	3bd0d46	4.15	4.85	-0.05	keep	--js for JS URLs in benchmark. JS=5! Reliability=4 (transient network)
+iteration	commit	total_ms	html_ms	text_ms	delta	status	description
+0	baseline	0.856	0.375	0.480	0	baseline	Initial: prompt_injection 61% text, semantic_manipulation 30% text, unicode_tricks 20% html
+1	iter1	0.829	0.368	0.462	-0.027	keep	Pre-compiled delimiter XML tag, urgency pre-check, css-class require injection pattern
+2	iter2	0.583	0.377	0.206	-0.246	keep	Fast keyword pre-check for prompt_injection (6.5x speedup on that sanitiser)
+3	iter3	0.477	0.376	0.101	-0.106	keep	Fast keyword pre-check for semantic_manipulation authority patterns
+4	iter4	0.441	0.339	0.101	-0.036	keep	Unicode tricks bail-out when no trick chars in document
+5	iter5	0.419	0.319	0.101	-0.022	keep	Hidden text fast keyword pre-check on style string
