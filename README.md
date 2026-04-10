@@ -13,8 +13,8 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v0.12.1** | 2026-04-06 | Extended attack vector coverage: hidden iframes, hidden form inputs, CSS class hiding (.d-none, [hidden]), meta tag injection, homoglyph evasion (Cyrillic/Greek), markdown exfiltration detection, HTML entity evasion. 61-file corpus, 564 tests |
-| **v0.12.0** | 2026-04-06 | `--agent-safe` flag for adversarial content sanitisation, two-phase pipeline (HTML + text), 48-file attack/benign test corpus, prompt injection detection, semantic manipulation flagging, 506 tests |
+| **v0.12.1** | 2026-04-06 | Extended `--agent-safe` attack vector coverage: hidden iframes, hidden form inputs, CSS class hiding, meta tag injection, homoglyph evasion (Cyrillic/Greek), markdown exfiltration detection, HTML entity evasion. 13 sanitisers total, 61-file corpus, 564 tests. Based on [AI Agent Traps](https://ssrn.com/abstract=6372438) (Franklin et al., Google DeepMind, 2026) |
+| **v0.12.0** | 2026-04-06 | `--agent-safe` flag for adversarial content sanitisation. Two-phase pipeline (HTML + text) defending against content injection, prompt injection, and semantic manipulation. Informed by [AI Agent Traps](https://ssrn.com/abstract=6372438) (Franklin et al., Google DeepMind, 2026) |
 | **v0.11.0** | 2026-04-03 | `search` command (Jina Search), `--proxy` flag, `--clean` for HTML, per-site YAML rulesets (`flarecrawl rules`), `FLARECRAWL_PROXY` env var, 378 tests |
 | **v0.10.0** | 2026-04-02 | Enhanced content extraction (`--paywall`), stealth mode (`--stealth`), automatic content cleanup — multi-strategy cascade with per-site optimisations, browser TLS fingerprint impersonation via `curl_cffi`, archive fallbacks, ad/cruft removal on all markdown output, works without auth, batch mode support, 343 tests |
 | **v0.9.0** | 2026-03-26 | Markdown content negotiation (`Accept: text/markdown`) — auto-detects sites serving markdown natively, skips browser rendering for faster/cheaper/higher-quality extraction. Domain capability cache, `--no-negotiate`, `source` metadata on all results, `flarecrawl negotiate status/clear`, batch session reuse, 278 tests |
@@ -336,77 +336,14 @@ flarecrawl scrape https://example.com --format html --clean --json
 
 ### Agent-safe mode
 
-Sanitise scraped content against adversarial AI agent traps. Informed by
-the Google DeepMind "AI Agent Traps" taxonomy (Franklin et al., 2026), this
-flag defends against content injection, prompt injection, and semantic
-manipulation attacks embedded in web pages.
+Sanitise scraped content against adversarial AI agent traps. See
+[Agent Safety](#agent-safety) for full details.
 
 ```bash
-# Sanitise content for safe agent consumption
 flarecrawl scrape https://example.com --agent-safe --json
-
-# Combine with other extraction flags
 flarecrawl scrape https://example.com --agent-safe --paywall --stealth --json
-
-# Batch mode
-flarecrawl scrape --batch urls.txt --agent-safe --workers 5
-
-# Crawl with sanitisation
 flarecrawl crawl https://example.com --wait --limit 50 --agent-safe
-
-# Download with sanitisation
-flarecrawl download https://docs.example.com --limit 50 --agent-safe
-
-# AI extraction with sanitisation (sanitises before Workers AI)
-flarecrawl extract "Get all products" --urls https://shop.example.com --agent-safe --json
-
-# Stdin pipe (sanitises local HTML)
-cat page.html | flarecrawl scrape --stdin --agent-safe --json
 ```
-
-Two-phase sanitisation pipeline:
-
-**Phase 1 (HTML)** - runs on raw HTML before markdown conversion:
-- Hidden text via CSS (`display:none`, `visibility:hidden`, `opacity:0`,
-  `font-size:0`, off-screen positioning, `text-indent:-9999px`,
-  `clip-path:inset(100%)`, `color:transparent`)
-- HTML comments containing instruction-like content
-- Suspicious `data-*`, `aria-label`, `alt`, and `title` attributes with
-  injection patterns
-- Zero-width unicode characters and bidirectional text overrides
-
-**Phase 2 (Text)** - runs on markdown after conversion:
-- Prompt injection patterns: "ignore previous instructions", "SYSTEM:",
-  "ADMIN:", role-play attacks, delimiter injection (`<system>` tags),
-  base64-obfuscated instructions. Uses short-line bias (<200 chars) to
-  avoid stripping legitimate articles about prompt injection
-- Semantic manipulation: urgency clusters (2+ urgency words per line),
-  authority claims ("classified internal documents"). **Flagged only, never
-  removed** - the consuming agent decides what to do
-
-JSON output includes `metadata.agentSafety` with findings, severity, and
-stats. Supported on all content paths: browser rendering, content
-negotiation, paywall bypass, stdin, crawl records.
-
-```json
-{
-  "metadata": {
-    "agentSafety": {
-      "sanitised": true,
-      "findings": [
-        {"category": "content_injection", "severity": "high",
-         "description": "Hidden text via CSS (2 elements)", "action": "removed", "count": 2},
-        {"category": "semantic_manipulation", "severity": "medium",
-         "description": "Urgency language clusters (1 lines)", "action": "flagged", "count": 1}
-      ],
-      "stats": {"removed": 2, "flagged": 1, "byCategory": {"content_injection": 2, "semantic_manipulation": 1}}
-    }
-  }
-}
-```
-
-Extensible via decorator-based registry in `src/flarecrawl/sanitise.py`.
-Add new attack vectors with `@register_html` or `@register_text`.
 
 ### Web search
 
@@ -872,6 +809,157 @@ flarecrawl crawl JOB_ID --ndjson --fields url,markdown | \
 ### Retry behavior
 
 Requests automatically retry up to 3 times on HTTP 429 (rate limited), 502, and 503 errors with exponential backoff. Timeouts also trigger retries.
+
+## Agent Safety
+
+Flarecrawl is often the perception layer for AI agent workflows - scraped
+content flows directly into LLM context windows and RAG systems. The
+`--agent-safe` flag sanitises content against adversarial attacks before it
+reaches the consuming agent.
+
+### Background
+
+This implementation is informed by
+[AI Agent Traps](https://ssrn.com/abstract=6372438) (Franklin, Tomasev,
+Jacobs, Leibo, Osindero - Google DeepMind, March 2026), which identifies
+six categories of adversarial attacks against autonomous AI agents navigating
+the web:
+
+| Category | Target | Flarecrawl Defence |
+|----------|--------|-------------------|
+| Content Injection | Agent perception | **Defended** - hidden text, comments, attributes, unicode tricks, iframes, hidden inputs, CSS class hiding, meta tags |
+| Semantic Manipulation | Agent reasoning | **Defended** - urgency clusters and authority claims flagged (not removed) |
+| Behavioural Control | Agent actions | **Defended** - prompt injection patterns detected and stripped |
+| Cognitive State | Agent memory/RAG | Upstream - content provenance via `metadata.source` |
+| Systemic | Multi-agent networks | Upstream - outside scraping layer |
+| Human-in-the-Loop | Human supervisor | Upstream - outside scraping layer |
+
+### Usage
+
+```bash
+# Sanitise content for safe agent consumption
+flarecrawl scrape https://example.com --agent-safe --json
+
+# Combine with extraction flags
+flarecrawl scrape https://example.com --agent-safe --paywall --stealth --json
+
+# Batch mode
+flarecrawl scrape --batch urls.txt --agent-safe --workers 5
+
+# All commands support --agent-safe
+flarecrawl crawl https://example.com --wait --limit 50 --agent-safe
+flarecrawl download https://docs.example.com --limit 50 --agent-safe
+flarecrawl extract "Get products" --urls https://shop.example.com --agent-safe --json
+
+# Stdin pipe (sanitises local HTML)
+cat page.html | flarecrawl scrape --stdin --agent-safe --json
+```
+
+### Two-phase sanitisation pipeline
+
+Content passes through 13 sanitisers in two phases:
+
+**Phase 1 (HTML)** - 8 sanitisers run on the DOM before markdown conversion:
+
+| Sanitiser | Attack Vector | Action |
+|-----------|--------------|--------|
+| Hidden text | CSS hiding (`display:none`, `opacity:0`, off-screen, `clip-path`, `color:transparent`, etc.) | Removed |
+| HTML comments | Instruction-like content in `<!-- -->` comments | Removed |
+| Suspicious attributes | Injection patterns in `data-*`, `aria-label`, `alt`, `title` | Removed |
+| Unicode tricks | Zero-width characters, bidirectional text overrides | Removed |
+| Hidden iframes | `<iframe src="...">` with external content | Removed |
+| Hidden inputs | `<input type="hidden" value="...">` with instruction patterns | Removed |
+| CSS class hiding | `.d-none`, `.hidden`, `[hidden]` attribute with injection content | Removed |
+| Meta injection | Custom `<meta>` tags with adversarial content (standard tags preserved) | Removed |
+
+**Phase 2 (Text)** - 5 sanitisers run on markdown after conversion:
+
+| Sanitiser | Attack Vector | Action |
+|-----------|--------------|--------|
+| Prompt injection | "ignore previous instructions", "SYSTEM:", role-play, delimiter injection | Removed |
+| Semantic manipulation | Urgency clusters, authority claims | **Flagged only** |
+| Homoglyph evasion | Cyrillic/Greek lookalike characters bypassing patterns | Removed |
+| Markdown exfiltration | Image URLs with suspicious query params (IP addresses, exfil params) | **Flagged only** |
+| HTML entity evasion | `&#73;gnore` entity-encoded injection patterns | Removed |
+
+### False positive prevention
+
+| Technique | How it works |
+|-----------|-------------|
+| Short-line bias | Prompt injection only strips lines <200 chars - articles *about* injection are preserved |
+| Accessibility preservation | `.sr-only`/`.visually-hidden` text kept unless it matches injection patterns |
+| Standard meta allowlist | `description`, `og:*`, `twitter:*`, `charset` meta tags never touched |
+| Mixed-script detection | Homoglyph normalisation only on lines with both Latin and Cyrillic/Greek chars |
+| Threshold gates | Hidden elements need 20+ chars; hidden inputs need 50+ chars + pattern match |
+| Flag vs remove | Semantic manipulation and exfiltration are flagged, never removed |
+
+### JSON output
+
+When `--json` is used, `metadata.agentSafety` reports what was detected:
+
+```json
+{
+  "metadata": {
+    "agentSafety": {
+      "sanitised": true,
+      "findings": [
+        {"category": "content_injection", "severity": "high",
+         "description": "Hidden text via CSS (2 elements)", "action": "removed", "count": 2},
+        {"category": "prompt_injection", "severity": "high",
+         "description": "Prompt injection patterns removed (1 lines)", "action": "removed", "count": 1},
+        {"category": "semantic_manipulation", "severity": "medium",
+         "description": "Urgency language clusters (1 lines)", "action": "flagged", "count": 1}
+      ],
+      "stats": {
+        "removed": 3,
+        "flagged": 1,
+        "byCategory": {
+          "content_injection": 2,
+          "prompt_injection": 1,
+          "semantic_manipulation": 1
+        }
+      }
+    }
+  }
+}
+```
+
+### Extensibility
+
+New attack vectors are added by writing a function and decorating it:
+
+```python
+from flarecrawl.sanitise import register_html, register_text, Finding
+
+@register_html
+def sanitise_new_vector(soup):
+    """HTML-level sanitiser - mutates soup, returns findings."""
+    # ... detection and removal logic ...
+    return [Finding(category="content_injection", severity="high",
+                    description="New vector (N elements)", action="removed", count=n)]
+
+@register_text
+def sanitise_new_text_vector(text):
+    """Text-level sanitiser - returns (cleaned_text, findings)."""
+    # ... detection logic ...
+    return cleaned_text, findings
+```
+
+Add a corpus fixture to `tests/corpus/attacks/` and the parametrised test
+suite picks it up automatically.
+
+### Test corpus
+
+The `tests/corpus/` directory contains 61 fixture files that serve as both
+test data and a living catalogue of known attack vectors:
+
+- **`attacks/`** (45 files) - adversarial fixtures across 12 categories
+- **`benign/`** (16 files) - false-positive traps: security articles, responsive
+  CSS, ARIA accessibility, admin UIs, medical urgency, i18n content, code
+  tutorials, system docs, journalism
+
+Parametrised tests validate that every attack file produces findings and
+every benign file produces zero removals.
 
 ## Pricing Details
 
