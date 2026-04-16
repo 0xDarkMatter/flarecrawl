@@ -58,6 +58,19 @@
 | Recall extraction | `flarecrawl scrape URL --recall` |
 | Dedup crawl results | `flarecrawl crawl URL --wait --deduplicate` |
 | Load session cookies | `flarecrawl scrape URL --session cookies.json` |
+| Save session from file | `flarecrawl session save mysite --file cookies.json` |
+| List saved sessions | `flarecrawl session list` |
+| Show session cookies | `flarecrawl session show mysite` |
+| Delete saved session | `flarecrawl session delete mysite` |
+| Validate session against URL | `flarecrawl session validate mysite https://example.com` |
+| Fetch URL (content-aware) | `flarecrawl fetch URL` |
+| Fetch with session | `flarecrawl fetch URL --session cookies.json` |
+| Fetch with saved session | `flarecrawl fetch URL --session @mysite` |
+| Download binary file | `flarecrawl fetch URL -o file.pdf` |
+| Discover OpenAPI specs | `flarecrawl openapi URL --json` |
+| Download OpenAPI spec | `flarecrawl openapi URL --download -o ./specs` |
+| Probe common spec paths | `flarecrawl openapi URL --probe --json` |
+| Discover + OpenAPI | `flarecrawl discover URL --openapi --json` |
 | YAML batch config | `flarecrawl batch config.yml` |
 | Accessibility tree | `flarecrawl scrape URL --format accessibility --json` |
 | Enhanced content extraction | `flarecrawl scrape URL --paywall --json` |

@@ -3075,16 +3075,19 @@ def discover(
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers")] = None,
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
+    openapi_flag: Annotated[bool, typer.Option("--openapi", help="Also discover OpenAPI/Swagger specs")] = False,
 ):
     """Discover all URLs on a site via sitemaps, RSS feeds, and page links.
 
     Combines XML sitemap parsing, RSS/Atom feed discovery, and page link
-    extraction into a single unified URL list.
+    extraction into a single unified URL list. Use --openapi to also
+    probe for API specs.
 
     Example:
         flarecrawl discover https://example.com --json
         flarecrawl discover https://example.com --sitemap --no-feed --no-links
         flarecrawl discover https://example.com --limit 100
+        flarecrawl discover https://example.com --openapi --json
     """
     from urllib.parse import urljoin, urlparse
 
@@ -3226,6 +3229,22 @@ def discover(
             pass
         console.print(f"[dim]Links: {sum(1 for v in discovered.values() if v == 'links')} URLs[/dim]")
 
+    # 4. OpenAPI spec discovery (optional)
+    api_specs: list[dict] = []
+    if openapi_flag:
+        console.print("[dim]Checking for OpenAPI/Swagger specs...[/dim]")
+        try:
+            from .openapi import discover_specs, probe_common_paths
+            page_html = client.get_content(url, **kwargs)
+            for spec in discover_specs(page_html, url):
+                api_specs.append({"url": spec.url, "source": spec.source, "format": spec.format})
+            for spec in probe_common_paths(url):
+                if spec.url not in {s["url"] for s in api_specs}:
+                    api_specs.append({"url": spec.url, "source": spec.source, "format": spec.format})
+            console.print(f"[dim]API specs: {len(api_specs)} found[/dim]")
+        except FlareCrawlError:
+            pass
+
     # Apply limit
     all_urls = list(discovered.items())
     if limit:
@@ -3243,10 +3262,16 @@ def discover(
                 "links": sum(1 for _, s in all_urls if s == "links"),
             },
         }
+        if api_specs:
+            meta["api_specs"] = api_specs
         _output_json({"data": data, "meta": meta})
     else:
         for u, s in all_urls:
             _output_text(f"{u}  [{s}]")
+        if api_specs:
+            console.print("\n[bold]API Specs:[/bold]")
+            for spec in api_specs:
+                console.print(f"  [{spec['source']}] {spec['url']}")
         console.print(f"\n[dim]Total: {len(all_urls)} URLs[/dim]")
 
 
@@ -3396,6 +3421,287 @@ def usage(
     console.print()
     console.print(f"[dim]Total tracked: {total_ms / 1000:.1f}s | Est. cost: ${cost_estimate:.4f}[/dim]")
     console.print("[dim]Pricing: Free 10 min/day, then $0.09/hr[/dim]")
+
+
+# ------------------------------------------------------------------
+# openapi — OpenAPI/Swagger spec discovery
+# ------------------------------------------------------------------
+
+
+@app.command()
+def openapi(
+    url: Annotated[str, typer.Argument(help="URL to scan for API specs")],
+    download: Annotated[bool, typer.Option("--download", "-d", help="Download discovered specs")] = False,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output directory for downloads")] = None,
+    probe: Annotated[bool, typer.Option("--probe", help="Probe common spec paths (HEAD requests)")] = True,
+    session: Annotated[str | None, typer.Option("--session", help="Cookie file or @NAME for saved session")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
+):
+    """Discover and download OpenAPI/Swagger specs from a URL.
+
+    Scans the page HTML for spec links, checks SwaggerUI configs, and
+    optionally probes common spec paths (e.g. /openapi.json, /swagger.json).
+
+    Example:
+        flarecrawl openapi https://petstore.swagger.io --json
+        flarecrawl openapi https://api.example.com --download -o ./specs
+        flarecrawl openapi https://api.example.com --probe --json
+    """
+    from .openapi import discover_specs, download_spec, probe_common_paths
+
+    _validate_url(url, json_output)
+    cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
+    client = _get_client(json_output, cache_ttl=cache_ttl)
+
+    # Load session cookies for HTTP probing
+    _cookies = None
+    if session:
+        if session.startswith("@"):
+            from .config import load_session as _load_session
+            try:
+                _cookies = _load_session(session[1:])
+            except FileNotFoundError:
+                _error(f"Session not found: {session[1:]}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+        else:
+            from .cookies import load_cookies
+            try:
+                _cookies = load_cookies(Path(session))
+            except (OSError, json.JSONDecodeError, ValueError) as e:
+                _error(f"Cannot read session file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+
+    # Fetch page HTML via CF Browser Rendering
+    try:
+        html = client.get_content(url, reject_resources=["image", "media", "font", "stylesheet"])
+    except FlareCrawlError as e:
+        _handle_api_error(e, json_output)
+        return
+
+    # Discover specs in HTML
+    discovered = discover_specs(html, url)
+    if not json_output:
+        console.print(f"[dim]Found {len(discovered)} spec link(s) in page HTML[/dim]")
+
+    # Probe common paths
+    if probe:
+        import httpx as _httpx
+        probe_session = None
+        if _cookies:
+            from .cookies import cookies_to_httpx
+            probe_session = _httpx.Client(
+                cookies=cookies_to_httpx(_cookies),
+                follow_redirects=True, timeout=10,
+            )
+        try:
+            probed = probe_common_paths(url, session=probe_session)
+            if not json_output:
+                console.print(f"[dim]Found {len(probed)} spec(s) via path probing[/dim]")
+            for p in probed:
+                if p.url not in {d.url for d in discovered}:
+                    discovered.append(p)
+        finally:
+            if probe_session:
+                probe_session.close()
+
+    if not discovered:
+        if json_output:
+            _output_json({"data": [], "meta": {"url": url, "total": 0}})
+        else:
+            console.print("[yellow]No API specs found[/yellow]")
+        return
+
+    out_dir = output or Path(".")
+    results = []
+
+    for spec in discovered:
+        entry: dict = {
+            "url": spec.url,
+            "source": spec.source,
+            "format": spec.format,
+            "confidence": spec.confidence,
+        }
+
+        if download:
+            ext = ".yaml" if spec.format == "yaml" else ".json"
+            filename = spec.url.rstrip("/").rsplit("/", 1)[-1]
+            if not filename.endswith((".json", ".yaml", ".yml")):
+                filename = f"openapi{ext}"
+            out_path = out_dir / filename
+            try:
+                result = download_spec(spec.url, output_path=out_path)
+                entry["downloaded"] = str(result.path)
+                entry["size"] = result.size
+                entry["validation"] = {
+                    "valid": result.validation.valid,
+                    "version": result.validation.version,
+                    "title": result.validation.title,
+                    "endpoint_count": result.validation.endpoint_count,
+                }
+                if not json_output:
+                    v = result.validation
+                    status = "[green]valid[/green]" if v.valid else "[yellow]invalid[/yellow]"
+                    console.print(f"  {status} {spec.url} → {out_path}")
+                    if v.title:
+                        console.print(f"    Title: {v.title}, Endpoints: {v.endpoint_count}")
+            except Exception as e:
+                entry["error"] = str(e)
+                if not json_output:
+                    console.print(f"  [red]Error downloading {spec.url}:[/red] {e}")
+        else:
+            if not json_output:
+                console.print(f"  [{spec.source}] {spec.url} (confidence: {spec.confidence:.0%})")
+
+        results.append(entry)
+
+    if json_output:
+        _output_json({"data": results, "meta": {"url": url, "total": len(results)}})
+
+
+# ------------------------------------------------------------------
+# session — saved session management
+# ------------------------------------------------------------------
+
+
+session_app = typer.Typer(help="Saved cookie session management")
+app.add_typer(session_app, name="session")
+
+
+@session_app.command("save")
+def session_save(
+    name: Annotated[str, typer.Argument(help="Session name")],
+    file: Annotated[Path, typer.Option("--file", "-f", help="Cookie file to save")],
+):
+    """Save cookies from a file to a named session.
+
+    Supports Puppeteer JSON, Chrome DevTools, and Netscape format.
+
+    Example:
+        flarecrawl session save mysite --file cookies.json
+        flarecrawl session save github --file github-cookies.json
+    """
+    from .config import save_session as _save
+    from .cookies import load_cookies
+
+    try:
+        cookies = load_cookies(file)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        _error(f"Cannot read cookie file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION)
+
+    path = _save(name, cookies)
+    console.print(f"[green]Session saved:[/green] {name} ({len(cookies)} cookies → {path})")
+
+
+@session_app.command("list")
+def session_list(
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+):
+    """List all saved sessions.
+
+    Example:
+        flarecrawl session list
+        flarecrawl session list --json
+    """
+    from .config import list_sessions as _list
+
+    sessions = _list()
+
+    if json_output:
+        _output_json({"data": sessions, "meta": {"count": len(sessions)}})
+        return
+
+    if not sessions:
+        console.print("[dim]No saved sessions[/dim]")
+        return
+
+    for name in sessions:
+        console.print(f"  {name}")
+    console.print(f"\n[dim]{len(sessions)} session(s)[/dim]")
+
+
+@session_app.command("show")
+def session_show(
+    name: Annotated[str, typer.Argument(help="Session name")],
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+):
+    """Show cookies in a saved session.
+
+    Example:
+        flarecrawl session show mysite
+        flarecrawl session show mysite --json
+    """
+    from .config import load_session as _load
+
+    try:
+        cookies = _load(name)
+    except FileNotFoundError:
+        _error(f"Session not found: {name}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+        return
+
+    if json_output:
+        _output_json({"data": cookies, "meta": {"name": name, "count": len(cookies)}})
+        return
+
+    console.print(f"[bold]{name}[/bold] ({len(cookies)} cookies)")
+    for c in cookies:
+        domain = c.get("domain", "")
+        console.print(f"  [cyan]{c['name']}[/cyan] = {c['value'][:40]}{'...' if len(c['value']) > 40 else ''}"
+                      f" [{domain}]")
+
+
+@session_app.command("delete")
+def session_delete(
+    name: Annotated[str, typer.Argument(help="Session name")],
+):
+    """Delete a saved session.
+
+    Example:
+        flarecrawl session delete mysite
+    """
+    from .config import delete_session as _delete
+
+    if _delete(name):
+        console.print(f"[green]Deleted:[/green] {name}")
+    else:
+        _error(f"Session not found: {name}", "NOT_FOUND", EXIT_NOT_FOUND)
+
+
+@session_app.command("validate")
+def session_validate(
+    name: Annotated[str, typer.Argument(help="Session name")],
+    url: Annotated[str, typer.Argument(help="URL to test session against")],
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+):
+    """Test a saved session against a URL with a HEAD request.
+
+    Example:
+        flarecrawl session validate mysite https://example.com
+        flarecrawl session validate mysite https://example.com --json
+    """
+    from .config import load_session as _load
+    from .cookies import validate_cookies
+
+    _validate_url(url, json_output)
+
+    try:
+        cookies = _load(name)
+    except FileNotFoundError:
+        _error(f"Session not found: {name}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+        return
+
+    result = validate_cookies(cookies, url)
+
+    if json_output:
+        _output_json({"data": result, "meta": {"name": name, "url": url}})
+        return
+
+    status = "[green]valid[/green]" if result.get("valid") else "[red]invalid[/red]"
+    console.print(f"Session: [bold]{name}[/bold]")
+    console.print(f"URL: {url}")
+    console.print(f"Status: {status} (HTTP {result.get('status_code')})")
+    if result.get("redirected_to"):
+        console.print(f"Redirected to: [dim]{result['redirected_to']}[/dim]")
+    if result.get("error"):
+        console.print(f"Error: [red]{result['error']}[/red]")
 
 
 # ------------------------------------------------------------------

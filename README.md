@@ -13,6 +13,8 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.14.0** | 2026-04-16 | `fetch` command (content-type aware download), `openapi` command (spec discovery + download), `session` sub-app (save/list/show/delete/validate), `authcrawl` module (authenticated BFS crawler), `--openapi` flag on `discover`, multi-format cookie loading |
+| **v0.13.0** | 2026-04-14 | Optimize sanitise pipeline — 51% faster via keyword pre-checks |
 | **v0.12.1** | 2026-04-06 | Extended `--agent-safe` attack vector coverage: hidden iframes, hidden form inputs, CSS class hiding, meta tag injection, homoglyph evasion (Cyrillic/Greek), markdown exfiltration detection, HTML entity evasion. 13 sanitisers total, 61-file corpus, 564 tests. Based on [AI Agent Traps](https://ssrn.com/abstract=6372438) (Franklin et al., Google DeepMind, 2026) |
 | **v0.12.0** | 2026-04-06 | `--agent-safe` flag for adversarial content sanitisation. Two-phase pipeline (HTML + text) defending against content injection, prompt injection, and semantic manipulation. Informed by [AI Agent Traps](https://ssrn.com/abstract=6372438) (Franklin et al., Google DeepMind, 2026) |
 | **v0.11.0** | 2026-04-03 | `search` command (Jina Search), `--proxy` flag, `--clean` for HTML, per-site YAML rulesets (`flarecrawl rules`), `FLARECRAWL_PROXY` env var, 378 tests |

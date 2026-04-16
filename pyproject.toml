@@ -1,6 +1,6 @@
 [project]
 name = "flarecrawl"
-version = "0.13.0"
+version = "0.14.0"
 description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
 readme = "README.md"
 requires-python = ">=3.11"
