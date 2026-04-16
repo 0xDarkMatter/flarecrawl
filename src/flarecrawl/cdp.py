@@ -262,6 +262,8 @@ class _AsyncCDPClient:
 
     WS_URL = "wss://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/devtools/browser"
 
+    REST_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering"
+
     def __init__(self, account_id: str, api_token: str, timeout: float = 30.0) -> None:
         self._account_id = account_id
         self._api_token = api_token
@@ -274,6 +276,8 @@ class _AsyncCDPClient:
         self._pages: list[CDPPage] = []
         self._connected = False
         self._connect_args: dict[str, Any] = {}
+        self._recording = False
+        self._ws_url: str | None = None
 
     async def connect(self, keep_alive: int = 0, recording: bool = False) -> None:
         """Open WebSocket connection with Bearer auth."""
@@ -289,6 +293,8 @@ class _AsyncCDPClient:
             url = f"{url}?{urlencode(query)}"
 
         self._connect_args = {"keep_alive": keep_alive, "recording": recording}
+        self._recording = recording
+        self._ws_url = url
         headers = {"Authorization": f"Bearer {self._api_token}"}
 
         try:
@@ -463,6 +469,20 @@ class CDPClient:
         self._run(self._async.close())
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout=5)
+
+    @property
+    def session_id(self) -> str | None:
+        """Return the browser session ID if connected."""
+        if self._async._pages:
+            return self._async._pages[0].session_id
+        return None
+
+    @property
+    def ws_url(self) -> str | None:
+        """Return the WebSocket URL if connected."""
+        if self._async._ws:
+            return str(self._async._ws.uri) if hasattr(self._async._ws, "uri") else None
+        return None
 
     def __enter__(self) -> CDPClient:
         return self

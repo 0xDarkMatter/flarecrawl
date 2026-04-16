@@ -225,3 +225,77 @@ def delete_session(name: str) -> bool:
         path.unlink()
         return True
     return False
+
+
+# ------------------------------------------------------------------
+# CDP session persistence
+# ------------------------------------------------------------------
+
+_CDP_SESSIONS_FILE = "cdp_sessions.json"
+
+
+def _get_cdp_sessions_path() -> Path:
+    """Get the CDP sessions store file path."""
+    return get_config_dir() / _CDP_SESSIONS_FILE
+
+
+def _load_cdp_sessions_raw() -> list[dict]:
+    """Load all CDP sessions from disk (including expired)."""
+    path = _get_cdp_sessions_path()
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text())
+        return data if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _save_cdp_sessions_raw(sessions: list[dict]) -> None:
+    """Write CDP sessions list to disk."""
+    path = _get_cdp_sessions_path()
+    path.write_text(json.dumps(sessions, indent=2))
+
+
+def save_cdp_session(session_id: str, ws_url: str, expiry: float) -> None:
+    """Persist a CDP session for reuse across invocations."""
+    import time
+    sessions = [s for s in _load_cdp_sessions_raw() if s.get("expiry", 0) > time.time()]
+    sessions = [s for s in sessions if s.get("session_id") != session_id]
+    sessions.append({"session_id": session_id, "ws_url": ws_url, "expiry": expiry})
+    _save_cdp_sessions_raw(sessions)
+
+
+def load_cdp_session() -> dict | None:
+    """Return the newest non-expired CDP session, or None."""
+    import time
+    now = time.time()
+    sessions = _load_cdp_sessions_raw()
+    active = [s for s in sessions if s.get("expiry", 0) > now]
+    if not active:
+        return None
+    active.sort(key=lambda s: s["expiry"], reverse=True)
+    return active[0]
+
+
+def list_cdp_sessions() -> list[dict]:
+    """Return all non-expired CDP sessions."""
+    import time
+    now = time.time()
+    return [s for s in _load_cdp_sessions_raw() if s.get("expiry", 0) > now]
+
+
+def clear_cdp_session(session_id: str | None = None) -> bool:
+    """Remove a CDP session (or all if session_id is None). Returns True if any removed."""
+    if session_id is None:
+        path = _get_cdp_sessions_path()
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+    sessions = _load_cdp_sessions_raw()
+    filtered = [s for s in sessions if s.get("session_id") != session_id]
+    if len(filtered) == len(sessions):
+        return False
+    _save_cdp_sessions_raw(filtered)
+    return True

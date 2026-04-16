@@ -11,7 +11,7 @@ import sys
 import time as _time
 from datetime import UTC
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import typer
@@ -26,11 +26,15 @@ from .client import MOBILE_PRESET, Client, FlareCrawlError
 from .config import (
     DEFAULT_CACHE_TTL,
     DEFAULT_MAX_WORKERS,
+    clear_cdp_session,
     clear_credentials,
     get_account_id,
     get_api_token,
     get_auth_status,
     get_usage,
+    list_cdp_sessions,
+    load_cdp_session,
+    save_cdp_session,
     save_credentials,
 )
 
@@ -703,12 +707,23 @@ def _scrape_single_cdp(
     agent_safe: bool = False,
     user_agent: str | None = None,
     timeout: int | None = None,
+    har_output: Path | None = None,
+    load_cookies: Path | None = None,
+    save_cookies: Path | None = None,
 ) -> dict:
     """Scrape a URL using CDP WebSocket connection."""
     start = _time.time()
 
     page = cdp_client.new_page()
     try:
+        collector = None
+        if har_output:
+            collector = page.enable_network()
+
+        if load_cookies:
+            cookies = json.loads(load_cookies.read_text(encoding="utf-8"))
+            page.set_cookies(cookies)
+
         wait_until = "networkidle0" if scroll else "load"
         page.navigate(url, wait_until=wait_until, timeout=timeout or 30000)
 
@@ -737,8 +752,6 @@ def _scrape_single_cdp(
 
         from .extract import (
             extract_images,
-            extract_links,
-            extract_metadata,
             extract_main_content,
             html_to_markdown,
         )
@@ -753,7 +766,9 @@ def _scrape_single_cdp(
         if format == "html":
             content = html
         elif format == "links":
-            content = extract_links(html, url)
+            from bs4 import BeautifulSoup as BS
+            soup = BS(html, "lxml")
+            content = [a.get("href") for a in soup.find_all("a", href=True)]
         elif format == "images":
             content = extract_images(html, url)
         else:
@@ -762,12 +777,23 @@ def _scrape_single_cdp(
                 content = extract_main_content(content)
 
         if agent_safe and isinstance(content, str):
-            from .sanitise import sanitise
-            result = sanitise(content, html=html)
-            content = result.text
+            from .sanitise import sanitise as _sanitise_fn
+            san_result = _sanitise_fn(content, html=html)
+            content = san_result.text
 
-        metadata = extract_metadata(html, url)
-        metadata["source"] = "cdp"
+        if save_cookies:
+            cookies = page.get_cookies()
+            save_cookies.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+
+        if collector and har_output:
+            har_data = collector.to_har()
+            har_output.write_text(json.dumps(har_data, indent=2), encoding="utf-8")
+
+        metadata: dict[str, Any] = {"source": "cdp"}
+        if isinstance(content, str):
+            metadata["contentLength"] = len(content)
+            metadata["wordCount"] = len(content.split())
+        metadata["sourceURL"] = url
         elapsed = _time.time() - start
 
         return {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
