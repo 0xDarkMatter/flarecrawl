@@ -1,4 +1,4 @@
-"""Cloudflare Browser Rendering API client."""
+"""Cloudflare Browser Run API client."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ MOBILE_PRESET = {
 
 
 class Client:
-    """Cloudflare Browser Rendering REST API client.
+    """Cloudflare Browser Run REST API client.
 
     Uses a persistent httpx.Client session with connection pooling for
     TCP/TLS reuse across requests. Supports context manager protocol.
@@ -354,6 +354,8 @@ class Client:
             body["maxAge"] = kwargs.pop("max_age")
         if "modified_since" in kwargs:
             body["modifiedSince"] = kwargs.pop("modified_since")
+        if "ignore_robots" in kwargs:
+            body["ignoreRobots"] = kwargs.pop("ignore_robots")
 
         # Crawl options (nested under 'options')
         crawl_opts = {}

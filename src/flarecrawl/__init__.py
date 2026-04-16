@@ -1,3 +1,3 @@
-"""Flarecrawl - Cloudflare Browser Rendering CLI."""
+"""Flarecrawl - Cloudflare Browser Run CLI."""
 
-__version__ = "0.12.1"
+__version__ = "0.13.0"

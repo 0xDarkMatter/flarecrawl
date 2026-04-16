@@ -23,7 +23,7 @@ def get_env_int(key: str, default: int) -> int:
 # Configurable via environment variables
 DEFAULT_CACHE_TTL = get_env_int("FLARECRAWL_CACHE_TTL", 3600)
 DEFAULT_MAX_RETRIES = get_env_int("FLARECRAWL_MAX_RETRIES", 3)
-DEFAULT_MAX_WORKERS = get_env_int("FLARECRAWL_MAX_WORKERS", 10)
+DEFAULT_MAX_WORKERS = get_env_int("FLARECRAWL_MAX_WORKERS", 50)
 DEFAULT_TIMEOUT = get_env_int("FLARECRAWL_TIMEOUT", 120)
 
 

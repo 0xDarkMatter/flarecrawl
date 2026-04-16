@@ -1,7 +1,7 @@
 [project]
 name = "flarecrawl"
-version = "0.12.1"
-description = "Cloudflare Browser Rendering CLI - Firecrawl-compatible, cost-efficient at scale"
+version = "0.13.0"
+description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -57,3 +57,12 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.forma]
+description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
+resources = ['auth', 'cache', 'negotiate', 'rules']
+auth = "none"
+status = "experimental"
+origin = "forma"
+install = "uv tool install --editable ."
+command = "flarecrawl"

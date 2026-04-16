@@ -1,4 +1,4 @@
-"""Flarecrawl CLI - Firecrawl-compatible CLI backed by Cloudflare Browser Rendering."""
+"""Flarecrawl CLI - Firecrawl-compatible CLI backed by Cloudflare Browser Run."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from .config import (
 
 app = typer.Typer(
     name="flarecrawl",
-    help="Cloudflare Browser Rendering CLI — drop-in firecrawl replacement, much cheaper.",
+    help="Cloudflare Browser Run CLI — drop-in firecrawl replacement, much cheaper.",
     no_args_is_help=True,
 )
 
@@ -159,7 +159,7 @@ def _parse_body(body_str: str | None, as_json: bool = False) -> dict | None:
 
 
 def _parse_auth(auth_str: str | None, as_json: bool = False) -> dict | None:
-    """Parse --auth user:pass into auth kwargs for CF Browser Rendering API.
+    """Parse --auth user:pass into auth kwargs for CF Browser Run API.
 
     Returns a dict with both 'authenticate' and 'extra_headers' keys.
     - authenticate: Puppeteer page.authenticate() — responds to 401 challenges
@@ -335,7 +335,7 @@ def main(
                      help="Show version, auth status, and usage info"),
     ] = None,
 ):
-    """Cloudflare Browser Rendering CLI — drop-in firecrawl replacement."""
+    """Cloudflare Browser Run CLI — drop-in firecrawl replacement."""
 
 
 # ------------------------------------------------------------------
@@ -355,7 +355,7 @@ def auth_login(
         str | None, typer.Option("--token", help="Cloudflare API token")
     ] = None,
 ):
-    """Authenticate with Cloudflare Browser Rendering.
+    """Authenticate with Cloudflare Browser Run.
 
     Opens the Cloudflare dashboard in your browser to create a token,
     then prompts for your account ID and token.
@@ -367,7 +367,7 @@ def auth_login(
     import webbrowser
 
     if not account_id or not token:
-        console.print("\n[bold]Cloudflare Browser Rendering Setup[/bold]\n")
+        console.print("\n[bold]Cloudflare Browser Run Setup[/bold]\n")
 
     if not account_id:
         console.print("1. Open [cyan]https://dash.cloudflare.com[/cyan]")
@@ -1174,7 +1174,7 @@ def scrape(
     fields: Annotated[str | None, typer.Option("--fields", help="Comma-separated fields to include in JSON")] = None,
     input_file: Annotated[Path | None, typer.Option("--input", "-i", help="File with URLs (one per line)")] = None,
     batch: Annotated[Path | None, typer.Option("--batch", "-b", help="Batch input file (JSON array, NDJSON, or text)")] = None,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
-    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 50, free tier: 3)")] = 3,
     body: Annotated[str | None, typer.Option("--body", help="Raw JSON body (overrides all flags)")] = None,
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
     js: Annotated[bool, typer.Option("--js", help="Wait for JS rendering (networkidle0, slower but captures dynamic content)")] = False,  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501  # noqa: E501
@@ -1647,7 +1647,7 @@ def search(
     stealth: Annotated[bool, typer.Option("--stealth", help="Stealth mode for scraped URLs")] = False,
     only_main_content: Annotated[bool, typer.Option("--only-main-content", help="Main content only")] = False,
     clean: Annotated[bool, typer.Option("--clean", help="Strip ads from scraped HTML")] = False,
-    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for --scrape")] = 3,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for --scrape (max 50)")] = 3,
 ):
     """Search the web and optionally scrape results.
 
@@ -1747,6 +1747,7 @@ def crawl(
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     deduplicate: Annotated[bool, typer.Option("--deduplicate", help="Skip duplicate content")] = False,
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
+    ignore_robots: Annotated[bool, typer.Option("--ignore-robots", help="Ignore robots.txt and AI Crawl Control directives")] = False,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -1822,6 +1823,8 @@ def crawl(
             kwargs.update(auth_dict)
         if user_agent:
             kwargs["user_agent"] = user_agent
+        if ignore_robots:
+            kwargs["ignore_robots"] = True
 
         try:
             job_id = client.crawl_start(url_or_job_id, **kwargs)
@@ -2162,7 +2165,7 @@ def extract(
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     batch: Annotated[Path | None, typer.Option("--batch", "-b", help="Batch input file with URLs")] = None,
-    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 10)")] = 3,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers for batch (max 50, free tier: 3)")] = 3,
     body: Annotated[str | None, typer.Option("--body", help="Raw JSON body")] = None,
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass response cache")] = False,
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
@@ -2615,7 +2618,7 @@ def favicon(
 @app.command("batch")
 def batch_config(
     config_file: Annotated[Path, typer.Argument(help="YAML config file")],
-    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers")] = 3,
+    workers: Annotated[int, typer.Option("--workers", "-w", help="Parallel workers (max 50)")] = 3,
 ):
     """Run batch operations from a YAML config file.
 
@@ -2979,7 +2982,7 @@ def schema(
 def usage(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ):
-    """Show browser rendering time usage (tracked locally).
+    """Show browser time usage (tracked locally).
 
     Tracks the X-Browser-Ms-Used header from each API response.
     Free tier: 600,000ms (10 min) per day.
