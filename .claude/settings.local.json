@@ -6,7 +6,9 @@
       "Edit(*)",
       "Write(*)",
       "Glob(*)",
-      "Grep(*)"
+      "Grep(*)",
+      "Skill(pigeon)",
+      "Skill(pigeon:*)"
     ]
   }
 }

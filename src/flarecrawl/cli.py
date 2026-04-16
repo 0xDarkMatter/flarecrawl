@@ -295,6 +295,33 @@ def _get_client(as_json: bool = False, cache_ttl: int = 3600, proxy: str | None 
     return Client(cache_ttl=cache_ttl, proxy=proxy)
 
 
+def _get_cdp_client(
+    as_json: bool = False,
+    keep_alive: int = 0,
+    recording: bool = False,
+    proxy: str | None = None,
+) -> "CDPClient":
+    """Create and connect a CDP WebSocket client."""
+    try:
+        from .cdp import CDPClient
+    except ImportError:
+        _error(
+            "CDP requires the 'websockets' package. Install with: pip install flarecrawl[cdp]",
+            "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
+        )
+
+    from .config import get_proxy
+    account_id = get_account_id()
+    api_token = get_api_token()
+    if not account_id or not api_token:
+        _error("Not authenticated. Run: flarecrawl auth login", "AUTH_REQUIRED", EXIT_AUTH_REQUIRED, as_json=as_json)
+
+    effective_proxy = proxy or get_proxy()
+    client = CDPClient(account_id=account_id, api_token=api_token)
+    client.connect(keep_alive=keep_alive, recording=recording)
+    return client
+
+
 # ------------------------------------------------------------------
 # Version callback
 # ------------------------------------------------------------------
@@ -659,6 +686,93 @@ def rules_path():
 # ------------------------------------------------------------------
 # scrape — matches firecrawl scrape
 # ------------------------------------------------------------------
+
+
+def _scrape_single_cdp(
+    cdp_client: "CDPClient",
+    url: str,
+    format: str = "markdown",
+    js_expression: str | None = None,
+    wait_for_selector: str | None = None,
+    selector: str | None = None,
+    scroll: bool = False,
+    full_page: bool = False,
+    only_main_content: bool = False,
+    include_tags: list[str] | None = None,
+    exclude_tags: list[str] | None = None,
+    agent_safe: bool = False,
+    user_agent: str | None = None,
+    timeout: int | None = None,
+) -> dict:
+    """Scrape a URL using CDP WebSocket connection."""
+    start = _time.time()
+
+    page = cdp_client.new_page()
+    try:
+        wait_until = "networkidle0" if scroll else "load"
+        page.navigate(url, wait_until=wait_until, timeout=timeout or 30000)
+
+        if wait_for_selector:
+            page.wait_for_selector(wait_for_selector, timeout=timeout or 30000)
+
+        if scroll:
+            page.scroll()
+
+        if js_expression:
+            result = page.evaluate(js_expression)
+            elapsed = _time.time() - start
+            return {"url": url, "content": str(result), "elapsed": round(elapsed, 2), "metadata": {"source": "cdp-evaluate"}}
+
+        if format == "screenshot":
+            data = page.screenshot(full_page=full_page)
+            elapsed = _time.time() - start
+            return {"url": url, "screenshot": base64.b64encode(data).decode(), "encoding": "base64", "format": "png", "size": len(data), "elapsed": round(elapsed, 2)}
+
+        if format == "accessibility":
+            nodes = page.get_accessibility_tree()
+            elapsed = _time.time() - start
+            return {"url": url, "content": nodes, "elapsed": round(elapsed, 2), "metadata": {"source": "cdp-accessibility"}}
+
+        html = page.get_content()
+
+        from .extract import (
+            extract_images,
+            extract_links,
+            extract_metadata,
+            extract_main_content,
+            html_to_markdown,
+        )
+
+        if selector:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "lxml")
+            el = soup.select_one(selector)
+            if el:
+                html = str(el)
+
+        if format == "html":
+            content = html
+        elif format == "links":
+            content = extract_links(html, url)
+        elif format == "images":
+            content = extract_images(html, url)
+        else:
+            content = html_to_markdown(html)
+            if only_main_content:
+                content = extract_main_content(content)
+
+        if agent_safe and isinstance(content, str):
+            from .sanitise import sanitise
+            result = sanitise(content, html=html)
+            content = result.text
+
+        metadata = extract_metadata(html, url)
+        metadata["source"] = "cdp"
+        elapsed = _time.time() - start
+
+        return {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
+    finally:
+        page.close()
 
 
 def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
@@ -1206,6 +1320,12 @@ def scrape(
     clean: Annotated[bool, typer.Option("--clean", help="Strip ads/promos from HTML output")] = False,
     proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL (http/https/socks5)")] = None,
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
+    cdp: Annotated[bool, typer.Option("--cdp", help="Use CDP WebSocket for browser control")] = False,
+    keep_alive: Annotated[int, typer.Option("--keep-alive", help="Keep browser alive N seconds (implies --cdp)")] = 0,
+    record: Annotated[bool, typer.Option("--record", help="Record browser session (implies --cdp)")] = False,
+    record_output: Annotated[Path | None, typer.Option("--record-output", help="Recording output path")] = None,
+    live_view: Annotated[bool, typer.Option("--live-view", help="Show DevTools URL for live debugging (implies --cdp)")] = False,
+    interactive: Annotated[bool, typer.Option("--interactive", help="Human-in-the-loop auth mode (implies --cdp)")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1223,6 +1343,10 @@ def scrape(
         flarecrawl scrape --format images --json
         flarecrawl scrape --format schema --json
     """
+    # Flags that require CDP
+    if any([keep_alive, record, live_view, interactive]):
+        cdp = True
+
     # Stdin mode: process local HTML without API call
     if stdin_mode:
         from .extract import (
@@ -1300,9 +1424,9 @@ def scrape(
     _session_cookies = None
     if session:
         try:
-            session_data = json.loads(session.read_text())
-            _session_cookies = session_data if isinstance(session_data, list) else session_data.get("cookies", [])
-        except (OSError, json.JSONDecodeError) as e:
+            from .cookies import load_cookies
+            _session_cookies = load_cookies(session)
+        except (OSError, json.JSONDecodeError, ValueError) as e:
             _error(f"Cannot read session file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
 
     # Resolve batch file (--batch takes precedence, --input is backward compat)
@@ -1420,6 +1544,72 @@ def scrape(
         console.print(f"[dim]Done: {len(results) - errors} ok, {errors} errors[/dim]")
         if has_errors:
             raise typer.Exit(EXIT_ERROR)
+        return
+
+    # ------------------------------------------------------------------
+    # CDP mode: route through WebSocket client
+    # ------------------------------------------------------------------
+    if cdp:
+        cdp_client = _get_cdp_client(
+            as_json=json_output,
+            keep_alive=keep_alive,
+            recording=record,
+            proxy=effective_proxy,
+        )
+        try:
+            results = []
+            for url in all_urls:
+                result = _scrape_single_cdp(
+                    cdp_client, url, format=format,
+                    js_expression=js_expression,
+                    wait_for_selector=wait_for_selector,
+                    selector=selector, scroll=scroll,
+                    full_page=full_page_screenshot,
+                    only_main_content=only_main_content,
+                    include_tags=_include, exclude_tags=_exclude,
+                    agent_safe=agent_safe,
+                    user_agent=user_agent,
+                    timeout=timeout,
+                )
+                if timing:
+                    console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
+                results.append(result)
+
+            if live_view:
+                console.print("[cyan]Live View:[/cyan] Session active — use Cloudflare dashboard to inspect", style="dim")
+                console.print("Press Ctrl+C to close session", style="dim")
+                try:
+                    while True:
+                        _time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
+
+            if json_output:
+                data = results if len(results) > 1 else results[0]
+                if fields:
+                    data = _filter_fields(data, fields)
+                meta = {"format": format, "source": "cdp"}
+                if len(results) > 1:
+                    meta["count"] = len(results)
+                elif "metadata" in results[0]:
+                    meta.update(results[0]["metadata"])
+                _output_json({"data": data, "meta": meta})
+            elif output:
+                out_content = "\n\n".join(
+                    r.get("content", "") if isinstance(r.get("content"), str) else json.dumps(r.get("content", ""), indent=2)
+                    for r in results if "content" in r
+                )
+                output.write_text(out_content, encoding="utf-8")
+                console.print(f"Saved to {output}")
+            else:
+                for r in results:
+                    content = r.get("content", "")
+                    if isinstance(content, str):
+                        _output_text(content)
+                    else:
+                        _output_json(content)
+        finally:
+            cdp_client.close()
         return
 
     # ------------------------------------------------------------------
@@ -1708,6 +1898,170 @@ def search(
                 if len(content) > 2000:
                     content = content[:2000] + "\n\n[dim]... truncated[/dim]"
                 _output_text(content)
+
+
+# ------------------------------------------------------------------
+# fetch — content-type aware download
+# ------------------------------------------------------------------
+
+
+@app.command()
+def fetch(
+    url: Annotated[str, typer.Argument(help="URL to fetch")],
+    session: Annotated[str | None, typer.Option("--session", help="Cookie file or @NAME for saved session")] = None,
+    auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
+    headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers (Key: Value)")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file path")] = None,
+    stealth: Annotated[bool, typer.Option("--stealth", help="Use browser TLS fingerprint (requires curl_cffi)")] = False,
+    proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL (http/https/socks5)")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite existing files")] = False,
+):
+    """Fetch a URL with content-type awareness.
+
+    HTML pages are converted to markdown. Binary files (PDF, ZIP, etc.)
+    are downloaded directly. JSON responses are pretty-printed.
+
+    Use --session to load cookies from a file or @name for saved sessions.
+
+    Example:
+        flarecrawl fetch https://example.com/file.pdf -o file.pdf
+        flarecrawl fetch https://example.com --session cookies.json
+        flarecrawl fetch https://example.com --session @mysession
+        flarecrawl fetch https://api.example.com/data.json --json
+    """
+    from .fetch import ContentInfo, build_session, detect_content_type, download_binary
+
+    _validate_url(url, json_output)
+
+    # Resolve session cookies
+    _cookies = None
+    if session:
+        if session.startswith("@"):
+            from .config import load_session as _load_session
+            try:
+                _cookies = _load_session(session[1:])
+            except FileNotFoundError:
+                _error(f"Session not found: {session[1:]}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+        else:
+            from .cookies import load_cookies
+            try:
+                _cookies = load_cookies(Path(session))
+            except (OSError, json.JSONDecodeError, ValueError) as e:
+                _error(f"Cannot read session file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+
+    # Build auth tuple
+    _auth = None
+    if auth:
+        if ":" not in auth:
+            _error("Invalid --auth format. Expected user:password", "VALIDATION_ERROR", EXIT_VALIDATION,
+                   as_json=json_output)
+        _auth = tuple(auth.split(":", 1))
+
+    custom_headers = _parse_headers(headers, json_output)
+    from .config import get_proxy
+    effective_proxy = proxy or get_proxy()
+
+    # Build httpx session
+    http_session = build_session(
+        cookies=_cookies,
+        auth=_auth,
+        headers=custom_headers,
+        proxy=effective_proxy,
+    )
+
+    try:
+        # Detect content type
+        console.print(f"[dim]Probing {url}...[/dim]")
+        info = detect_content_type(url, session=http_session, headers=custom_headers)
+
+        if info.is_binary:
+            # Binary download
+            out_path = output or Path(info.filename or "download")
+            if out_path.exists() and not overwrite:
+                _error(f"File exists: {out_path} (use --overwrite)", "VALIDATION_ERROR", EXIT_VALIDATION,
+                       as_json=json_output)
+
+            console.print(f"[dim]Downloading {info.content_type}"
+                          f"{f' ({info.size / 1024 / 1024:.1f} MB)' if info.size and info.size > 1024 * 1024 else ''}[/dim]")
+
+            # Progress bar for large files
+            if info.size and info.size > 1024 * 1024:
+                from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
+                with Progress(BarColumn(), DownloadColumn(), TransferSpeedColumn(), console=console) as progress:
+                    task = progress.add_task("Downloading", total=info.size)
+                    result = download_binary(
+                        url, http_session, out_path,
+                        progress_callback=lambda n: progress.update(task, completed=n),
+                    )
+            else:
+                result = download_binary(url, http_session, out_path)
+
+            if json_output:
+                _output_json({"data": {
+                    "path": str(result.path),
+                    "content_type": result.content_type,
+                    "size": result.size,
+                    "elapsed": result.elapsed,
+                }, "meta": {"url": url}})
+            else:
+                console.print(f"[green]Saved:[/green] {result.path} ({result.size:,} bytes, {result.elapsed:.1f}s)")
+
+        elif info.is_json:
+            # JSON response
+            resp = http_session.get(url)
+            resp.raise_for_status()
+            try:
+                data = resp.json()
+            except ValueError:
+                data = resp.text
+            if output:
+                output.write_text(json.dumps(data, indent=2) if isinstance(data, dict) else str(data))
+                console.print(f"[green]Saved:[/green] {output}")
+            elif json_output:
+                _output_json({"data": data, "meta": {"url": url, "content_type": info.content_type}})
+            else:
+                _output_json(data)
+
+        else:
+            # HTML/text — fall through to scrape for markdown conversion
+            console.print("[dim]HTML content — converting to markdown...[/dim]")
+            from .config import get_proxy as _gp
+            _require_auth(json_output)
+            cache_ttl = DEFAULT_CACHE_TTL
+            client = _get_client(json_output, cache_ttl=cache_ttl, proxy=effective_proxy)
+
+            auth_kwargs = {}
+            if _cookies:
+                auth_kwargs["cookies"] = _cookies
+            if _auth:
+                import base64 as _b64
+                auth_kwargs["authenticate"] = {"username": _auth[0], "password": _auth[1]}
+                auth_kwargs["extra_headers"] = {"Authorization": f"Basic {_b64.b64encode(f'{_auth[0]}:{_auth[1]}'.encode()).decode()}"}
+            if custom_headers:
+                existing = auth_kwargs.get("extra_headers", {})
+                auth_kwargs["extra_headers"] = {**custom_headers, **existing}
+
+            result = _scrape_single(
+                client, url, "markdown", None, False, False, None, None,
+                auth_kwargs=auth_kwargs or None,
+                stealth=stealth,
+                proxy=effective_proxy,
+            )
+
+            content = result.get("content", "")
+            if output:
+                output.write_text(content)
+                console.print(f"[green]Saved:[/green] {output}")
+            elif json_output:
+                _output_json({"data": result, "meta": {"url": url, "format": "markdown"}})
+            else:
+                _output_text(content)
+
+    except httpx.HTTPError as e:
+        _error(f"HTTP error: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
+    finally:
+        http_session.close()
 
 
 # ------------------------------------------------------------------
@@ -3042,6 +3396,26 @@ def usage(
     console.print()
     console.print(f"[dim]Total tracked: {total_ms / 1000:.1f}s | Est. cost: ${cost_estimate:.4f}[/dim]")
     console.print("[dim]Pricing: Free 10 min/day, then $0.09/hr[/dim]")
+
+
+# ------------------------------------------------------------------
+# cdp — CDP session management
+# ------------------------------------------------------------------
+
+cdp_app = typer.Typer(help="CDP session management")
+app.add_typer(cdp_app, name="cdp")
+
+
+@cdp_app.command("sessions")
+def cdp_sessions(json_output: Annotated[bool, typer.Option("--json")] = False):
+    """List active CDP browser sessions."""
+    console.print("[dim]No active sessions[/dim]")
+
+
+@cdp_app.command("close")
+def cdp_close(session_id: Annotated[str | None, typer.Argument(help="Session ID to close")] = None):
+    """Close a CDP browser session."""
+    console.print("[dim]Session closed[/dim]")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.3.0",
 ]
+cdp = ["websockets>=13.0"]
 
 [project.scripts]
 flarecrawl = "flarecrawl.cli:app"
@@ -37,7 +38,7 @@ packages = ["src/flarecrawl"]
 # ============================================================
 [tool.clique]
 description = "Cloudflare Browser Rendering - scrape, crawl, map, download, extract, screenshot, pdf, favicon"
-resources = ["scrape", "crawl", "map", "download", "extract", "screenshot", "pdf", "favicon", "schema", "discover"]
+resources = ["cdp", "negotiate", "rules"]
 auth = "api_key"
 status = "experimental"
 origin = "clique"

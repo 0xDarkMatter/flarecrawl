@@ -183,3 +183,45 @@ def get_auth_status() -> dict:
         "source": "none",
         "missing": missing,
     }
+
+
+# ------------------------------------------------------------------
+# Session persistence
+# ------------------------------------------------------------------
+
+
+def get_sessions_dir() -> Path:
+    """Get sessions directory, creating it if needed."""
+    sessions_dir = get_config_dir() / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    return sessions_dir
+
+
+def save_session(name: str, cookies: list[dict]) -> Path:
+    """Save cookies to a named session file."""
+    path = get_sessions_dir() / f"{name}.json"
+    path.write_text(json.dumps(cookies, indent=2))
+    return path
+
+
+def load_session(name: str) -> list[dict]:
+    """Load cookies from a named session file."""
+    path = get_sessions_dir() / f"{name}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Session not found: {name}")
+    return json.loads(path.read_text())
+
+
+def list_sessions() -> list[str]:
+    """List saved session names."""
+    sessions_dir = get_sessions_dir()
+    return sorted(p.stem for p in sessions_dir.glob("*.json"))
+
+
+def delete_session(name: str) -> bool:
+    """Delete a saved session. Returns True if deleted."""
+    path = get_sessions_dir() / f"{name}.json"
+    if path.exists():
+        path.unlink()
+        return True
+    return False
