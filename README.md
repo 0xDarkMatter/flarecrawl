@@ -1,5 +1,6 @@
 # 🔥 Flarecrawl CLI
 
+[![Forma](https://img.shields.io/badge/forma-experimental-orange.svg)](https://github.com/forma-tools/forma)
 [![GitHub](https://img.shields.io/badge/github-0xDarkMatter%2Fflarecrawl-blue?logo=github)](https://github.com/0xDarkMatter/flarecrawl)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -47,15 +48,45 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 
 Different pricing models suit different use cases. Flarecrawl's time-based pricing is particularly cost-efficient for high-volume crawls.
 
+## Quick Start
+
+```bash
+git clone https://github.com/0xDarkMatter/flarecrawl.git
+cd flarecrawl
+uv tool install --editable .
+flarecrawl auth login
+flarecrawl scrape https://example.com
+flarecrawl scrape https://example.com --json | jq '.data.content'
+```
+
+## Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `flarecrawl scrape URL` | Scrape page to markdown (or html/links/images/summary) |
+| `flarecrawl crawl URL --wait --limit N` | Crawl site with async job system |
+| `flarecrawl download URL --limit N` | Save site pages to disk as markdown/html |
+| `flarecrawl extract PROMPT --urls URL` | AI-powered structured data extraction |
+| `flarecrawl fetch URL -o file` | Content-type aware download (binary, JSON, HTML) |
+| `flarecrawl openapi URL --probe` | Discover OpenAPI/Swagger specs on a site |
+| `flarecrawl screenshot URL -o page.png` | Capture full or partial page screenshots |
+| `flarecrawl pdf URL -o page.pdf` | Render page as PDF |
+| `flarecrawl map URL` | List all links on a page |
+| `flarecrawl discover URL` | Discover URLs via sitemaps, feeds, and links |
+| `flarecrawl search QUERY` | Web search via Jina API |
+| `flarecrawl schema URL` | Extract LD+JSON, OpenGraph, Twitter Cards |
+| `flarecrawl favicon URL` | Extract favicon/icon URLs |
+| `flarecrawl session list` | Manage saved cookie sessions |
+
 ## Install
 
 ```bash
 git clone https://github.com/0xDarkMatter/flarecrawl.git
 cd flarecrawl
-uv venv && uv tool install --editable .
+uv tool install --editable .
 ```
 
-## Setup
+## Authentication
 
 ### 1. Create an API token
 
@@ -981,13 +1012,17 @@ flarecrawl/
 ├── README.md                   # This file
 ├── src/flarecrawl/
 │   ├── __init__.py             # Version
+│   ├── authcrawl.py            # Authenticated BFS crawler (session cookie propagation)
 │   ├── batch.py                # Batch processing (parse + parallel workers)
 │   ├── cache.py                # File-based response cache
 │   ├── cli.py                  # Typer CLI (all commands)
 │   ├── client.py               # CF Browser Rendering API client (httpx pooling, HTTP/2)
-│   ├── config.py               # Credentials, usage tracking, env-var config
+│   ├── config.py               # Credentials, usage tracking, env-var config, session storage
+│   ├── cookies.py              # Cookie loading (Puppeteer/Netscape/Chrome), conversion, validation
 │   ├── extract.py              # HTML extraction (main content, images, schema, tags)
+│   ├── fetch.py                # Content-type aware download (binary, JSON, HTML)
 │   ├── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
+│   ├── openapi.py              # OpenAPI/Swagger spec discovery and validation
 │   ├── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
 │   ├── rules.py                # Per-site YAML rulesets (load, merge, cache)
 │   ├── search.py               # Web search via Jina Search API
@@ -1026,6 +1061,10 @@ ruff check src/
 # Reinstall after changes
 uv tool install --editable .
 ```
+
+## Forma Protocol
+
+This tool follows the [Forma Protocol](https://github.com/forma-tools/forma).
 
 ## License
 
