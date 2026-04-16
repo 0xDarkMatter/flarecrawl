@@ -1,7 +1,8 @@
 # Flarecrawl - AI Agent Context
 
-> Cloudflare Browser Rendering CLI — Firecrawl-compatible, cost-efficient at scale.
+> Cloudflare Browser Run CLI — Firecrawl-compatible, cost-efficient at scale.
 > Renders JavaScript, extracts content, takes screenshots, generates PDFs, crawls entire sites.
+> Now with CDP WebSocket access for persistent browser sessions, real-time debugging, and authenticated scraping.
 
 ## Quick Reference
 
@@ -86,6 +87,17 @@
 | Add user rule | `flarecrawl rules add example.com --referer https://google.com/` |
 | Agent-safe sanitisation | `flarecrawl scrape URL --agent-safe --json` |
 | Agent-safe + stealth + paywall | `flarecrawl scrape URL --agent-safe --paywall --stealth --json` |
+| CDP: persistent browser session | `flarecrawl scrape URL --cdp --keep-alive 60 --json` |
+| CDP: interactive auth (login in DevTools) | `flarecrawl scrape URL --interactive --json` |
+| CDP: live browser debugging | `flarecrawl scrape URL --live-view` |
+| CDP: proper JS eval (async, typed) | `flarecrawl scrape URL --cdp --js-eval "await fetch('/api').then(r => r.json())"` |
+| CDP: real HAR network capture | `flarecrawl scrape URL --cdp --har traffic.har --json` |
+| CDP: session recording | `flarecrawl scrape URL --record --record-output debug.json` |
+| CDP: save cookies after scrape | `flarecrawl scrape URL --cdp --save-cookies session.json` |
+| CDP: load cookies for auth | `flarecrawl scrape URL --cdp --load-cookies session.json --json` |
+| CDP: list active sessions | `flarecrawl cdp sessions --json` |
+| CDP: close sessions | `flarecrawl cdp close` |
+| Crawl ignoring robots.txt | `flarecrawl crawl URL --wait --limit 50 --ignore-robots` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |
 | Clear negotiate domain cache | `flarecrawl negotiate clear` |
@@ -480,6 +492,15 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 33. **`--agent-safe` is opt-in** — does not affect normal scraping. When enabled, content is sanitised on all paths (browser rendering, content negotiation, paywall bypass, stdin, crawl records). Combine with `--paywall --stealth` for maximum extraction + safety
 34. **`--agent-safe` uses short-line bias** for prompt injection detection — only removes lines <200 chars to avoid stripping legitimate articles about prompt injection. Articles discussing "ignore previous instructions" in long analytical paragraphs are preserved
 35. **Agent-safe findings are structured** — each finding has `category`, `severity`, `description`, `action` (removed/flagged), and `count`. Use `metadata.agentSafety.stats.byCategory` to quickly check what was detected without parsing individual findings
+36. **Use `--cdp` for persistent browser control** — connects via Chrome DevTools Protocol WebSocket instead of REST. Enables `--interactive`, `--live-view`, `--record`, real `--har`, proper `--js-eval`, and `--keep-alive`. Requires `uv pip install websockets` (or `uv pip install flarecrawl[cdp]`). REST stays default for simple scraping
+37. **`--interactive` for authenticated scraping** — opens DevTools for manual login (OAuth, 2FA, CAPTCHAs), auto-saves cookies, then scrapes with the authenticated session. Implies `--cdp`. Saved cookies reusable via `--load-cookies`
+38. **`--live-view` for debugging** — prints Chrome DevTools URL for real-time browser inspection. Implies `--cdp --keep-alive 300`. Session stays open until Ctrl+C
+39. **`--keep-alive N` for session reuse** — holds browser open N seconds. Sessions persist across invocations. Use `flarecrawl cdp sessions` to list and `flarecrawl cdp close` to clean up
+40. **`--record` for session recordings** — saves rrweb-format recording JSON. Use `--record-output path.json` to specify location. Implies `--cdp`
+41. **`--save-cookies`/`--load-cookies`** — persist and reuse browser cookies. `--save-cookies session.json` after scrape, `--load-cookies session.json` on next run. Both imply `--cdp`
+42. **`--ignore-robots`** on crawl — bypasses robots.txt and AI Crawl Control directives. CF crawl respects these by default
+43. **Workers max is now 50** (was 10) — CF quadrupled concurrent browser limit to 120. Free tier: use `--workers 3`, paid: up to `--workers 50`. Override with `FLARECRAWL_MAX_WORKERS` env var
+44. **CDP flags auto-promote** — `--interactive`, `--live-view`, `--record`, `--save-cookies`, `--load-cookies`, `--keep-alive` all imply `--cdp`. No need to pass both
 
 ## Pricing Reference
 
@@ -487,7 +508,7 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 |------|------------|------|
 | Free | 10 min/day (600,000ms) | $0 |
 | Paid | 10 hr/month included | $0.09/hr after |
-| Concurrency | Free: 3, Paid: 10 | +$2/extra browser |
+| Concurrency | Up to 120 (default) | Higher on request |
 
 A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s (~$0.001).
 
@@ -499,7 +520,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 | `FLARECRAWL_API_TOKEN` | — | Cloudflare API token (overrides config file) |
 | `FLARECRAWL_CACHE_TTL` | 3600 | Response cache TTL in seconds (0 to disable) |
 | `FLARECRAWL_MAX_RETRIES` | 3 | Max retry attempts on 429/502/503 |
-| `FLARECRAWL_MAX_WORKERS` | 10 | Max parallel workers for batch mode |
+| `FLARECRAWL_MAX_WORKERS` | 50 | Max parallel workers for batch mode (CF supports 120) |
 | `FLARECRAWL_TIMEOUT` | 120 | Request timeout in seconds |
 | `FLARECRAWL_PROXY` | - | Default proxy URL (http/https/socks5) |
 | `JINA_API_KEY` | - | Jina API key for `search` command (free at jina.ai) |

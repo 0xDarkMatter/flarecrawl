@@ -310,7 +310,7 @@ def _get_cdp_client(
         from .cdp import CDPClient
     except ImportError:
         _error(
-            "CDP requires the 'websockets' package. Install with: pip install flarecrawl[cdp]",
+            "CDP requires the 'websockets' package. Install with: uv pip install websockets",
             "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
         )
 
@@ -710,11 +710,21 @@ def _scrape_single_cdp(
     har_output: Path | None = None,
     load_cookies: Path | None = None,
     save_cookies: Path | None = None,
+    page: "SyncCDPPage | None" = None,
+    skip_navigation: bool = False,
 ) -> dict:
-    """Scrape a URL using CDP WebSocket connection."""
+    """Scrape a URL using CDP WebSocket connection.
+
+    If *page* is provided, reuse the existing page instead of creating a new
+    one (used by --interactive mode where the user has already navigated and
+    authenticated). When *skip_navigation* is True, the URL navigation step is
+    skipped — useful when the page is already on the target URL.
+    """
     start = _time.time()
 
-    page = cdp_client.new_page()
+    own_page = page is None
+    if own_page:
+        page = cdp_client.new_page()
     try:
         collector = None
         if har_output:
@@ -724,8 +734,9 @@ def _scrape_single_cdp(
             cookies = json.loads(load_cookies.read_text(encoding="utf-8"))
             page.set_cookies(cookies)
 
-        wait_until = "networkidle0" if scroll else "load"
-        page.navigate(url, wait_until=wait_until, timeout=timeout or 30000)
+        if not skip_navigation:
+            wait_until = "networkidle0" if scroll else "load"
+            page.navigate(url, wait_until=wait_until, timeout=timeout or 30000)
 
         if wait_for_selector:
             page.wait_for_selector(wait_for_selector, timeout=timeout or 30000)
@@ -798,7 +809,8 @@ def _scrape_single_cdp(
 
         return {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
     finally:
-        page.close()
+        if own_page:
+            page.close()
 
 
 def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
@@ -1352,6 +1364,8 @@ def scrape(
     record_output: Annotated[Path | None, typer.Option("--record-output", help="Recording output path")] = None,
     live_view: Annotated[bool, typer.Option("--live-view", help="Show DevTools URL for live debugging (implies --cdp)")] = False,
     interactive: Annotated[bool, typer.Option("--interactive", help="Human-in-the-loop auth mode (implies --cdp)")] = False,
+    save_cookies_file: Annotated[Path | None, typer.Option("--save-cookies", help="Save browser cookies to file after navigation (implies --cdp)")] = None,
+    load_cookies_file: Annotated[Path | None, typer.Option("--load-cookies", help="Load cookies from file before navigation (implies --cdp)")] = None,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1370,7 +1384,7 @@ def scrape(
         flarecrawl scrape --format schema --json
     """
     # Flags that require CDP
-    if any([keep_alive, record, live_view, interactive]):
+    if any([keep_alive, record, live_view, interactive, save_cookies_file, load_cookies_file]):
         cdp = True
 
     # Stdin mode: process local HTML without API call
@@ -1576,15 +1590,63 @@ def scrape(
     # CDP mode: route through WebSocket client
     # ------------------------------------------------------------------
     if cdp:
+        # Interactive mode needs longer keep-alive for human auth
+        if interactive and not keep_alive:
+            keep_alive = 300  # 5 minutes
+
         cdp_client = _get_cdp_client(
             as_json=json_output,
             keep_alive=keep_alive,
             recording=record,
             proxy=effective_proxy,
         )
+        if keep_alive and cdp_client.ws_url:
+            expiry = _time.time() + keep_alive
+            save_cdp_session(
+                session_id=cdp_client.session_id or "unknown",
+                ws_url=cdp_client.ws_url,
+                expiry=expiry,
+            )
+
+        # Show DevTools URL when live-view or interactive is active
+        if live_view or interactive:
+            dt_url = cdp_client.devtools_url
+            if dt_url:
+                console.print(f"[cyan]Live View:[/cyan] {dt_url}", err=True)
+            if cdp_client.session_id:
+                console.print(f"[dim]Session ID: {cdp_client.session_id}[/dim]", err=True)
+
         try:
             results = []
-            for url in all_urls:
+
+            # --interactive: human-in-the-loop auth flow
+            if interactive:
+                from .config import save_session as _save_session
+                url = all_urls[0]  # interactive uses single URL
+                page = cdp_client.new_page()
+                page.navigate(url, wait_until="load", timeout=timeout or 30000)
+                console.print(
+                    f"\n[bold yellow]Interactive mode:[/bold yellow] Browser is navigated to [cyan]{url}[/cyan]",
+                    err=True,
+                )
+                console.print(
+                    "Complete authentication in the browser, then press [bold]Enter[/bold] to continue...",
+                    err=True,
+                )
+                try:
+                    input()
+                except EOFError:
+                    pass
+
+                # Extract cookies from authenticated session
+                cookies = page.get_cookies()
+                session_path = _save_session("interactive", cookies)
+                console.print(
+                    f"[green]Saved {len(cookies)} cookies to:[/green] {session_path}",
+                    err=True,
+                )
+
+                # Continue scraping with the authenticated page
                 result = _scrape_single_cdp(
                     cdp_client, url, format=format,
                     js_expression=js_expression,
@@ -1596,14 +1658,67 @@ def scrape(
                     agent_safe=agent_safe,
                     user_agent=user_agent,
                     timeout=timeout,
+                    har_output=har_output,
+                    save_cookies=save_cookies_file,
+                    page=page,
+                    skip_navigation=True,
                 )
                 if timing:
                     console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
                 results.append(result)
+                page.close()
+
+                # Scrape remaining URLs (if any) with fresh pages
+                for url in all_urls[1:]:
+                    result = _scrape_single_cdp(
+                        cdp_client, url, format=format,
+                        js_expression=js_expression,
+                        wait_for_selector=wait_for_selector,
+                        selector=selector, scroll=scroll,
+                        full_page=full_page_screenshot,
+                        only_main_content=only_main_content,
+                        include_tags=_include, exclude_tags=_exclude,
+                        agent_safe=agent_safe,
+                        user_agent=user_agent,
+                        timeout=timeout,
+                        har_output=har_output,
+                        save_cookies=save_cookies_file,
+                    )
+                    if timing:
+                        console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
+                    results.append(result)
+            else:
+                for url in all_urls:
+                    result = _scrape_single_cdp(
+                        cdp_client, url, format=format,
+                        js_expression=js_expression,
+                        wait_for_selector=wait_for_selector,
+                        selector=selector, scroll=scroll,
+                        full_page=full_page_screenshot,
+                        only_main_content=only_main_content,
+                        include_tags=_include, exclude_tags=_exclude,
+                        agent_safe=agent_safe,
+                        user_agent=user_agent,
+                        timeout=timeout,
+                        har_output=har_output,
+                        load_cookies=load_cookies_file,
+                        save_cookies=save_cookies_file,
+                    )
+                    if timing:
+                        console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
+                    results.append(result)
+
+            # --record: save recording data
+            if record:
+                recording_data = cdp_client.get_recording()
+                if recording_data:
+                    from datetime import datetime
+                    rec_path = record_output or Path(f"recording-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json")
+                    rec_path.write_text(json.dumps(recording_data, indent=2, default=str), encoding="utf-8")
+                    console.print(f"[green]Recording saved to:[/green] {rec_path}", err=True)
 
             if live_view:
-                console.print("[cyan]Live View:[/cyan] Session active — use Cloudflare dashboard to inspect", style="dim")
-                console.print("Press Ctrl+C to close session", style="dim")
+                console.print("[dim]Session active — press Ctrl+C to close[/dim]", err=True)
                 try:
                     while True:
                         _time.sleep(1)
@@ -3739,15 +3854,42 @@ app.add_typer(cdp_app, name="cdp")
 
 
 @cdp_app.command("sessions")
-def cdp_sessions(json_output: Annotated[bool, typer.Option("--json")] = False):
+def cdp_sessions_cmd(json_output: Annotated[bool, typer.Option("--json")] = False):
     """List active CDP browser sessions."""
-    console.print("[dim]No active sessions[/dim]")
+    sessions = list_cdp_sessions()
+    if not sessions:
+        if json_output:
+            _output_json({"sessions": []})
+        else:
+            console.print("[dim]No active sessions[/dim]")
+        return
+
+    if json_output:
+        _output_json({"sessions": sessions})
+        return
+
+    from datetime import datetime
+    table = Table(title="Active CDP Sessions")
+    table.add_column("Session ID", style="cyan")
+    table.add_column("WebSocket URL", style="dim", max_width=60)
+    table.add_column("Expires", style="green")
+    for s in sessions:
+        expiry_dt = datetime.fromtimestamp(s["expiry"]).strftime("%Y-%m-%d %H:%M:%S")
+        table.add_row(s["session_id"], s["ws_url"], expiry_dt)
+    console.print(table)
 
 
 @cdp_app.command("close")
-def cdp_close(session_id: Annotated[str | None, typer.Argument(help="Session ID to close")] = None):
+def cdp_close_cmd(
+    session_id: Annotated[str | None, typer.Argument(help="Session ID to close (omit to close all)")] = None,
+):
     """Close a CDP browser session."""
-    console.print("[dim]Session closed[/dim]")
+    removed = clear_cdp_session(session_id)
+    if removed:
+        target = session_id or "all"
+        console.print(f"[green]Session removed:[/green] {target}")
+    else:
+        console.print("[dim]No matching session found[/dim]")
 
 
 if __name__ == "__main__":

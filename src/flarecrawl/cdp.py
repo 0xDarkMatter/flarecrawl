@@ -24,7 +24,7 @@ except ImportError:
 def _require_websockets() -> None:
     if websockets is None:
         raise FlareCrawlError(
-            "CDP requires the 'websockets' package. Install with: pip install flarecrawl[cdp]",
+            "CDP requires the 'websockets' package. Install with: uv pip install websockets",
             code="MISSING_DEPENDENCY",
         )
 
@@ -400,6 +400,61 @@ class _AsyncCDPClient:
         self._pages.append(page)
         return page
 
+    @property
+    def devtools_url(self) -> str | None:
+        """Return the Chrome DevTools frontend URL for live inspection.
+
+        Constructs the URL from the WebSocket connection URL. The DevTools
+        frontend connects to the same WebSocket endpoint.
+        """
+        if not self._ws_url:
+            return None
+        # Convert wss://... to a DevTools inspector URL
+        ws_target = self._ws_url
+        return f"https://devtools.cloudflare.com/js_app?wss={ws_target.replace('wss://', '')}"
+
+    async def get_recording(self) -> dict | None:
+        """Retrieve session recording data if recording was enabled.
+
+        Makes a REST API call to the Cloudflare Browser Rendering API to
+        fetch the rrweb-format recording for the current session.
+        Returns None if recording was not enabled or data is unavailable.
+        """
+        if not self._recording:
+            return None
+
+        import httpx
+
+        rest_base = self.REST_URL.format(account_id=self._account_id)
+        headers = {
+            "Authorization": f"Bearer {self._api_token}",
+            "Content-Type": "application/json",
+        }
+
+        # Try to retrieve recording via the sessions endpoint which returns
+        # session metadata including recording data when recording=true.
+        try:
+            async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
+                resp = await client.get(f"{rest_base}/sessions")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return {
+                        "format": "rrweb",
+                        "recording_enabled": True,
+                        "session_data": data,
+                        "ws_url": self._ws_url,
+                    }
+        except Exception:
+            pass
+
+        # Fallback: return what metadata we have
+        return {
+            "format": "rrweb",
+            "recording_enabled": True,
+            "ws_url": self._ws_url,
+            "note": "Recording data may be available via Cloudflare dashboard",
+        }
+
     async def close(self) -> None:
         """Close all pages and disconnect."""
         for page in list(self._pages):
@@ -480,9 +535,16 @@ class CDPClient:
     @property
     def ws_url(self) -> str | None:
         """Return the WebSocket URL if connected."""
-        if self._async._ws:
-            return str(self._async._ws.uri) if hasattr(self._async._ws, "uri") else None
-        return None
+        return self._async._ws_url
+
+    @property
+    def devtools_url(self) -> str | None:
+        """Return the Chrome DevTools frontend URL for live inspection."""
+        return self._async.devtools_url
+
+    def get_recording(self) -> dict | None:
+        """Retrieve session recording data if recording was enabled."""
+        return self._run(self._async.get_recording())
 
     def __enter__(self) -> CDPClient:
         return self

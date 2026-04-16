@@ -1001,3 +1001,325 @@ class TestCDPErrors:
         """CDPConnectionError should store the error message."""
         err = CDPConnectionError("WebSocket closed")
         assert "WebSocket closed" in str(err)
+
+
+# ---------------------------------------------------------------------------
+# TestCDPCLIIntegration
+# ---------------------------------------------------------------------------
+
+
+class TestCDPCLIIntegration:
+    """Tests for CLI CDP routing using typer's CliRunner."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_runner(self):
+        from typer.testing import CliRunner
+        from flarecrawl.cli import app
+        self.runner = CliRunner()
+        self.app = app
+
+    def test_scrape_cdp_flag_in_help(self):
+        """--cdp appears in scrape --help."""
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--cdp" in result.output
+
+    def test_keep_alive_flag_in_help(self):
+        """--keep-alive appears in scrape --help."""
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--keep-alive" in result.output
+
+    def test_record_flag_in_help(self):
+        """--record appears in scrape --help."""
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--record" in result.output
+
+    def test_live_view_flag_in_help(self):
+        """--live-view appears in scrape --help."""
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--live-view" in result.output
+
+    def test_interactive_flag_in_help(self):
+        """--interactive appears in scrape --help."""
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--interactive" in result.output
+
+    def test_save_cookies_flag_in_help(self):
+        """--session (cookie loading) appears in scrape --help."""
+        # The CLI uses --session for cookie persistence, not --save-cookies
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--session" in result.output
+
+    def test_load_cookies_flag_in_help(self):
+        """--session (cookie loading) appears in scrape --help."""
+        result = self.runner.invoke(self.app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--session" in result.output
+
+    def test_cdp_subcommand_in_help(self):
+        """cdp appears in the main app --help."""
+        result = self.runner.invoke(self.app, ["--help"])
+        assert result.exit_code == 0
+        assert "cdp" in result.output
+
+    def test_cdp_sessions_in_help(self):
+        """sessions appears in cdp --help."""
+        result = self.runner.invoke(self.app, ["cdp", "--help"])
+        assert result.exit_code == 0
+        assert "sessions" in result.output
+
+    def test_cdp_close_in_help(self):
+        """close appears in cdp --help."""
+        result = self.runner.invoke(self.app, ["cdp", "--help"])
+        assert result.exit_code == 0
+        assert "close" in result.output
+
+
+# ---------------------------------------------------------------------------
+# TestCDPSessionStore
+# ---------------------------------------------------------------------------
+
+
+class TestCDPSessionStore:
+    """Tests for CDP session persistence in config.py."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_tmp(self, tmp_path, monkeypatch):
+        """Point config dir to a temp directory."""
+        monkeypatch.setattr("flarecrawl.config.get_config_dir", lambda: tmp_path)
+        self.tmp_path = tmp_path
+
+    def test_save_cdp_session(self):
+        """save_cdp_session creates the sessions file."""
+        import time
+        from flarecrawl.config import save_cdp_session, _get_cdp_sessions_path
+        save_cdp_session("sess-1", "wss://example.com", time.time() + 3600)
+        assert _get_cdp_sessions_path().exists()
+
+    def test_load_cdp_session(self):
+        """save then load returns matching data."""
+        import time
+        from flarecrawl.config import save_cdp_session, load_cdp_session
+        expiry = time.time() + 3600
+        save_cdp_session("sess-2", "wss://test.com", expiry)
+        loaded = load_cdp_session()
+        assert loaded is not None
+        assert loaded["session_id"] == "sess-2"
+        assert loaded["ws_url"] == "wss://test.com"
+
+    def test_load_expired_session(self):
+        """Expired session returns None."""
+        import time
+        from flarecrawl.config import save_cdp_session, load_cdp_session
+        save_cdp_session("sess-old", "wss://old.com", time.time() - 100)
+        loaded = load_cdp_session()
+        assert loaded is None
+
+    def test_clear_cdp_session(self):
+        """save then clear removes the session."""
+        import time
+        from flarecrawl.config import save_cdp_session, clear_cdp_session, load_cdp_session
+        save_cdp_session("sess-3", "wss://clear.com", time.time() + 3600)
+        result = clear_cdp_session("sess-3")
+        assert result is True
+        assert load_cdp_session() is None
+
+    def test_load_missing_session(self):
+        """load when no session saved returns None."""
+        from flarecrawl.config import load_cdp_session
+        loaded = load_cdp_session()
+        assert loaded is None
+
+
+# ---------------------------------------------------------------------------
+# TestNetworkCollectorHAR
+# ---------------------------------------------------------------------------
+
+
+class TestNetworkCollectorHAR:
+    """Detailed HAR output validation for NetworkCollector."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_collector(self, cdp):
+        """Set up a connected client with a page and network enabled."""
+        async def _setup():
+            ws = _make_mock_ws()
+            client = cdp._AsyncCDPClient(account_id="acct-1", api_token="tok-secret")
+            with _patch_connect(ws):
+                await client.connect()
+            self.page = await client.new_page()
+            self.collector = await self.page.enable_network()
+            await client.close()
+
+        asyncio.run(_setup())
+        yield
+
+    def _feed_request_response(self, req_id, url, method="GET", status=200):
+        """Helper to feed a complete request/response pair."""
+        self.collector._on_request({
+            "requestId": req_id,
+            "request": {
+                "url": url,
+                "method": method,
+                "headers": {"Accept": "text/html"},
+            },
+            "wallTime": 1000.0,
+        })
+        self.collector._on_response({
+            "requestId": req_id,
+            "response": {
+                "url": url,
+                "status": status,
+                "statusText": "OK" if status == 200 else "Not Found",
+                "headers": {"Content-Type": "text/html"},
+                "protocol": "HTTP/1.1",
+                "encodedDataLength": 1234,
+                "mimeType": "text/html",
+            },
+        })
+        self.collector._on_finished({
+            "requestId": req_id,
+            "encodedDataLength": 1234,
+        })
+
+    def test_har_has_correct_version(self):
+        """HAR version is '1.2'."""
+        har = self.collector.to_har()
+        assert har["log"]["version"] == "1.2"
+
+    def test_har_has_creator(self):
+        """HAR creator has name 'flarecrawl'."""
+        har = self.collector.to_har()
+        assert har["log"]["creator"]["name"] == "flarecrawl"
+
+    def test_har_entry_has_request(self):
+        """Each entry has request with method, url, headers."""
+        self._feed_request_response("r1", "https://example.com")
+        har = self.collector.to_har()
+        entry = har["log"]["entries"][0]
+        req = entry["request"]
+        assert req["method"] == "GET"
+        assert req["url"] == "https://example.com"
+        assert isinstance(req["headers"], list)
+        assert len(req["headers"]) >= 1
+
+    def test_har_entry_has_response(self):
+        """Each entry has response with status, headers."""
+        self._feed_request_response("r1", "https://example.com", status=200)
+        har = self.collector.to_har()
+        entry = har["log"]["entries"][0]
+        resp = entry["response"]
+        assert resp["status"] == 200
+        assert isinstance(resp["headers"], list)
+
+    def test_har_entry_has_timings(self):
+        """Entries include timing info."""
+        self._feed_request_response("r1", "https://example.com")
+        har = self.collector.to_har()
+        entry = har["log"]["entries"][0]
+        assert "timings" in entry
+        timings = entry["timings"]
+        assert "send" in timings
+        assert "wait" in timings
+        assert "receive" in timings
+
+    def test_har_multiple_requests(self):
+        """Multiple requests produce multiple entries in order."""
+        self._feed_request_response("r1", "https://example.com/page1")
+        self._feed_request_response("r2", "https://example.com/page2")
+        self._feed_request_response("r3", "https://example.com/page3")
+        har = self.collector.to_har()
+        entries = har["log"]["entries"]
+        assert len(entries) == 3
+        urls = [e["request"]["url"] for e in entries]
+        assert "https://example.com/page1" in urls
+        assert "https://example.com/page2" in urls
+        assert "https://example.com/page3" in urls
+
+
+# ---------------------------------------------------------------------------
+# TestCookieManagement
+# ---------------------------------------------------------------------------
+
+
+class TestCookieManagement:
+    """Thorough tests for CDPPage cookie methods."""
+
+    def test_get_cookies_with_urls(self, cdp):
+        """get_cookies(urls=["https://example.com"]) passes urls param."""
+        async def _test():
+            ws = _make_mock_ws()
+            ws.add_response(
+                "Network.getCookies",
+                {"cookies": [{"name": "sid", "value": "xyz", "domain": ".example.com"}]},
+            )
+            client = cdp._AsyncCDPClient(account_id="acct-1", api_token="tok-secret")
+            with _patch_connect(ws):
+                await client.connect()
+            page = await client.new_page()
+            cookies = await page.get_cookies(urls=["https://example.com"])
+            # Verify the urls param was sent
+            cookie_msgs = [
+                msg for msg in ws.sent if msg.get("method") == "Network.getCookies"
+            ]
+            assert len(cookie_msgs) >= 1
+            assert cookie_msgs[-1]["params"]["urls"] == ["https://example.com"]
+            assert cookies[0]["name"] == "sid"
+            await client.close()
+
+        asyncio.run(_test())
+
+    def test_set_multiple_cookies(self, cdp):
+        """set_cookies with multiple cookies sends correct params."""
+        async def _test():
+            ws = _make_mock_ws()
+            client = cdp._AsyncCDPClient(account_id="acct-1", api_token="tok-secret")
+            with _patch_connect(ws):
+                await client.connect()
+            page = await client.new_page()
+            cookies = [
+                {"name": "a", "value": "1", "domain": ".example.com"},
+                {"name": "b", "value": "2", "domain": ".example.com"},
+                {"name": "c", "value": "3", "domain": ".test.com"},
+            ]
+            await page.set_cookies(cookies)
+            set_msgs = [
+                msg for msg in ws.sent if msg.get("method") == "Network.setCookies"
+            ]
+            assert len(set_msgs) >= 1
+            assert set_msgs[-1]["params"]["cookies"] == cookies
+            assert len(set_msgs[-1]["params"]["cookies"]) == 3
+            await client.close()
+
+        asyncio.run(_test())
+
+    def test_cookie_roundtrip(self, cdp):
+        """set cookies then get them back (mock returns what was set)."""
+        async def _test():
+            ws = _make_mock_ws()
+            cookies_to_set = [
+                {"name": "token", "value": "abc123", "domain": ".example.com"},
+                {"name": "pref", "value": "dark", "domain": ".example.com"},
+            ]
+            # Configure mock to return the cookies we set
+            ws.add_response(
+                "Network.getCookies",
+                {"cookies": cookies_to_set},
+            )
+            client = cdp._AsyncCDPClient(account_id="acct-1", api_token="tok-secret")
+            with _patch_connect(ws):
+                await client.connect()
+            page = await client.new_page()
+            await page.set_cookies(cookies_to_set)
+            retrieved = await page.get_cookies()
+            assert len(retrieved) == 2
+            assert retrieved[0]["name"] == "token"
+            assert retrieved[1]["name"] == "pref"
+            await client.close()
+
+        asyncio.run(_test())

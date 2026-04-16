@@ -4,16 +4,17 @@
 [![GitHub](https://img.shields.io/badge/github-0xDarkMatter%2Fflarecrawl-blue?logo=github)](https://github.com/0xDarkMatter/flarecrawl)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Cloudflare](https://img.shields.io/badge/cloudflare-browser--rendering-orange?logo=cloudflare)](https://developers.cloudflare.com/browser-rendering/)
+[![Cloudflare](https://img.shields.io/badge/cloudflare-browser--run-orange?logo=cloudflare)](https://developers.cloudflare.com/browser-rendering/)
 
-> Cloudflare Browser Rendering CLI — Firecrawl-compatible, cost-efficient at scale.
+> Cloudflare Browser Run CLI — Firecrawl-compatible, cost-efficient at scale.
 
-CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.cloudflare.com/browser-rendering/rest-api/) with the same command structure as Firecrawl. Supports scraping, crawling, URL discovery, screenshots, PDFs, and AI-powered data extraction — all running on Cloudflare's headless Chromium infrastructure. Cost-efficient alternative for high-volume use cases (free 10 min/day, then $0.09/hr).
+CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/browser-rendering/rest-api/) with the same command structure as Firecrawl. Supports scraping, crawling, URL discovery, screenshots, PDFs, and AI-powered data extraction — all running on Cloudflare's headless Chromium infrastructure. Now with direct Chrome DevTools Protocol (CDP) access for persistent browser sessions, real-time debugging, and authenticated scraping. Cost-efficient alternative for high-volume use cases (free 10 min/day, then $0.09/hr).
 
 ## Recent Updates
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.14.1** | 2026-04-16 | **CDP WebSocket integration** — `--cdp` flag for persistent browser sessions via Chrome DevTools Protocol. `--interactive` human-in-the-loop auth (login in DevTools, cookies auto-saved). `--live-view` real-time browser debugging via Chrome DevTools. Proper `--js-eval` via `Runtime.evaluate` (replaces addScriptTag hack). Real `--har` network capture via `Network.enable`. `--record` session recordings (rrweb format). `--keep-alive N` persistent sessions with cross-invocation reuse. `--save-cookies`/`--load-cookies` for authenticated scraping. `--ignore-robots` on crawl. `flarecrawl cdp sessions/close` session management. Workers max 10 → 50 (CF now supports 120 concurrent browsers). Rebranded to Cloudflare Browser Run. 723 tests |
 | **v0.14.0** | 2026-04-16 | `fetch` command (content-type aware download), `openapi` command (spec discovery + download), `session` sub-app (save/list/show/delete/validate), `authcrawl` module (authenticated BFS crawler), `--openapi` flag on `discover`, multi-format cookie loading |
 | **v0.13.0** | 2026-04-14 | Optimize sanitise pipeline — 51% faster via keyword pre-checks |
 | **v0.12.1** | 2026-04-06 | Extended `--agent-safe` attack vector coverage: hidden iframes, hidden form inputs, CSS class hiding, meta tag injection, homoglyph evasion (Cyrillic/Greek), markdown exfiltration detection, HTML entity evasion. 13 sanitisers total, 61-file corpus, 564 tests. Based on [AI Agent Traps](https://ssrn.com/abstract=6372438) (Franklin et al., Google DeepMind, 2026) |
@@ -47,6 +48,119 @@ CLI that wraps Cloudflare's [Browser Rendering REST API](https://developers.clou
 | **Branding extraction** | Yes | Not yet |
 
 Different pricing models suit different use cases. Flarecrawl's time-based pricing is particularly cost-efficient for high-volume crawls.
+
+## Use Cases
+
+### AI agent perception layer
+
+Flarecrawl is often the first thing an AI agent sees when it reads the web.
+`--agent-safe` sanitises scraped content against adversarial attacks
+([AI Agent Traps](https://ssrn.com/abstract=6372438), Google DeepMind 2026)
+before it enters an LLM context window or RAG pipeline. 13 sanitisers
+defend against hidden text injection, prompt injection, and semantic
+manipulation — with findings reported in structured JSON metadata.
+
+### Scraping behind authentication
+
+The hardest scraping problem isn't parsing HTML — it's getting past the login
+page. `--interactive` opens a real browser in Chrome DevTools where you
+complete OAuth flows, solve CAPTCHAs, or handle 2FA manually. Cookies are
+auto-saved and reused on subsequent scrapes. No more extracting tokens from
+browser DevTools and pasting them into headers.
+
+### High-volume content extraction
+
+Batch mode with up to 50 parallel workers (`--workers 50`) scrapes thousands
+of pages concurrently. Combine with `--paywall` (multi-strategy extraction
+cascade), `--stealth` (browser TLS fingerprinting), and `--agent-safe` for
+production pipelines that handle the real web — paywalls, bot detection, and
+adversarial content included.
+
+### Site monitoring and change detection
+
+`--diff` compares current content against the cached version. Combine with
+`--har` for network-level visibility into what changed. `--record` saves
+full session recordings for audit trails. Use `--keep-alive` for cost-efficient
+repeated checks on the same site.
+
+### Documentation and knowledge base building
+
+`flarecrawl download` saves entire sites as markdown files. `flarecrawl discover`
+finds every URL via sitemaps, RSS feeds, and link crawling. Content negotiation
+(`Accept: text/markdown`) fetches server-rendered markdown directly from
+compatible sites — zero browser time, higher quality output.
+
+### API and structured data extraction
+
+`flarecrawl extract` uses Cloudflare Workers AI for natural language data
+extraction ("Get all product names and prices"). `flarecrawl schema` extracts
+LD+JSON, OpenGraph, and Twitter Cards. `flarecrawl openapi` discovers and
+downloads API specifications.
+
+## CDP: Persistent Browser Control
+
+Flarecrawl v0.14.1 adds direct Chrome DevTools Protocol (CDP) access via
+Cloudflare's Browser Run WebSocket endpoint. This is an opt-in mode (`--cdp`)
+that gives you a persistent, controllable browser session instead of
+fire-and-forget REST calls.
+
+**REST (default)** — each command spins up a fresh browser, navigates, extracts,
+and destroys. Stateless and cheap. Good for 90% of scraping.
+
+**CDP (`--cdp`)** — you get a live browser session that stays open. Navigate,
+interact, inspect, then navigate again — all within the same browser context.
+The browser remembers cookies, localStorage, and DOM state between operations.
+
+### When to use CDP
+
+| Scenario | Why CDP |
+|----------|---------|
+| **Scraping behind login** | `--interactive` opens DevTools, you log in manually (OAuth, 2FA, CAPTCHA), cookies auto-saved for future scrapes |
+| **Debugging failed scrapes** | `--live-view` opens Chrome DevTools pointed at the remote browser — see console errors, inspect DOM, watch network |
+| **Complex JS execution** | `--js-eval` via CDP uses real `Runtime.evaluate` — async/await works, returns typed objects, not the REST addScriptTag hack |
+| **Multi-step workflows** | `--keep-alive 60` holds the browser open — scrape, screenshot, extract without re-navigating (1/3 the browser time cost) |
+| **Network debugging** | `--har` captures real browser network traffic (redirects, blocked resources, timing waterfall), not just flarecrawl API metadata |
+| **Audit trails** | `--record` saves rrweb session recordings — replay exactly what the browser did |
+
+### CDP examples
+
+```bash
+# Interactive auth: login in DevTools, cookies saved, then scrape
+flarecrawl scrape https://private-app.example.com --interactive --json
+
+# Debug a scrape in real-time
+flarecrawl scrape https://broken-site.com --live-view
+
+# Proper JS execution (async, typed returns)
+flarecrawl scrape https://spa.example.com --cdp --js-eval "await fetch('/api/data').then(r => r.json())"
+
+# Persistent session: navigate once, do multiple things
+flarecrawl scrape https://example.com --cdp --keep-alive 120 \
+  --save-cookies session.json --har traffic.har --json
+
+# Record a session for debugging later
+flarecrawl scrape https://example.com --record --record-output debug.json
+
+# Reuse saved cookies for authenticated scraping
+flarecrawl scrape https://private-app.example.com --load-cookies session.json --cdp --json
+
+# Manage CDP sessions
+flarecrawl cdp sessions --json
+flarecrawl cdp close
+```
+
+### Install CDP support
+
+CDP requires the `websockets` package (optional dependency):
+
+```bash
+uv pip install websockets
+# or with extras
+uv pip install flarecrawl[cdp]
+```
+
+Without `websockets`, all non-CDP features work normally. The `--cdp` flag
+will print a clear install instruction if the dependency is missing.
 
 ## Quick Start
 
@@ -998,8 +1112,8 @@ every benign file produces zero removals.
 
 | Tier | Browser Time | Concurrent Browsers |
 |------|-------------|-------------------|
-| **Free** | 10 min/day | 3 max |
-| **Paid** | 10 hr/month included, then $0.09/hr | 10 (averaged monthly), +$2/extra |
+| **Free** | 10 min/day | Up to 120 (default) |
+| **Paid** | 10 hr/month included, then $0.09/hr | Up to 120 (default), higher on request |
 
 Browser time is shared between REST API calls and Workers bindings. Track your usage with `flarecrawl usage`.
 
@@ -1016,7 +1130,8 @@ flarecrawl/
 │   ├── batch.py                # Batch processing (parse + parallel workers)
 │   ├── cache.py                # File-based response cache
 │   ├── cli.py                  # Typer CLI (all commands)
-│   ├── client.py               # CF Browser Rendering API client (httpx pooling, HTTP/2)
+│   ├── cdp.py                  # CDP WebSocket client (persistent sessions, DevTools Protocol)
+│   ├── client.py               # CF Browser Run REST API client (httpx pooling, HTTP/2)
 │   ├── config.py               # Credentials, usage tracking, env-var config, session storage
 │   ├── cookies.py              # Cookie loading (Puppeteer/Netscape/Chrome), conversion, validation
 │   ├── extract.py              # HTML extraction (main content, images, schema, tags)
@@ -1042,6 +1157,7 @@ flarecrawl/
     ├── test_extract.py         # Extract module tests
     ├── test_paywall.py         # Paywall bypass tests
     ├── test_rules.py           # Per-site rules tests
+    ├── test_cdp.py             # CDP client tests (69 tests)
     ├── test_sanitise.py        # Agent-safety tests (137 tests + corpus validation)
     └── test_search.py          # Search module tests
 ```
