@@ -50,7 +50,7 @@ Different pricing models suit different use cases. Flarecrawl's time-based prici
 ```bash
 git clone https://github.com/0xDarkMatter/flarecrawl.git
 cd flarecrawl
-uv venv && uv pip install -e .
+uv venv && uv tool install --editable .
 ```
 
 ## Setup
@@ -1013,7 +1013,7 @@ flarecrawl/
 
 ```bash
 # Install dev dependencies
-uv pip install -e ".[dev]"
+uv tool install --editable . --with pytest --with ruff
 
 # Run tests
 pytest tests/ -v
@@ -1022,7 +1022,7 @@ pytest tests/ -v
 ruff check src/
 
 # Reinstall after changes
-uv pip install -e .
+uv tool install --editable .
 ```
 
 ## License
