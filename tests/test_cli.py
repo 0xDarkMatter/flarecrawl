@@ -29,6 +29,16 @@ class TestHelp:
         assert result.exit_code == 0
         assert "flarecrawl 0.16.0" in result.output
 
+    def test_crawl_has_rate_limit_flag(self):
+        result = runner.invoke(app, ["crawl", "--help"])
+        assert result.exit_code == 0
+        assert "--rate-limit" in result.output
+
+    def test_download_has_rate_limit_flag(self):
+        result = runner.invoke(app, ["download", "--help"])
+        assert result.exit_code == 0
+        assert "--rate-limit" in result.output
+
     def test_status_flag(self):
         result = runner.invoke(app, ["--status"])
         assert result.exit_code == 0

@@ -2254,6 +2254,7 @@ def crawl(
     deduplicate: Annotated[bool, typer.Option("--deduplicate", help="Skip duplicate content")] = False,
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
     ignore_robots: Annotated[bool, typer.Option("--ignore-robots", help="Ignore robots.txt and AI Crawl Control directives")] = False,
+    rate_limit: Annotated[float, typer.Option("--rate-limit", help="Max requests/sec per hostname (0 disables)")] = 2.0,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -2541,6 +2542,7 @@ def download(
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     backup_dir: Annotated[Path | None, typer.Option("--backup-dir", help="Save raw HTML to this directory")] = None,
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
+    rate_limit: Annotated[float, typer.Option("--rate-limit", help="Max requests/sec per hostname (0 disables)")] = 2.0,
 ):
     """Download a site into .flarecrawl/ as files.
 

@@ -19,6 +19,7 @@ import httpx
 from selectolax.parser import HTMLParser
 
 from .extract import extract_main_content, html_to_markdown
+from .ratelimit import DomainRateLimiter
 
 
 @dataclass(slots=True)
@@ -34,6 +35,9 @@ class CrawlConfig:
     workers: int = 3
     delay: float = 1.0
     output_dir: str | None = None
+    # Per-host request rate in req/sec. ``None`` disables the limiter, which
+    # is the pre-item-6 behaviour. Item 6 default is 2.0 req/s/host.
+    rate_limit: float | None = 2.0
 
 
 @dataclass(slots=True)
@@ -107,6 +111,13 @@ class AuthenticatedCrawler:
     def __init__(self, config: CrawlConfig):
         self._config = config
         self._session: httpx.AsyncClient | None = None
+        # Per-host rate limiter — guards HTTP fetches so one domain cannot
+        # starve another and we stay within polite-crawling bounds.
+        self._rate_limiter: DomainRateLimiter | None = (
+            DomainRateLimiter(rate=config.rate_limit, per=1.0)
+            if config.rate_limit and config.rate_limit > 0
+            else None
+        )
 
     def _build_session(self) -> httpx.AsyncClient:
         from .cookies import cookies_to_httpx
@@ -177,7 +188,11 @@ class AuthenticatedCrawler:
         async with semaphore:
             start = time.time()
             try:
-                resp = await session.get(url)
+                if self._rate_limiter is not None:
+                    async with self._rate_limiter.for_url(url):
+                        resp = await session.get(url)
+                else:
+                    resp = await session.get(url)
                 resp.raise_for_status()
                 ct = resp.headers.get("content-type", "text/html").split(";")[0].strip()
                 html = resp.text
