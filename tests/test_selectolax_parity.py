@@ -11,6 +11,11 @@ slightly differently but the DOM must be equivalent.
 
 For structured-data / collection outputs (images, ld_json, og, twitter,
 markdown, a11y tree) we compare values directly.
+
+Note on html_to_markdown: selectolax drops the leading DOCTYPE "html" literal
+that BS4 emitted as a NavigableString child of the soup root. The expected
+fixtures were refreshed once post-migration to reflect this (intended)
+improvement — all subsequent runs are byte-stable.
 """
 
 from __future__ import annotations
@@ -38,16 +43,44 @@ FIXTURES = ["blog", "news", "spa"]
 BASE_URL = "https://example.com/page"
 
 
-def _normalise_html(html: str) -> str:
-    """Collapse whitespace + lowercase tag names for semantic HTML comparison.
+_VOID_TAGS = {"img", "br", "hr", "input", "meta", "link", "source", "area",
+              "base", "col", "embed", "param", "track", "wbr"}
 
-    BS4 and selectolax both produce valid markup but with different whitespace
-    defaults. We compare a canonical form: text between tags collapsed, empty
-    strings between tags stripped.
+
+def _normalise_html(html: str) -> str:
+    """Collapse whitespace + canonicalise attrs for semantic HTML comparison.
+
+    BS4 and selectolax are both valid HTML parsers but differ in incidental
+    serialisation details:
+
+    - BS4 (via lxml) alphabetises attributes; selectolax preserves source order.
+    - BS4 emits void elements as self-closing ``<img ... />``; selectolax
+      emits them as ``<img ...>``.
+
+    We normalise both dimensions: sort attributes alphabetically per tag and
+    strip trailing ``/`` on void-tag openers.
     """
+    # Collapse whitespace
     s = re.sub(r">\s+<", "><", html)
-    s = re.sub(r"\s+", " ", s)
-    return s.strip()
+    s = re.sub(r"\s+", " ", s).strip()
+
+    # Canonicalise each opening tag: sort attributes alphabetically.
+    def _canon_tag(m: re.Match) -> str:
+        tag = m.group("tag").lower()
+        rest = m.group("rest") or ""
+        # Extract attr="value" pairs (also handles attr=value and bare attrs).
+        attrs = re.findall(r'([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*(?:=\s*"([^"]*)")?', rest)
+        pairs = sorted((k.lower(), v) for k, v in attrs if k)
+        attr_s = "".join(f' {k}="{v}"' for k, v in pairs)
+        return f"<{tag}{attr_s}>"
+
+    s = re.sub(r"<(?P<tag>[a-zA-Z][a-zA-Z0-9]*)(?P<rest>\s[^>]*?)?\s*/?>", _canon_tag, s)
+
+    # Strip closing tags for HTML void elements — BS4 sometimes emits these
+    # when the source HTML supplied them explicitly, selectolax never does.
+    void_close = "|".join(sorted(_VOID_TAGS))
+    s = re.sub(rf"</(?:{void_close})>", "", s, flags=re.IGNORECASE)
+    return s
 
 
 def _load_expected(name: str) -> dict:
