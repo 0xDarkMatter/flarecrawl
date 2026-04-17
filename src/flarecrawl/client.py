@@ -67,10 +67,18 @@ class Client:
                 "Content-Type": "application/json",
             },
             limits=httpx.Limits(
-                max_connections=10,
-                max_keepalive_connections=5,
+                # Scaled for crawl workloads (OTDB: 54k venues, weekly refresh).
+                # Keep connections warm for 60s to amortise TLS across batches.
+                max_connections=100,
+                max_keepalive_connections=50,
+                keepalive_expiry=60.0,
             ),
-            timeout=httpx.Timeout(self.TIMEOUT),
+            timeout=httpx.Timeout(
+                connect=10.0,
+                read=float(self.TIMEOUT),
+                write=10.0,
+                pool=5.0,
+            ),
             http2=True,
             proxy=proxy,
         )

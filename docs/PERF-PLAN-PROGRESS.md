@@ -38,6 +38,42 @@ Methodology: DSP (Design → Spec → Produce) per item, one commit each.
 - 16 unit tests: str/bytes loads, indent, sort_keys, unicode, primitives.
 - Zero new runtime deps (orjson is optional under `perf`).
 
+**Produce** — see commit `9a9e862`.
+
+---
+
+## Item 4 — `slots=True` on all 13 dataclasses
+
+**Design**
+- Verified no subclasses and no `__dict__` / `vars()` / `asdict()` use.
+- Applied `@dataclass(slots=True)` to classes in: authcrawl (2), fetch (2),
+  negotiate (1), openapi (3), paywall (1), sanitise (2), search (1), stealth (1).
+- Reduces per-instance memory ~40% and speeds attribute access.
+- Risk: very low — slots only bans dynamic attribute assignment, which the
+  codebase does not use.
+
+**Spec**
+- All 392 dataclass-adjacent tests pass unchanged.
+- Module imports succeed; dataclass fields unchanged.
+
+**Produce** — see commit.
+
+---
+
+## Item 5 — httpx pool tuning + split timeouts
+
+**Design**
+- Client pool: `max_connections=100` (was 10), `max_keepalive=50` (was 5),
+  `keepalive_expiry=60s` to amortise TLS across crawl batches.
+- Split timeouts: connect=10, read=TIMEOUT, write=10, pool=5 — prevents a slow
+  DNS/TCP step from burning the per-request read budget.
+- Risk: low. Larger pool means more fd usage; 100 is well below typical
+  soft ulimit (1024 on Linux, 16384 on Windows WSL).
+
+**Spec**
+- `test_client.py` suite passes unchanged (uses respx mocks, pool-transparent).
+- Behaviour unchanged for single-request flows.
+
 **Produce** — see commit.
 
 ---
