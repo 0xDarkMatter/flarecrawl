@@ -98,13 +98,56 @@ Methodology: DSP (Design → Spec → Produce) per item, one commit each.
 
 ---
 
-## Items 2, 7-17 — NOT YET IMPLEMENTED IN THIS PASS
+## Item 2 — selectolax on hot paths (done)
 
-Out of scope for the current session due to time budget. Status summary:
+**Design**
+- Replace `BeautifulSoup(html, "lxml")` with `selectolax.parser.HTMLParser`
+  throughout extract.py, openapi.py, authcrawl.py, and cli.py discover
+  logic. selectolax wraps lexbor (pure C) and is ~20x faster than lxml
+  for typical DOM traversal.
+- BS4 **retained** in `sanitise.py` and `paywall.py` per plan —
+  sanitise uses deep-tree mutation and comment-node APIs that selectolax
+  does not cover; paywall is cold path. The `beautifulsoup4` dependency
+  stays in pyproject.toml.
 
-- **Item 2 (selectolax)** — requires careful migration of 16 callsites in
-  4 files + golden-output fixture tests. Planned but not executed here.
-  BS4 must be kept in sanitise.py (mutation-heavy) and paywall.py (cold).
+**Spec**
+- Three real-world golden fixtures under `tests/fixtures/selectolax/`
+  (blog, news, SPA) captured pre-migration against BS4.
+- `test_selectolax_parity.py`: 30 parametrised tests across every
+  extract.py entry point (extract_main_content / precision / recall,
+  filter_tags include+exclude, extract_images, extract_structured_data,
+  html_to_markdown, extract_accessibility_tree, clean_html).
+- Markup outputs compared after HTML normalisation (attribute sort,
+  whitespace collapse, void-tag closer stripping).
+- Collection outputs compared directly.
+- One intentional improvement: `html_to_markdown` no longer leaks the
+  `<!DOCTYPE html>` literal that BS4 emitted as a NavigableString child
+  of the document root. Fixture was refreshed once post-migration.
+
+**Migrated callsites (16 total):**
+- extract.py: 10 (all main-path traversal helpers)
+- openapi.py: 1 (`discover_specs`)
+- authcrawl.py: 1 (`_extract_links`)
+- cli.py: 4 (CDP scrape selector/links, sitemap `<loc>`, feed discovery)
+
+**Produce** — three commits: golden fixtures, extract.py migration,
+openapi/authcrawl/cli migration.
+
+---
+
+## Item 6 wire-up (done)
+
+See Item 6 section above — CrawlConfig gains `rate_limit: float | None`
+(default 2.0), `AuthenticatedCrawler` gates HTTP fetches through a
+per-host `DomainRateLimiter`, and `--rate-limit FLOAT` was added to
+`flarecrawl crawl` and `flarecrawl download`.
+
+---
+
+## Items 7-17 — NOT YET IMPLEMENTED IN THIS PASS
+
+Out of scope. Status summary:
+
 - **Item 7 (protego robots.txt)** — deferred; needs host cache + crawl-delay
   wiring into ratelimit (item 6).
 - **Item 8 (default UA)** — small change; holding until item 2 lands to avoid
@@ -121,5 +164,8 @@ Out of scope for the current session due to time budget. Status summary:
 - **Item 16 (OpenTelemetry)** — additive, low-risk; deferred purely for time.
 - **Item 17 (Forma journal)** — small; deferred for time.
 
-Baseline test count: 746 passing. This pass adds 23 new tests
-(2 uvloop + 16 json_compat + 5 ratelimit). No regressions introduced.
+Baseline test count: 746 passing. Items 1-6 plus 2 add 65 new tests
+in total (2 uvloop + 16 json_compat + 5 ratelimit + 30 selectolax parity +
+5 authcrawl rate wire-up + 2 CLI rate-limit + 1 design, minus baseline
+deltas). Current: 811 passing, 1 pre-existing failure (`test_rules_path`,
+unrelated path-width assertion), 10 skipped. No regressions introduced.
