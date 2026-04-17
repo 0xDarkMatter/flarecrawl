@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Flarecrawl Test: Multi-Step Form</title>
+    <style>
+        body { font-family: system-ui; max-width: 500px; margin: 60px auto; }
+        .step { display: none; }
+        .step.active { display: block; }
+        label { display: block; margin: 12px 0 4px; font-weight: 600; }
+        input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { margin-top: 16px; padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button.secondary { background: #64748b; }
+        .progress { display: flex; gap: 8px; margin-bottom: 24px; }
+        .progress span { flex: 1; height: 4px; background: #e2e8f0; border-radius: 2px; }
+        .progress span.done { background: #2563eb; }
+        .progress span.current { background: #60a5fa; }
+        #confirmation { display: none; }
+        #confirmation pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Multi-Step Registration</h1>
+
+    <div class="progress">
+        <span id="prog-1" class="current"></span>
+        <span id="prog-2"></span>
+        <span id="prog-3"></span>
+    </div>
+
+    <!-- Step 1: Personal Info -->
+    <div id="step-1" class="step active">
+        <h2>Step 1: Personal Info</h2>
+        <label for="first-name">First Name</label>
+        <input type="text" id="first-name" name="first-name">
+
+        <label for="last-name">Last Name</label>
+        <input type="text" id="last-name" name="last-name">
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email">
+
+        <button type="button" id="next-1" onclick="goToStep(2)">Next</button>
+    </div>
+
+    <!-- Step 2: Preferences -->
+    <div id="step-2" class="step">
+        <h2>Step 2: Preferences</h2>
+        <label for="plan">Plan</label>
+        <select id="plan" name="plan">
+            <option value="free">Free</option>
+            <option value="pro">Pro ($9/mo)</option>
+            <option value="enterprise">Enterprise ($49/mo)</option>
+        </select>
+
+        <label for="notifications">
+            <input type="checkbox" id="notifications" name="notifications" checked>
+            Email notifications
+        </label>
+
+        <label for="bio">Short Bio</label>
+        <textarea id="bio" name="bio" rows="3" placeholder="Tell us about yourself..."></textarea>
+
+        <button type="button" class="secondary" onclick="goToStep(1)">Back</button>
+        <button type="button" id="next-2" onclick="goToStep(3)">Next</button>
+    </div>
+
+    <!-- Step 3: Confirm -->
+    <div id="step-3" class="step">
+        <h2>Step 3: Confirm</h2>
+        <div id="summary"></div>
+        <button type="button" class="secondary" onclick="goToStep(2)">Back</button>
+        <button type="button" id="confirm-btn" onclick="submitForm()">Confirm Registration</button>
+    </div>
+
+    <!-- Confirmation -->
+    <div id="confirmation">
+        <h2>Registration Complete</h2>
+        <p>Your registration ID: <code id="reg-id"></code></p>
+        <pre id="reg-data"></pre>
+    </div>
+
+    <script>
+        function goToStep(n) {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById('step-' + n).classList.add('active');
+
+            for (let i = 1; i <= 3; i++) {
+                const el = document.getElementById('prog-' + i);
+                el.className = i < n ? 'done' : i === n ? 'current' : '';
+            }
+
+            if (n === 3) {
+                const data = collectData();
+                document.getElementById('summary').innerHTML =
+                    '<p><strong>Name:</strong> ' + data.firstName + ' ' + data.lastName + '</p>' +
+                    '<p><strong>Email:</strong> ' + data.email + '</p>' +
+                    '<p><strong>Plan:</strong> ' + data.plan + '</p>' +
+                    '<p><strong>Notifications:</strong> ' + (data.notifications ? 'Yes' : 'No') + '</p>' +
+                    '<p><strong>Bio:</strong> ' + (data.bio || '(none)') + '</p>';
+            }
+        }
+
+        function collectData() {
+            return {
+                firstName: document.getElementById('first-name').value,
+                lastName: document.getElementById('last-name').value,
+                email: document.getElementById('email').value,
+                plan: document.getElementById('plan').value,
+                notifications: document.getElementById('notifications').checked,
+                bio: document.getElementById('bio').value,
+            };
+        }
+
+        function submitForm() {
+            const data = collectData();
+            data.registrationId = 'REG-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+            data.timestamp = new Date().toISOString();
+
+            document.querySelectorAll('.step, .progress').forEach(el => el.style.display = 'none');
+            document.getElementById('confirmation').style.display = 'block';
+            document.getElementById('reg-id').textContent = data.registrationId;
+            document.getElementById('reg-data').textContent = JSON.stringify(data, null, 2);
+
+            // Update URL to indicate success
+            window.history.pushState({}, '', '?registered=true&id=' + data.registrationId);
+        }
+    </script>
+</body>
+</html>

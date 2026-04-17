@@ -359,6 +359,36 @@ class CDPPage:
         # Type new value
         await self.type(selector, value)
 
+    async def webmcp_list_tools(self) -> list[dict]:
+        """Discover WebMCP tools exposed by the current page."""
+        result = await self.evaluate("""
+            (async () => {
+                if (navigator.modelContextTesting) {
+                    const tools = await navigator.modelContextTesting.listTools();
+                    return tools;
+                } else if (navigator.modelContext) {
+                    const tools = await navigator.modelContext.listTools();
+                    return tools;
+                }
+                return null;
+            })()
+        """)
+        if result is None:
+            raise CDPError("Page does not support WebMCP (requires Chrome 146+)", code="WEBMCP_NOT_SUPPORTED")
+        return result
+
+    async def webmcp_execute(self, tool_name: str, params: dict | None = None) -> Any:
+        """Execute a WebMCP tool on the current page."""
+        params_json = json.dumps(params or {})
+        result = await self.evaluate(f"""
+            (async () => {{
+                const api = navigator.modelContextTesting || navigator.modelContext;
+                if (!api) throw new Error("WebMCP not supported");
+                return await api.executeTool("{tool_name}", JSON.stringify({params_json}));
+            }})()
+        """)
+        return result
+
     async def close(self) -> None:
         """Close this page target."""
         await self._client.send("Target.closeTarget", {"targetId": self._target_id})
@@ -502,6 +532,17 @@ class _AsyncCDPClient:
         except ValueError:
             pass
 
+    async def list_pages(self) -> list[dict]:
+        """List all open pages/tabs in this browser session."""
+        result = await self.send("Target.getTargets")
+        targets = result.get("targetInfos", [])
+        return [t for t in targets if t.get("type") == "page"]
+
+    async def page_count(self) -> int:
+        """Return number of open pages."""
+        pages = await self.list_pages()
+        return len(pages)
+
     async def new_page(self, url: str | None = None) -> CDPPage:
         """Create a new browser page and return a CDPPage handle."""
         result = await self.send("Target.createTarget", {"url": url or "about:blank"})
@@ -516,58 +557,95 @@ class _AsyncCDPClient:
 
     @property
     def devtools_url(self) -> str | None:
-        """Return the Chrome DevTools frontend URL for live inspection.
+        """Return the Live View URL for real-time browser inspection.
 
-        Constructs the URL from the WebSocket connection URL. The DevTools
-        frontend connects to the same WebSocket endpoint.
+        Uses Cloudflare's hosted UI at live.browser.run which provides
+        a tab view of the remote browser session.
         """
         if not self._ws_url:
             return None
-        # Convert wss://... to a DevTools inspector URL
-        ws_target = self._ws_url
-        return f"https://devtools.cloudflare.com/js_app?wss={ws_target.replace('wss://', '')}"
+        from urllib.parse import quote
+        return f"https://live.browser.run/ui/view?mode=tab&wss={quote(self._ws_url, safe='')}"
 
-    async def get_recording(self) -> dict | None:
-        """Retrieve session recording data if recording was enabled.
+    @property
+    def devtools_inspector_url(self) -> str | None:
+        """Return the DevTools inspector URL for developer tooling.
 
-        Makes a REST API call to the Cloudflare Browser Rendering API to
-        fetch the rrweb-format recording for the current session.
-        Returns None if recording was not enabled or data is unavailable.
+        Uses Cloudflare's hosted UI at live.browser.run in devtools mode.
+        Note: DevTools frontend URLs are valid for 5 minutes.
         """
-        if not self._recording:
+        if not self._ws_url:
             return None
+        from urllib.parse import quote
+        return f"https://live.browser.run/ui/view?mode=devtools&wss={quote(self._ws_url, safe='')}"
 
+    @staticmethod
+    async def list_sessions(account_id: str, api_token: str) -> list[dict]:
+        """List active CDP sessions via REST API.
+
+        Calls GET /devtools/session on the CF Browser Rendering API.
+        """
         import httpx
 
+        url = (
+            f"https://api.cloudflare.com/client/v4/accounts/{account_id}"
+            "/browser-rendering/devtools/session"
+        )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {api_token}"})
+            resp.raise_for_status()
+            return resp.json().get("result", [])
+
+    async def close_session_rest(self, session_id: str) -> bool:
+        """Close a session via REST API.
+
+        Calls DELETE /devtools/browser/{session_id} on the CF Browser Rendering API.
+        """
+        import httpx
+
+        url = (
+            f"https://api.cloudflare.com/client/v4/accounts/{self._account_id}"
+            f"/browser-rendering/devtools/browser/{session_id}"
+        )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.delete(url, headers={"Authorization": f"Bearer {self._api_token}"})
+            return resp.status_code in (200, 204)
+
+    async def get_recording(self, session_id: str | None = None) -> dict | None:
+        """Retrieve session recording via REST API.
+
+        Calls GET /recording/{session_id} on the CF Browser Rendering API.
+        Returns rrweb event arrays. Recordings have 30-day retention,
+        require min 1s duration, and max 2hr session.
+        Enable via recording=true query param on the WebSocket URL.
+        """
+        import httpx
+
+        sid = session_id or getattr(self, "_session_id", None)
+        if not sid and not self._recording:
+            return None
+
         rest_base = self.REST_URL.format(account_id=self._account_id)
-        headers = {
-            "Authorization": f"Bearer {self._api_token}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Authorization": f"Bearer {self._api_token}"}
 
-        # Try to retrieve recording via the sessions endpoint which returns
-        # session metadata including recording data when recording=true.
-        try:
-            async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
-                resp = await client.get(f"{rest_base}/sessions")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return {
-                        "format": "rrweb",
-                        "recording_enabled": True,
-                        "session_data": data,
-                        "ws_url": self._ws_url,
-                    }
-        except Exception:
-            pass
+        if sid:
+            try:
+                async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
+                    resp = await client.get(f"{rest_base}/recording/{sid}")
+                    if resp.status_code == 200:
+                        return resp.json()
+            except Exception:
+                pass
 
-        # Fallback: return what metadata we have
-        return {
-            "format": "rrweb",
-            "recording_enabled": True,
-            "ws_url": self._ws_url,
-            "note": "Recording data may be available via Cloudflare dashboard",
-        }
+        # Fallback: return metadata if we know recording was enabled
+        if self._recording:
+            return {
+                "format": "rrweb",
+                "recording_enabled": True,
+                "ws_url": self._ws_url,
+                "note": "Recording data may require session_id — use 'flarecrawl cdp sessions' to find it",
+            }
+        return None
 
     async def close(self) -> None:
         """Close all pages and disconnect."""
@@ -627,6 +705,14 @@ class CDPClient:
     def unsubscribe(self, event: str, callback: Callable) -> None:
         """Remove callback for a CDP event."""
         self._async.unsubscribe(event, callback)
+
+    def list_pages(self) -> list[dict]:
+        """List all open pages/tabs in this browser session."""
+        return self._run(self._async.list_pages())
+
+    def page_count(self) -> int:
+        """Return number of open pages."""
+        return self._run(self._async.page_count())
 
     def new_page(self, url: str | None = None) -> SyncCDPPage:
         """Create a new page and return a sync wrapper."""
@@ -756,6 +842,14 @@ class SyncCDPPage:
     def fill(self, selector: str, value: str) -> None:
         """Clear and type into a form field with human-like timing."""
         self._run(self._page.fill(selector, value))
+
+    def webmcp_list_tools(self) -> list[dict]:
+        """Discover WebMCP tools exposed by the current page."""
+        return self._run(self._page.webmcp_list_tools())
+
+    def webmcp_execute(self, tool_name: str, params: dict | None = None) -> Any:
+        """Execute a WebMCP tool on the current page."""
+        return self._run(self._page.webmcp_execute(tool_name, params))
 
     def close(self) -> None:
         """Close this page."""

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Flarecrawl Test: Dynamic JS Content</title>
+    <style>
+        body { font-family: system-ui; max-width: 600px; margin: 60px auto; }
+        .loading { color: #94a3b8; font-style: italic; }
+        .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 12px 0; }
+        .card h3 { margin: 0 0 8px; }
+        .card p { margin: 0; color: #64748b; }
+        .price { font-size: 1.2em; font-weight: 700; color: #059669; }
+        #lazy-section { min-height: 200px; }
+        .counter { background: #f1f5f9; padding: 8px 16px; border-radius: 4px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1>Dynamic Content Test</h1>
+
+    <h2>Section 1: Delayed Load</h2>
+    <div id="delayed-content" class="loading">Loading products...</div>
+
+    <h2>Section 2: JS-Computed Values</h2>
+    <div>
+        <span>Counter: </span>
+        <span id="counter" class="counter">0</span>
+        <button id="increment-btn" onclick="increment()">+1</button>
+    </div>
+    <div style="margin-top: 12px;">
+        <span>Computed: </span>
+        <code id="computed-value"></code>
+    </div>
+
+    <h2>Section 3: Lazy-Loaded (Scroll)</h2>
+    <div id="lazy-section">
+        <p class="loading" id="lazy-placeholder">Scroll down to load more content...</p>
+    </div>
+
+    <script>
+        // Section 1: Products load after 1.5s
+        setTimeout(function() {
+            const products = [
+                { name: 'Widget Pro', price: '$29.99', sku: 'WP-001' },
+                { name: 'Gadget Max', price: '$49.99', sku: 'GM-002' },
+                { name: 'Thingamajig', price: '$9.99', sku: 'TH-003' },
+            ];
+            let html = '';
+            products.forEach(function(p) {
+                html += '<div class="card" data-sku="' + p.sku + '">' +
+                    '<h3>' + p.name + '</h3>' +
+                    '<p class="price">' + p.price + '</p>' +
+                    '<p>SKU: ' + p.sku + '</p>' +
+                    '</div>';
+            });
+            document.getElementById('delayed-content').innerHTML = html;
+            document.getElementById('delayed-content').classList.remove('loading');
+        }, 1500);
+
+        // Section 2: Counter + computed
+        let count = 0;
+        function increment() {
+            count++;
+            document.getElementById('counter').textContent = count;
+            document.getElementById('computed-value').textContent =
+                JSON.stringify({ count: count, doubled: count * 2, timestamp: Date.now() });
+        }
+        // Auto-increment to give initial computed value
+        increment();
+
+        // Section 3: Intersection observer for lazy load
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    const section = document.getElementById('lazy-section');
+                    let html = '';
+                    for (let i = 1; i <= 20; i++) {
+                        html += '<div class="card"><h3>Lazy Item #' + i + '</h3>' +
+                            '<p>This content loaded when scrolled into view.</p></div>';
+                    }
+                    section.innerHTML = html;
+                    observer.disconnect();
+                }
+            });
+        });
+        observer.observe(document.getElementById('lazy-placeholder'));
+    </script>
+</body>
+</html>

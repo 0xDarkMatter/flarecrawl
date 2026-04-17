@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Flarecrawl Test: Dropdowns & Selects</title>
+    <style>
+        body { font-family: system-ui; max-width: 500px; margin: 60px auto; }
+        label { display: block; margin: 12px 0 4px; font-weight: 600; }
+        select, input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { margin-top: 16px; padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        #result { display: none; padding: 16px; background: #f0f9ff; border-radius: 8px; margin-top: 20px; }
+        #result pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Test Form: Selects</h1>
+    <form id="survey-form">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" name="name" placeholder="John Doe">
+
+        <label for="country">Country</label>
+        <select id="country" name="country">
+            <option value="">-- Select --</option>
+            <option value="US">United States</option>
+            <option value="GB">United Kingdom</option>
+            <option value="AU">Australia</option>
+            <option value="NZ">New Zealand</option>
+            <option value="DE">Germany</option>
+            <option value="FR">France</option>
+            <option value="JP">Japan</option>
+        </select>
+
+        <label for="role">Role</label>
+        <select id="role" name="role">
+            <option value="">-- Select --</option>
+            <option value="developer">Developer</option>
+            <option value="designer">Designer</option>
+            <option value="manager">Manager</option>
+            <option value="other">Other</option>
+        </select>
+
+        <label for="experience">Experience (years)</label>
+        <input type="number" id="experience" name="experience" min="0" max="50" value="0">
+
+        <button type="submit" id="submit-btn">Submit</button>
+    </form>
+
+    <div id="result">
+        <h2>Submission Result</h2>
+        <pre id="result-json"></pre>
+    </div>
+
+    <script>
+        document.getElementById('survey-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const data = {
+                name: document.getElementById('name').value,
+                country: document.getElementById('country').value,
+                role: document.getElementById('role').value,
+                experience: parseInt(document.getElementById('experience').value) || 0,
+                timestamp: new Date().toISOString()
+            };
+            document.getElementById('result-json').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('result').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

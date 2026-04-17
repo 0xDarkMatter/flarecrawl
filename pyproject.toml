@@ -1,6 +1,6 @@
 [project]
 name = "flarecrawl"
-version = "0.14.2"
+version = "0.15.0"
 description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -48,7 +48,7 @@ testpaths = ["tests"]
 
 [tool.forma]
 description = "Cloudflare Browser Rendering - scrape, crawl, map, download, extract, screenshot, pdf, favicon"
-resources = ["scrape", "crawl", "download", "extract", "screenshot", "pdf", "favicon", "search", "discover", "schema", "map", "fetch", "openapi"]
+resources = ["scrape", "crawl", "download", "extract", "screenshot", "pdf", "favicon", "search", "discover", "schema", "map", "fetch", "openapi", "cdp", "webmcp", "interact", "negotiate", "rules", "session"]
 auth = "api_key"
 status = "experimental"
 origin = "forma"

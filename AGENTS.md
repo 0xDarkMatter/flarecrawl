@@ -98,6 +98,11 @@
 | CDP: get WebSocket URL for Playwright | `flarecrawl cdp connect --json` |
 | CDP: list active sessions | `flarecrawl cdp sessions --json` |
 | CDP: close sessions | `flarecrawl cdp close` |
+| WebMCP: discover site tools | `flarecrawl webmcp discover URL --json` |
+| WebMCP: call a site tool | `flarecrawl webmcp call URL --tool searchFlights --params '{"dest":"Paris"}' --json` |
+| Interact: fill form fields | `flarecrawl interact URL --fill "#name=John" --fill "#email=j@e.com" --click "button[type=submit]" --json` |
+| Interact: with screenshot | `flarecrawl interact URL --fill "#q=search" --click "#go" --screenshot result.png` |
+| CDP: multi-URL session reuse | `flarecrawl scrape URL1 URL2 URL3 --cdp --tabs 3 --json` |
 | Crawl ignoring robots.txt | `flarecrawl crawl URL --wait --limit 50 --ignore-robots` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |
@@ -531,7 +536,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (564 tests, no API calls)
+# Unit tests (723+ tests, no API calls)
 pytest tests/ -v
 
 # Agent-safety tests only (137 tests including corpus validation)

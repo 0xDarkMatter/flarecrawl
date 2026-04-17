@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Flarecrawl Test: Login Form</title>
+    <style>
+        body { font-family: system-ui; max-width: 400px; margin: 60px auto; }
+        label { display: block; margin: 12px 0 4px; font-weight: 600; }
+        input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { margin-top: 16px; padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .success { display: none; padding: 16px; background: #dcfce7; border-radius: 8px; margin-top: 20px; }
+        .error { display: none; padding: 16px; background: #fecaca; border-radius: 8px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Test Login</h1>
+    <form id="login-form">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Enter username">
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter password">
+
+        <button type="submit" id="submit-btn">Log In</button>
+    </form>
+
+    <div id="success" class="success">
+        <strong>Login successful!</strong>
+        <p>Welcome, <span id="welcome-name"></span>.</p>
+        <p>Session token: <code id="session-token"></code></p>
+    </div>
+
+    <div id="error" class="error">
+        <strong>Login failed.</strong>
+        <p>Invalid credentials. Use testuser / testpass123.</p>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+
+            if (user === 'testuser' && pass === 'testpass123') {
+                document.getElementById('welcome-name').textContent = user;
+                document.getElementById('session-token').textContent = 'tok_' + Math.random().toString(36).slice(2);
+                document.getElementById('success').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('login-form').style.display = 'none';
+                document.cookie = 'auth=valid; path=/';
+                document.cookie = 'user=' + user + '; path=/';
+            } else {
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('success').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
