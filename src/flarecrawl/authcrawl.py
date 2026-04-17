@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from selectolax.parser import HTMLParser
 
 from .extract import extract_main_content, html_to_markdown
 
@@ -50,10 +50,10 @@ class CrawlResult:
 
 def _extract_links(html: str, base_url: str) -> list[str]:
     """Extract all href links from HTML, resolved to absolute URLs."""
-    soup = BeautifulSoup(html, "lxml")
+    tree = HTMLParser(html)
     links: list[str] = []
-    for a in soup.find_all("a", href=True):
-        href = str(a["href"]).strip()
+    for a in tree.css("a[href]"):
+        href = (a.attributes.get("href") or "").strip()
         if not href or href.startswith("#") or href.startswith("javascript:") or href.startswith("mailto:"):
             continue
         abs_url = urljoin(base_url, href)

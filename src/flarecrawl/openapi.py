@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from selectolax.parser import HTMLParser
 
 
 @dataclass(slots=True)
@@ -61,7 +61,7 @@ COMMON_SPEC_PATHS = [
 
 def discover_specs(html: str, base_url: str) -> list[SpecDiscovery]:
     """Parse HTML for API spec links from multiple sources."""
-    soup = BeautifulSoup(html, "lxml")
+    tree = HTMLParser(html)
     specs: list[SpecDiscovery] = []
     seen: set[str] = set()
 
@@ -73,14 +73,14 @@ def discover_specs(html: str, base_url: str) -> list[SpecDiscovery]:
         specs.append(SpecDiscovery(url=url, source=source, format=fmt, confidence=confidence))
 
     # 1. <a href> links matching spec patterns
-    for a in soup.find_all("a", href=True):
-        href = str(a["href"])
+    for a in tree.css("a[href]"):
+        href = a.attributes.get("href") or ""
         if _SPEC_LINK_PATTERNS.search(href):
             _add(urljoin(base_url, href), "link", 0.9)
 
     # 2. <script> tags with SwaggerUI config
-    for script in soup.find_all("script"):
-        text = script.get_text()
+    for script in tree.css("script"):
+        text = script.text() or ""
         if not text:
             continue
         url_match = re.search(r'url\s*:\s*["\']([^"\']+\.(?:json|ya?ml))["\']', text)
@@ -92,20 +92,19 @@ def discover_specs(html: str, base_url: str) -> list[SpecDiscovery]:
                 _add(urljoin(base_url, m.group(1)), "swagger-ui", 0.9)
 
     # 3. <link> or <meta> tags with API documentation rels
-    for link in soup.find_all("link", rel=True):
-        rel_list = link.get("rel", [])
-        rel = " ".join(str(r) for r in rel_list) if isinstance(rel_list, list) else str(rel_list)
-        if "api" in rel.lower() or "openapi" in rel.lower():
-            href = link.get("href")
+    for link in tree.css("link[rel]"):
+        rel = (link.attributes.get("rel") or "").lower()
+        if "api" in rel or "openapi" in rel:
+            href = link.attributes.get("href")
             if href:
-                _add(urljoin(base_url, str(href)), "link", 0.85)
+                _add(urljoin(base_url, href), "link", 0.85)
 
     # 4. Text content near links matching spec keywords
     _spec_keywords = re.compile(r"download\s+openapi|api\s+specification|swagger|openapi\s+spec", re.IGNORECASE)
-    for a in soup.find_all("a", href=True):
-        text = a.get_text(strip=True)
+    for a in tree.css("a[href]"):
+        text = a.text(strip=True)
         if _spec_keywords.search(text):
-            href = str(a["href"])
+            href = a.attributes.get("href") or ""
             if href and not href.startswith("#") and not href.startswith("javascript:"):
                 _add(urljoin(base_url, href), "text-match", 0.7)
 

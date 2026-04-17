@@ -778,18 +778,18 @@ def _scrape_single_cdp(
         )
 
         if selector:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html, "lxml")
-            el = soup.select_one(selector)
+            from selectolax.parser import HTMLParser
+            tree = HTMLParser(html)
+            el = tree.css_first(selector)
             if el:
-                html = str(el)
+                html = el.html or html
 
         if format == "html":
             content = html
         elif format == "links":
-            from bs4 import BeautifulSoup as BS
-            soup = BS(html, "lxml")
-            content = [a.get("href") for a in soup.find_all("a", href=True)]
+            from selectolax.parser import HTMLParser
+            tree = HTMLParser(html)
+            content = [a.attributes.get("href") for a in tree.css("a[href]")]
         elif format == "images":
             content = extract_images(html, url)
         else:
@@ -3270,12 +3270,12 @@ def discover(
 
         Returns (page_urls, sub_sitemap_urls).
         """
-        from bs4 import BeautifulSoup
-        # CF renders XML as HTML — use BS to extract text content of <loc> tags
-        soup = BeautifulSoup(html_or_xml, "lxml")
+        from selectolax.parser import HTMLParser
+        # CF renders XML as HTML — use selectolax to extract text of <loc> tags
+        tree = HTMLParser(html_or_xml)
         pages, sub_sitemaps = [], []
-        for loc in soup.find_all("loc"):
-            text = loc.get_text(strip=True)
+        for loc in tree.css("loc"):
+            text = loc.text(strip=True)
             if not text or not text.startswith("http"):
                 continue
             if text.endswith(".xml") or "sitemap" in text.lower():
@@ -3328,14 +3328,14 @@ def discover(
         console.print("[dim]Checking feeds...[/dim]")
         try:
             html = client.get_content(url, **kwargs)
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html, "lxml")
+            from selectolax.parser import HTMLParser
+            tree = HTMLParser(html)
             feed_urls = []
             # Find <link> tags with RSS/Atom types
-            for link_tag in soup.find_all("link"):
-                link_type = (link_tag.get("type") or "").lower()
+            for link_tag in tree.css("link"):
+                link_type = (link_tag.attributes.get("type") or "").lower()
                 if "rss" in link_type or "atom" in link_type:
-                    href = link_tag.get("href")
+                    href = link_tag.attributes.get("href")
                     if href:
                         feed_urls.append(urljoin(url, href))
             # Also try common feed paths
@@ -3346,19 +3346,25 @@ def discover(
             for feed_url in dict.fromkeys(feed_urls):  # dedupe, preserve order
                 try:
                     feed_html = client.get_content(feed_url, **kwargs)
-                    # CF renders XML as HTML — use BS to find link elements
-                    feed_soup = BeautifulSoup(feed_html, "lxml")
+                    # CF renders XML as HTML — use selectolax to find link elements
+                    feed_tree = HTMLParser(feed_html)
                     # RSS: <item><link>URL</link></item>
-                    for item in feed_soup.find_all("item"):
-                        link_el = item.find("link")
+                    for item in feed_tree.css("item"):
+                        link_el = item.css_first("link")
                         if link_el:
-                            href = link_el.get_text(strip=True) or link_el.next_sibling
+                            href = link_el.text(strip=True)
+                            # Fallback: CF/lxml sometimes turns self-closing
+                            # <link/> into a sibling text node containing the URL.
+                            if not href:
+                                nxt = link_el.next
+                                if nxt is not None and nxt.tag == "-text":
+                                    href = (nxt.text() or "").strip()
                             if href and isinstance(href, str) and href.strip().startswith("http"):
                                 discovered.setdefault(href.strip(), "feed")
                     # Atom: <entry><link href="URL"/></entry>
-                    for entry in feed_soup.find_all("entry"):
-                        for link_el in entry.find_all("link"):
-                            href = link_el.get("href")
+                    for entry in feed_tree.css("entry"):
+                        for link_el in entry.css("link"):
+                            href = link_el.attributes.get("href")
                             if href and href.startswith("http"):
                                 discovered.setdefault(href.strip(), "feed")
                 except FlareCrawlError:
