@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>On Writing Faster HTML Parsers — Dev Notes</title>
+  <meta property="og:title" content="On Writing Faster HTML Parsers">
+  <meta property="og:description" content="A short post about the cost of BeautifulSoup on the hot path.">
+  <meta property="og:image" content="/img/cover.png">
+  <meta property="og:url" content="https://example.com/blog/faster-html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Faster HTML Parsers">
+  <meta name="twitter:description" content="Short notes on parser perf.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "On Writing Faster HTML Parsers",
+    "author": {"@type": "Person", "name": "A. Developer"},
+    "datePublished": "2026-03-12"
+  }
+  </script>
+  <style>body{font-family:sans-serif}</style>
+</head>
+<body>
+  <nav class="site-nav"><a href="/">Home</a> <a href="/blog">Blog</a> <a href="/about">About</a></nav>
+  <header><h1 class="site-title">Dev Notes</h1></header>
+  <main>
+    <article>
+      <h1>On Writing Faster HTML Parsers</h1>
+      <p class="byline">By <a href="/author/adev">A. Developer</a> &middot; March 12, 2026</p>
+      <p>Parsing HTML dominates the CPU profile of many crawlers. The stock choice
+      in Python — <a href="https://pypi.org/project/beautifulsoup4/">BeautifulSoup</a>
+      — trades speed for ergonomics. For a hot path that sees thousands of pages,
+      this is usually the wrong trade.</p>
+      <h2>Why selectolax</h2>
+      <p>The <code>selectolax</code> library wraps <strong>lexbor</strong>, a C parser
+      that is about <em>20x faster</em> than lxml for typical DOM operations.
+      It exposes a small, sharp API:</p>
+      <ul>
+        <li><code>HTMLParser(html)</code> replaces <code>BeautifulSoup(html, "lxml")</code></li>
+        <li><code>tree.css(selector)</code> replaces <code>soup.select(selector)</code></li>
+        <li><code>node.text()</code> replaces <code>el.get_text()</code></li>
+      </ul>
+      <h2>Caveats</h2>
+      <p>There are a few features selectolax does not support: deep tree mutation,
+      certain regex-driven navigation helpers. For those, keep BS4.</p>
+      <blockquote>Right tool, right path.</blockquote>
+      <img src="/img/chart.png" alt="A chart showing parser throughput.">
+    </article>
+  </main>
+  <aside class="sidebar">
+    <h3>Recent posts</h3>
+    <ul>
+      <li><a href="/blog/a">Post A</a></li>
+      <li><a href="/blog/b">Post B</a></li>
+    </ul>
+  </aside>
+  <footer>© 2026 Dev Notes &middot; <a href="/privacy">Privacy</a></footer>
+  <script>console.log("analytics")</script>
+</body>
+</html>

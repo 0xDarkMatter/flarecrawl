@@ -1,0 +1,191 @@
+{
+  "clean_html": "<body>\n<nav class=\"site-nav\"><a href=\"/\">Home</a> <a href=\"/blog\">Blog</a> <a href=\"/about\">About</a></nav>\n<header><h1 class=\"site-title\">Dev Notes</h1></header>\n<main>\n<article>\n<h1>On Writing Faster HTML Parsers</h1>\n<p class=\"byline\">By <a href=\"/author/adev\">A. Developer</a> · March 12, 2026</p>\n<p>Parsing HTML dominates the CPU profile of many crawlers. The stock choice\n      in Python — <a href=\"https://pypi.org/project/beautifulsoup4/\">BeautifulSoup</a>\n      — trades speed for ergonomics. For a hot path that sees thousands of pages,\n      this is usually the wrong trade.</p>\n<h2>Why selectolax</h2>\n<p>The <code>selectolax</code> library wraps <strong>lexbor</strong>, a C parser\n      that is about <em>20x faster</em> than lxml for typical DOM operations.\n      It exposes a small, sharp API:</p>\n<ul>\n<li><code>HTMLParser(html)</code> replaces <code>BeautifulSoup(html, \"lxml\")</code></li>\n<li><code>tree.css(selector)</code> replaces <code>soup.select(selector)</code></li>\n<li><code>node.text()</code> replaces <code>el.get_text()</code></li>\n</ul>\n<h2>Caveats</h2>\n<p>There are a few features selectolax does not support: deep tree mutation,\n      certain regex-driven navigation helpers. For those, keep BS4.</p>\n<blockquote>Right tool, right path.</blockquote>\n<img alt=\"A chart showing parser throughput.\" src=\"/img/chart.png\"/>\n</article>\n</main>\n<aside class=\"sidebar\">\n<h3>Recent posts</h3>\n<ul>\n<li><a href=\"/blog/a\">Post A</a></li>\n<li><a href=\"/blog/b\">Post B</a></li>\n</ul>\n</aside>\n<footer>© 2026 Dev Notes · <a href=\"/privacy\">Privacy</a></footer>\n<script>console.log(\"analytics\")</script>\n</body>",
+  "extract_accessibility_tree": [
+    {
+      "depth": 0,
+      "role": "navigation"
+    },
+    {
+      "depth": 1,
+      "href": "/",
+      "name": "Home",
+      "role": "link"
+    },
+    {
+      "depth": 1,
+      "href": "/blog",
+      "name": "Blog",
+      "role": "link"
+    },
+    {
+      "depth": 1,
+      "href": "/about",
+      "name": "About",
+      "role": "link"
+    },
+    {
+      "depth": 0,
+      "role": "banner"
+    },
+    {
+      "depth": 1,
+      "level": 1,
+      "name": "Dev Notes",
+      "role": "heading"
+    },
+    {
+      "depth": 0,
+      "role": "main"
+    },
+    {
+      "depth": 1,
+      "role": "article"
+    },
+    {
+      "depth": 2,
+      "level": 1,
+      "name": "On Writing Faster HTML Parsers",
+      "role": "heading"
+    },
+    {
+      "depth": 2,
+      "href": "/author/adev",
+      "name": "A. Developer",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "href": "https://pypi.org/project/beautifulsoup4/",
+      "name": "BeautifulSoup",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "level": 2,
+      "name": "Why selectolax",
+      "role": "heading"
+    },
+    {
+      "depth": 2,
+      "role": "list"
+    },
+    {
+      "depth": 3,
+      "name": "HTMLParser(html)replacesBeautifulSoup(html, \"lxml\")",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "name": "tree.css(selector)replacessoup.select(selector)",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "name": "node.text()replacesel.get_text()",
+      "role": "listitem"
+    },
+    {
+      "depth": 2,
+      "level": 2,
+      "name": "Caveats",
+      "role": "heading"
+    },
+    {
+      "depth": 2,
+      "name": "A chart showing parser throughput.",
+      "role": "image",
+      "src": "/img/chart.png"
+    },
+    {
+      "depth": 0,
+      "role": "complementary"
+    },
+    {
+      "depth": 1,
+      "level": 3,
+      "name": "Recent posts",
+      "role": "heading"
+    },
+    {
+      "depth": 1,
+      "role": "list"
+    },
+    {
+      "depth": 2,
+      "name": "Post A",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "href": "/blog/a",
+      "name": "Post A",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "name": "Post B",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "href": "/blog/b",
+      "name": "Post B",
+      "role": "link"
+    },
+    {
+      "depth": 0,
+      "role": "contentinfo"
+    },
+    {
+      "depth": 1,
+      "href": "/privacy",
+      "name": "Privacy",
+      "role": "link"
+    }
+  ],
+  "extract_images": [
+    {
+      "alt": "A chart showing parser throughput.",
+      "height": null,
+      "url": "https://example.com/img/chart.png",
+      "width": null
+    },
+    {
+      "alt": "",
+      "height": null,
+      "url": "https://example.com/img/cover.png",
+      "width": null
+    }
+  ],
+  "extract_main_content": "<main>\n<article>\n<h1>On Writing Faster HTML Parsers</h1>\n<p class=\"byline\">By <a href=\"/author/adev\">A. Developer</a> · March 12, 2026</p>\n<p>Parsing HTML dominates the CPU profile of many crawlers. The stock choice\n      in Python — <a href=\"https://pypi.org/project/beautifulsoup4/\">BeautifulSoup</a>\n      — trades speed for ergonomics. For a hot path that sees thousands of pages,\n      this is usually the wrong trade.</p>\n<h2>Why selectolax</h2>\n<p>The <code>selectolax</code> library wraps <strong>lexbor</strong>, a C parser\n      that is about <em>20x faster</em> than lxml for typical DOM operations.\n      It exposes a small, sharp API:</p>\n<ul>\n<li><code>HTMLParser(html)</code> replaces <code>BeautifulSoup(html, \"lxml\")</code></li>\n<li><code>tree.css(selector)</code> replaces <code>soup.select(selector)</code></li>\n<li><code>node.text()</code> replaces <code>el.get_text()</code></li>\n</ul>\n<h2>Caveats</h2>\n<p>There are a few features selectolax does not support: deep tree mutation,\n      certain regex-driven navigation helpers. For those, keep BS4.</p>\n<blockquote>Right tool, right path.</blockquote>\n<img alt=\"A chart showing parser throughput.\" src=\"/img/chart.png\"/>\n</article>\n</main>",
+  "extract_main_content_precision": "<article>\n<h1>On Writing Faster HTML Parsers</h1>\n<p class=\"byline\">By <a href=\"/author/adev\">A. Developer</a> · March 12, 2026</p>\n<p>Parsing HTML dominates the CPU profile of many crawlers. The stock choice\n      in Python — <a href=\"https://pypi.org/project/beautifulsoup4/\">BeautifulSoup</a>\n      — trades speed for ergonomics. For a hot path that sees thousands of pages,\n      this is usually the wrong trade.</p>\n<h2>Why selectolax</h2>\n<p>The <code>selectolax</code> library wraps <strong>lexbor</strong>, a C parser\n      that is about <em>20x faster</em> than lxml for typical DOM operations.\n      It exposes a small, sharp API:</p>\n<ul>\n<li><code>HTMLParser(html)</code> replaces <code>BeautifulSoup(html, \"lxml\")</code></li>\n<li><code>tree.css(selector)</code> replaces <code>soup.select(selector)</code></li>\n<li><code>node.text()</code> replaces <code>el.get_text()</code></li>\n</ul>\n<h2>Caveats</h2>\n<p>There are a few features selectolax does not support: deep tree mutation,\n      certain regex-driven navigation helpers. For those, keep BS4.</p>\n<blockquote>Right tool, right path.</blockquote>\n<img alt=\"A chart showing parser throughput.\" src=\"/img/chart.png\"/>\n</article>",
+  "extract_main_content_recall": "<main>\n<article>\n<h1>On Writing Faster HTML Parsers</h1>\n<p class=\"byline\">By <a href=\"/author/adev\">A. Developer</a> · March 12, 2026</p>\n<p>Parsing HTML dominates the CPU profile of many crawlers. The stock choice\n      in Python — <a href=\"https://pypi.org/project/beautifulsoup4/\">BeautifulSoup</a>\n      — trades speed for ergonomics. For a hot path that sees thousands of pages,\n      this is usually the wrong trade.</p>\n<h2>Why selectolax</h2>\n<p>The <code>selectolax</code> library wraps <strong>lexbor</strong>, a C parser\n      that is about <em>20x faster</em> than lxml for typical DOM operations.\n      It exposes a small, sharp API:</p>\n<ul>\n<li><code>HTMLParser(html)</code> replaces <code>BeautifulSoup(html, \"lxml\")</code></li>\n<li><code>tree.css(selector)</code> replaces <code>soup.select(selector)</code></li>\n<li><code>node.text()</code> replaces <code>el.get_text()</code></li>\n</ul>\n<h2>Caveats</h2>\n<p>There are a few features selectolax does not support: deep tree mutation,\n      certain regex-driven navigation helpers. For those, keep BS4.</p>\n<blockquote>Right tool, right path.</blockquote>\n<img alt=\"A chart showing parser throughput.\" src=\"/img/chart.png\"/>\n</article>\n</main>",
+  "extract_structured_data": {
+    "ld_json": [
+      {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "author": {
+          "@type": "Person",
+          "name": "A. Developer"
+        },
+        "datePublished": "2026-03-12",
+        "headline": "On Writing Faster HTML Parsers"
+      }
+    ],
+    "opengraph": {
+      "description": "A short post about the cost of BeautifulSoup on the hot path.",
+      "image": "/img/cover.png",
+      "title": "On Writing Faster HTML Parsers",
+      "url": "https://example.com/blog/faster-html"
+    },
+    "twitter_card": {
+      "card": "summary_large_image",
+      "description": "Short notes on parser perf.",
+      "title": "Faster HTML Parsers"
+    }
+  },
+  "filter_tags_exclude_nav": "<body>\n\n<header><h1 class=\"site-title\">Dev Notes</h1></header>\n<main>\n<article>\n<h1>On Writing Faster HTML Parsers</h1>\n<p class=\"byline\">By <a href=\"/author/adev\">A. Developer</a> · March 12, 2026</p>\n<p>Parsing HTML dominates the CPU profile of many crawlers. The stock choice\n      in Python — <a href=\"https://pypi.org/project/beautifulsoup4/\">BeautifulSoup</a>\n      — trades speed for ergonomics. For a hot path that sees thousands of pages,\n      this is usually the wrong trade.</p>\n<h2>Why selectolax</h2>\n<p>The <code>selectolax</code> library wraps <strong>lexbor</strong>, a C parser\n      that is about <em>20x faster</em> than lxml for typical DOM operations.\n      It exposes a small, sharp API:</p>\n<ul>\n<li><code>HTMLParser(html)</code> replaces <code>BeautifulSoup(html, \"lxml\")</code></li>\n<li><code>tree.css(selector)</code> replaces <code>soup.select(selector)</code></li>\n<li><code>node.text()</code> replaces <code>el.get_text()</code></li>\n</ul>\n<h2>Caveats</h2>\n<p>There are a few features selectolax does not support: deep tree mutation,\n      certain regex-driven navigation helpers. For those, keep BS4.</p>\n<blockquote>Right tool, right path.</blockquote>\n<img alt=\"A chart showing parser throughput.\" src=\"/img/chart.png\"/>\n</article>\n</main>\n<aside class=\"sidebar\">\n<h3>Recent posts</h3>\n<ul>\n<li><a href=\"/blog/a\">Post A</a></li>\n<li><a href=\"/blog/b\">Post B</a></li>\n</ul>\n</aside>\n\n<script>console.log(\"analytics\")</script>\n</body>",
+  "filter_tags_include_h2": "<div><h2>Why selectolax</h2><h2>Caveats</h2></div>",
+  "html_to_markdown": "html\nOn Writing Faster HTML Parsers — Dev Notes\n[Home](/)\n[Blog](/blog)\n[About](/about)\n\n# Dev Notes\n\n# On Writing Faster HTML Parsers\n\nBy [A. Developer](/author/adev) · March 12, 2026\n\nParsing HTML dominates the CPU profile of many crawlers. The stock choice\n      in Python — [BeautifulSoup](https://pypi.org/project/beautifulsoup4/) — trades speed for ergonomics. For a hot path that sees thousands of pages,\n      this is usually the wrong trade.\n\n## Why selectolax\n\nThe `selectolax` library wraps **lexbor** , a C parser\n      that is about *20x faster* than lxml for typical DOM operations.\n      It exposes a small, sharp API:\n\n- `HTMLParser(html)` replaces `BeautifulSoup(html, \"lxml\")`\n- `tree.css(selector)` replaces `soup.select(selector)`\n- `node.text()` replaces `el.get_text()`\n\n## Caveats\n\nThere are a few features selectolax does not support: deep tree mutation,\n      certain regex-driven navigation helpers. For those, keep BS4.\n\n> Right tool, right path.\n\n![A chart showing parser throughput.](/img/chart.png)\n\n### Recent posts\n\n- [Post A](/blog/a)\n- [Post B](/blog/b)\n\n© 2026 Dev Notes ·\n[Privacy](/privacy)"
+}

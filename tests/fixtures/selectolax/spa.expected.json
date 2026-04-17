@@ -1,0 +1,183 @@
+{
+  "clean_html": "<body>\n<div id=\"app\">\n<header id=\"top\">\n<nav><a href=\"/\">Home</a> <a href=\"/app\">Dashboard</a> <a href=\"/docs\">Docs</a></nav>\n</header>\n<main data-rendered=\"server\" id=\"main\">\n<section class=\"content\" id=\"content\">\n<h1>Project Overview</h1>\n<p>Welcome back. Here is a summary of your workspace activity for the past 7 days.</p>\n<h2>Metrics</h2>\n<ul>\n<li>Active users: <strong>1,284</strong></li>\n<li>Requests: <strong>2.1M</strong></li>\n<li>Error rate: <strong>0.07%</strong></li>\n</ul>\n<h2>Recent events</h2>\n<ol>\n<li>Deployment <code>v1.42.0</code> completed.</li>\n<li>Incident <a href=\"/incidents/1042\">#1042</a> resolved.</li>\n<li>New integration enabled: <em>Postgres</em>.</li>\n</ol>\n<p>For more details, see the <a href=\"/docs\">documentation</a>.</p>\n<img alt=\"Usage chart over the past week.\" src=\"/img/chart.svg\"/>\n</section>\n</main>\n<aside class=\"sidebar\" id=\"sidebar\">\n<h3>Quick links</h3>\n<ul>\n<li><a href=\"/app/settings\">Settings</a></li>\n<li><a href=\"/app/billing\">Billing</a></li>\n</ul>\n</aside>\n<footer>© 2026 Acme</footer>\n</div>\n<noscript>Please enable JavaScript.</noscript>\n<script>window.__INITIAL_STATE__ = {ready: true};</script>\n</body>",
+  "extract_accessibility_tree": [
+    {
+      "depth": 0,
+      "role": "banner"
+    },
+    {
+      "depth": 1,
+      "role": "navigation"
+    },
+    {
+      "depth": 2,
+      "href": "/",
+      "name": "Home",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "href": "/app",
+      "name": "Dashboard",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "href": "/docs",
+      "name": "Docs",
+      "role": "link"
+    },
+    {
+      "depth": 0,
+      "role": "main"
+    },
+    {
+      "depth": 1,
+      "role": "region"
+    },
+    {
+      "depth": 2,
+      "level": 1,
+      "name": "Project Overview",
+      "role": "heading"
+    },
+    {
+      "depth": 2,
+      "level": 2,
+      "name": "Metrics",
+      "role": "heading"
+    },
+    {
+      "depth": 2,
+      "role": "list"
+    },
+    {
+      "depth": 3,
+      "name": "Active users:1,284",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "name": "Requests:2.1M",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "name": "Error rate:0.07%",
+      "role": "listitem"
+    },
+    {
+      "depth": 2,
+      "level": 2,
+      "name": "Recent events",
+      "role": "heading"
+    },
+    {
+      "depth": 2,
+      "role": "list"
+    },
+    {
+      "depth": 3,
+      "name": "Deploymentv1.42.0completed.",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "name": "Incident#1042resolved.",
+      "role": "listitem"
+    },
+    {
+      "depth": 4,
+      "href": "/incidents/1042",
+      "name": "#1042",
+      "role": "link"
+    },
+    {
+      "depth": 3,
+      "name": "New integration enabled:Postgres.",
+      "role": "listitem"
+    },
+    {
+      "depth": 2,
+      "href": "/docs",
+      "name": "documentation",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "name": "Usage chart over the past week.",
+      "role": "image",
+      "src": "/img/chart.svg"
+    },
+    {
+      "depth": 0,
+      "role": "complementary"
+    },
+    {
+      "depth": 1,
+      "level": 3,
+      "name": "Quick links",
+      "role": "heading"
+    },
+    {
+      "depth": 1,
+      "role": "list"
+    },
+    {
+      "depth": 2,
+      "name": "Settings",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "href": "/app/settings",
+      "name": "Settings",
+      "role": "link"
+    },
+    {
+      "depth": 2,
+      "name": "Billing",
+      "role": "listitem"
+    },
+    {
+      "depth": 3,
+      "href": "/app/billing",
+      "name": "Billing",
+      "role": "link"
+    },
+    {
+      "depth": 0,
+      "role": "contentinfo"
+    }
+  ],
+  "extract_images": [
+    {
+      "alt": "Usage chart over the past week.",
+      "height": null,
+      "url": "https://example.com/img/chart.svg",
+      "width": null
+    }
+  ],
+  "extract_main_content": "<main data-rendered=\"server\" id=\"main\">\n<section class=\"content\" id=\"content\">\n<h1>Project Overview</h1>\n<p>Welcome back. Here is a summary of your workspace activity for the past 7 days.</p>\n<h2>Metrics</h2>\n<ul>\n<li>Active users: <strong>1,284</strong></li>\n<li>Requests: <strong>2.1M</strong></li>\n<li>Error rate: <strong>0.07%</strong></li>\n</ul>\n<h2>Recent events</h2>\n<ol>\n<li>Deployment <code>v1.42.0</code> completed.</li>\n<li>Incident <a href=\"/incidents/1042\">#1042</a> resolved.</li>\n<li>New integration enabled: <em>Postgres</em>.</li>\n</ol>\n<p>For more details, see the <a href=\"/docs\">documentation</a>.</p>\n<img alt=\"Usage chart over the past week.\" src=\"/img/chart.svg\"/>\n</section>\n</main>",
+  "extract_main_content_precision": "<main data-rendered=\"server\" id=\"main\">\n<section class=\"content\" id=\"content\">\n<h1>Project Overview</h1>\n<p>Welcome back. Here is a summary of your workspace activity for the past 7 days.</p>\n<h2>Metrics</h2>\n<ul>\n<li>Active users: <strong>1,284</strong></li>\n<li>Requests: <strong>2.1M</strong></li>\n<li>Error rate: <strong>0.07%</strong></li>\n</ul>\n<h2>Recent events</h2>\n<ol>\n<li>Deployment <code>v1.42.0</code> completed.</li>\n<li>Incident <a href=\"/incidents/1042\">#1042</a> resolved.</li>\n<li>New integration enabled: <em>Postgres</em>.</li>\n</ol>\n<p>For more details, see the <a href=\"/docs\">documentation</a>.</p>\n<img alt=\"Usage chart over the past week.\" src=\"/img/chart.svg\"/>\n</section>\n</main>",
+  "extract_main_content_recall": "<main data-rendered=\"server\" id=\"main\">\n<section class=\"content\" id=\"content\">\n<h1>Project Overview</h1>\n<p>Welcome back. Here is a summary of your workspace activity for the past 7 days.</p>\n<h2>Metrics</h2>\n<ul>\n<li>Active users: <strong>1,284</strong></li>\n<li>Requests: <strong>2.1M</strong></li>\n<li>Error rate: <strong>0.07%</strong></li>\n</ul>\n<h2>Recent events</h2>\n<ol>\n<li>Deployment <code>v1.42.0</code> completed.</li>\n<li>Incident <a href=\"/incidents/1042\">#1042</a> resolved.</li>\n<li>New integration enabled: <em>Postgres</em>.</li>\n</ol>\n<p>For more details, see the <a href=\"/docs\">documentation</a>.</p>\n<img alt=\"Usage chart over the past week.\" src=\"/img/chart.svg\"/>\n</section>\n</main>",
+  "extract_structured_data": {
+    "ld_json": [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Acme SaaS"
+      }
+    ],
+    "opengraph": {
+      "description": "Operational dashboard",
+      "title": "Acme SaaS Dashboard"
+    },
+    "twitter_card": {
+      "card": "app"
+    }
+  },
+  "filter_tags_exclude_nav": "<body>\n<div id=\"app\">\n<header id=\"top\">\n\n</header>\n<main data-rendered=\"server\" id=\"main\">\n<section class=\"content\" id=\"content\">\n<h1>Project Overview</h1>\n<p>Welcome back. Here is a summary of your workspace activity for the past 7 days.</p>\n<h2>Metrics</h2>\n<ul>\n<li>Active users: <strong>1,284</strong></li>\n<li>Requests: <strong>2.1M</strong></li>\n<li>Error rate: <strong>0.07%</strong></li>\n</ul>\n<h2>Recent events</h2>\n<ol>\n<li>Deployment <code>v1.42.0</code> completed.</li>\n<li>Incident <a href=\"/incidents/1042\">#1042</a> resolved.</li>\n<li>New integration enabled: <em>Postgres</em>.</li>\n</ol>\n<p>For more details, see the <a href=\"/docs\">documentation</a>.</p>\n<img alt=\"Usage chart over the past week.\" src=\"/img/chart.svg\"/>\n</section>\n</main>\n<aside class=\"sidebar\" id=\"sidebar\">\n<h3>Quick links</h3>\n<ul>\n<li><a href=\"/app/settings\">Settings</a></li>\n<li><a href=\"/app/billing\">Billing</a></li>\n</ul>\n</aside>\n\n</div>\n<noscript>Please enable JavaScript.</noscript>\n<script>window.__INITIAL_STATE__ = {ready: true};</script>\n</body>",
+  "filter_tags_include_h2": "<div><h2>Metrics</h2><h2>Recent events</h2></div>",
+  "html_to_markdown": "html\nDashboard — Acme SaaS\n[Home](/)\n[Dashboard](/app)\n[Docs](/docs)\n\n# Project Overview\n\nWelcome back. Here is a summary of your workspace activity for the past 7 days.\n\n## Metrics\n\n- Active users: **1,284**\n- Requests: **2.1M**\n- Error rate: **0.07%**\n\n## Recent events\n\n1. Deployment `v1.42.0` completed.\n2. Incident [#1042](/incidents/1042) resolved.\n3. New integration enabled: *Postgres* .\n\nFor more details, see the [documentation](/docs) .\n\n![Usage chart over the past week.](/img/chart.svg)\n\n### Quick links\n\n- [Settings](/app/settings)\n- [Billing](/app/billing)\n\n© 2026 Acme"
+}

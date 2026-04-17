@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard — Acme SaaS</title>
+  <meta property="og:title" content="Acme SaaS Dashboard">
+  <meta property="og:description" content="Operational dashboard">
+  <meta name="twitter:card" content="app">
+  <script type="application/ld+json">
+  {"@context": "https://schema.org", "@type": "WebApplication", "name": "Acme SaaS"}
+  </script>
+  <script src="/static/app.bundle.js"></script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div id="app">
+    <header id="top">
+      <nav><a href="/">Home</a> <a href="/app">Dashboard</a> <a href="/docs">Docs</a></nav>
+    </header>
+    <main id="main" data-rendered="server">
+      <section id="content" class="content">
+        <h1>Project Overview</h1>
+        <p>Welcome back. Here is a summary of your workspace activity for the past 7 days.</p>
+        <h2>Metrics</h2>
+        <ul>
+          <li>Active users: <strong>1,284</strong></li>
+          <li>Requests: <strong>2.1M</strong></li>
+          <li>Error rate: <strong>0.07%</strong></li>
+        </ul>
+        <h2>Recent events</h2>
+        <ol>
+          <li>Deployment <code>v1.42.0</code> completed.</li>
+          <li>Incident <a href="/incidents/1042">#1042</a> resolved.</li>
+          <li>New integration enabled: <em>Postgres</em>.</li>
+        </ol>
+        <p>For more details, see the <a href="/docs">documentation</a>.</p>
+        <img src="/img/chart.svg" alt="Usage chart over the past week.">
+      </section>
+    </main>
+    <aside id="sidebar" class="sidebar">
+      <h3>Quick links</h3>
+      <ul>
+        <li><a href="/app/settings">Settings</a></li>
+        <li><a href="/app/billing">Billing</a></li>
+      </ul>
+    </aside>
+    <footer>© 2026 Acme</footer>
+  </div>
+  <noscript>Please enable JavaScript.</noscript>
+  <script>window.__INITIAL_STATE__ = {ready: true};</script>
+</body>
+</html>
