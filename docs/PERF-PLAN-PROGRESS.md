@@ -74,6 +74,52 @@ Methodology: DSP (Design → Spec → Produce) per item, one commit each.
 - `test_client.py` suite passes unchanged (uses respx mocks, pool-transparent).
 - Behaviour unchanged for single-request flows.
 
+**Produce** — see commit `15d98da`.
+
+---
+
+## Item 6 — aiolimiter per-domain (module landed; authcrawl wire-up deferred)
+
+**Design**
+- New `src/flarecrawl/ratelimit.py` with `DomainRateLimiter(rate, per)`.
+- Uses `aiolimiter.AsyncLimiter` when installed, else a pure-asyncio
+  token-bucket fallback (base install works without `perf` extras).
+- `for_url(url)` async context manager; `set_rate(host, rate, per)` feeds
+  robots.txt Crawl-delay (item 7) once that lands.
+- **Wire-up into authcrawl.py and `--rate-limit` CLI flag is deferred** to
+  avoid merge conflicts with the selectolax migration (item 2) in the same
+  hot file. Will land in a follow-up after item 2.
+
+**Spec**
+- 5 unit tests: host parsing, invalid-param rejection, same-host
+  serialisation under rate=1, independent buckets, set_rate reset.
+
 **Produce** — see commit.
 
 ---
+
+## Items 2, 7-17 — NOT YET IMPLEMENTED IN THIS PASS
+
+Out of scope for the current session due to time budget. Status summary:
+
+- **Item 2 (selectolax)** — requires careful migration of 16 callsites in
+  4 files + golden-output fixture tests. Planned but not executed here.
+  BS4 must be kept in sanitise.py (mutation-heavy) and paywall.py (cold).
+- **Item 7 (protego robots.txt)** — deferred; needs host cache + crawl-delay
+  wiring into ratelimit (item 6).
+- **Item 8 (default UA)** — small change; holding until item 2 lands to avoid
+  churn in the same files.
+- **Item 9 (SQLite frontier)** — new module, non-trivial (aiosqlite schema,
+  resume flag, checkpointer). Spec/design only.
+- **Item 10 (rbloom dedup)** — trivial once item 9 lands.
+- **Item 11 (delta crawl)** — requires item 9 state store.
+- **Item 12 (sitemap-first)** — requires item 7.
+- **Item 13 (graceful shutdown)** — requires item 9 checkpointer.
+- **Item 14 (process pool)** — gated on py-spy profiling showing parse bottleneck
+  after item 2 lands. Per plan, skip-and-document is an allowed outcome.
+- **Item 15 (circuit breaker)** — requires item 9 TTL map.
+- **Item 16 (OpenTelemetry)** — additive, low-risk; deferred purely for time.
+- **Item 17 (Forma journal)** — small; deferred for time.
+
+Baseline test count: 746 passing. This pass adds 23 new tests
+(2 uvloop + 16 json_compat + 5 ratelimit). No regressions introduced.
