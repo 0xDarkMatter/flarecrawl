@@ -14,6 +14,7 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.16.0** | 2026-04-17 | **Design system extraction.** `flarecrawl design extract` generates DESIGN.md from any website — colors, typography, spacing, shadows, radii, layout, CSS variables, media queries, z-index. 9-category Design Coherence scoring (A-F). `design coherence` for standalone scoring. `design diff` for side-by-side comparison. HTML preview with visual swatches. Works behind auth via --session. Uses CDP for live computed style extraction |
 | **v0.15.0** | 2026-04-17 | **WebMCP + form interaction + correctness fixes.** `flarecrawl webmcp discover/call` for structured tool discovery on WebMCP-enabled sites. `flarecrawl interact` command with `--fill`, `--click`, `--select` and human-like timing (Bezier mouse curves, variable keystroke delays). `flarecrawl cdp connect` prints WebSocket URL for Playwright/Puppeteer. `FLARECRAWL_CDP_ENDPOINT` env var for custom CDP backends (Oxylabs, Bright Data, local Chrome). Fixed Live View URLs to use `live.browser.run` hosted UI. Session listing/close via real CF REST API. Recording retrieval via `/recording/{session_id}`. `keep_alive` capped at 600s (CF max). `--tabs` for multi-URL session reuse. `--stagehand` stub. Free tier warnings. Live test corpus (740 total tests) |
 | **v0.14.1** | 2026-04-16 | **CDP WebSocket integration** — `--cdp` flag for persistent browser sessions via Chrome DevTools Protocol. `--interactive` human-in-the-loop auth (login in DevTools, cookies auto-saved). `--live-view` real-time browser debugging via Chrome DevTools. Proper `--js-eval` via `Runtime.evaluate` (replaces addScriptTag hack). Real `--har` network capture via `Network.enable`. `--record` session recordings (rrweb format). `--keep-alive N` persistent sessions with cross-invocation reuse. `--save-cookies`/`--load-cookies` for authenticated scraping. `--ignore-robots` on crawl. `flarecrawl cdp sessions/close` session management. Workers max 10 → 50 (CF now supports 120 concurrent browsers). Rebranded to Cloudflare Browser Run. 723 tests |
 | **v0.14.0** | 2026-04-16 | `fetch` command (content-type aware download), `openapi` command (spec discovery + download), `session` sub-app (save/list/show/delete/validate), `authcrawl` module (authenticated BFS crawler), `--openapi` flag on `discover`, multi-format cookie loading |
@@ -1149,6 +1150,7 @@ flarecrawl/
 │   ├── client.py               # CF Browser Run REST API client (httpx pooling, HTTP/2)
 │   ├── config.py               # Credentials, usage tracking, env-var config, session storage
 │   ├── cookies.py              # Cookie loading (Puppeteer/Netscape/Chrome), conversion, validation
+│   ├── design.py               # Design system extraction (tokens, coherence scoring, formatting)
 │   ├── extract.py              # HTML extraction (main content, images, schema, tags)
 │   ├── fetch.py                # Content-type aware download (binary, JSON, HTML)
 │   ├── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
@@ -1169,6 +1171,7 @@ flarecrawl/
     ├── test_cache.py           # Cache module tests
     ├── test_cli.py             # CLI tests
     ├── test_client.py          # Client tests
+    ├── test_design.py          # Design extraction tests
     ├── test_extract.py         # Extract module tests
     ├── test_paywall.py         # Paywall bypass tests
     ├── test_rules.py           # Per-site rules tests

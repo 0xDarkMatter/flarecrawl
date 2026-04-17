@@ -27,7 +27,7 @@ class TestHelp:
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "flarecrawl 0.15.0" in result.output
+        assert "flarecrawl 0.16.0" in result.output
 
     def test_status_flag(self):
         result = runner.invoke(app, ["--status"])

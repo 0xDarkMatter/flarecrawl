@@ -100,6 +100,11 @@
 | CDP: close sessions | `flarecrawl cdp close` |
 | WebMCP: discover site tools | `flarecrawl webmcp discover URL --json` |
 | WebMCP: call a site tool | `flarecrawl webmcp call URL --tool searchFlights --params '{"dest":"Paris"}' --json` |
+| Design: extract design system | `flarecrawl design extract URL -o DESIGN.md` |
+| Design: HTML preview | `flarecrawl design extract URL --preview -o preview.html` |
+| Design: coherence score | `flarecrawl design coherence URL --json` |
+| Design: compare two sites | `flarecrawl design diff URL1 URL2 --json` |
+| Design: full extraction | `flarecrawl design extract URL --full -o DESIGN.md` |
 | Interact: fill form fields | `flarecrawl interact URL --fill "#name=John" --fill "#email=j@e.com" --click "button[type=submit]" --json` |
 | Interact: with screenshot | `flarecrawl interact URL --fill "#q=search" --click "#go" --screenshot result.png` |
 | CDP: multi-URL session reuse | `flarecrawl scrape URL1 URL2 URL3 --cdp --tabs 3 --json` |
