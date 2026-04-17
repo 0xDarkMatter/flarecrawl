@@ -9,6 +9,16 @@ import json
 import re
 import sys
 import time as _time
+
+# Optional: install uvloop on non-Windows platforms for 2-4x async speedup.
+# No-op on Windows (uvloop is not supported there) or if uvloop is not installed.
+if sys.platform != "win32":
+    try:  # pragma: no cover - platform-specific bootstrap
+        import uvloop
+
+        uvloop.install()
+    except ImportError:
+        pass
 from datetime import UTC
 from pathlib import Path
 from typing import Annotated, Any
