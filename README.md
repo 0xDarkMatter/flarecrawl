@@ -39,13 +39,27 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | | Firecrawl | Flarecrawl |
 |---|---|---|
-| **Pricing model** | Per-page credits | Time-based (free 10 min/day, then $0.09/hr) |
+| **Pricing** | Per-page credits ($99/100K) | Time-based (free 10 min/day, then $0.09/hr) |
+| **Crossover** | Cheaper below ~8K pages/mo | **11x cheaper** at 100K pages/mo |
 | **JS rendering** | Yes | Yes (headless Chromium on edge) |
-| **PDF generation** | No | Yes |
+| **Persistent browser sessions** | No | **Yes** (`--cdp --keep-alive`) |
+| **Live browser debugging** | No | **Yes** (`--live-view` via Chrome DevTools) |
+| **Interactive auth (OAuth/2FA/CAPTCHA)** | No | **Yes** (`--interactive` — login in DevTools) |
+| **Form filling** | No | **Yes** (`interact` command with human-like timing) |
+| **Session recordings** | No | **Yes** (`--record` — rrweb format, 30-day retention) |
+| **WebMCP tool discovery** | No | **Yes** (`webmcp discover/call`) |
 | **AI extraction** | Spark models | Workers AI (included) |
-| **Favicon extraction** | Via branding format | Dedicated command |
-| **Self-hosted option** | Yes | Cloudflare infrastructure |
-| **Web search** | Yes | No |
+| **Agent-safe sanitisation** | No | **Yes** (`--agent-safe` — 13 sanitisers, DeepMind taxonomy) |
+| **Paywall bypass** | Limited | **Multi-strategy cascade** (`--paywall --stealth`) |
+| **Content negotiation** | No | **Yes** (auto `Accept: text/markdown`, zero browser time) |
+| **PDF generation** | No | **Yes** |
+| **Web search** | Yes | Yes (Jina Search API) |
+| **Cookie persistence** | No | **Yes** (`--save-cookies`/`--load-cookies`) |
+| **Real HAR capture** | No | **Yes** (CDP `Network.enable`) |
+| **Custom CDP backends** | No | **Yes** (`FLARECRAWL_CDP_ENDPOINT` — Oxylabs, Bright Data, local Chrome) |
+| **Batch mode** | Limited | **Yes** (file input, NDJSON output, up to 50 workers) |
+| **Self-hosted** | Yes | Cloudflare infrastructure (or any CDP backend) |
+| **Favicon extraction** | Via branding | Dedicated command |
 | **Branding extraction** | Yes | Not yet |
 
 Different pricing models suit different use cases. Flarecrawl's time-based pricing is particularly cost-efficient for high-volume crawls.
