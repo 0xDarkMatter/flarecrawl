@@ -91,7 +91,7 @@ def _get_site_headers(url: str) -> dict:
     return get_site_headers(url)
 
 
-@dataclass
+@dataclass(slots=True)
 class PaywallResult:
     """Result of a successful paywall bypass."""
 

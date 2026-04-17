@@ -38,7 +38,7 @@ from bs4 import BeautifulSoup, Comment, Tag
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(slots=True)
 class Finding:
     """A single sanitisation finding."""
 
@@ -49,7 +49,7 @@ class Finding:
     count: int = 1
 
 
-@dataclass
+@dataclass(slots=True)
 class SanitiseResult:
     """Result of a sanitisation pass."""
 

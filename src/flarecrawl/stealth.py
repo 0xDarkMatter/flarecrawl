@@ -32,7 +32,7 @@ def is_available() -> bool:
         return False
 
 
-@dataclass
+@dataclass(slots=True)
 class StealthResponse:
     """Normalised response matching httpx.Response interface."""
     status_code: int

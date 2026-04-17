@@ -21,7 +21,7 @@ def _get_jina_api_key() -> str | None:
     return os.environ.get("JINA_API_KEY", "").strip() or None
 
 
-@dataclass
+@dataclass(slots=True)
 class SearchResult:
     """A single search result."""
 

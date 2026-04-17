@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 
 
-@dataclass
+@dataclass(slots=True)
 class ContentInfo:
     """Result of a HEAD probe for content type."""
     content_type: str
@@ -26,7 +26,7 @@ class ContentInfo:
     is_json: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class DownloadResult:
     """Result of a binary download."""
     path: Path

@@ -12,7 +12,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 
-@dataclass
+@dataclass(slots=True)
 class SpecDiscovery:
     """A discovered OpenAPI/Swagger spec location."""
     url: str
@@ -21,7 +21,7 @@ class SpecDiscovery:
     confidence: float  # 0.0 - 1.0
 
 
-@dataclass
+@dataclass(slots=True)
 class SpecValidation:
     """Quick validation of an OpenAPI/Swagger spec."""
     valid: bool
@@ -30,7 +30,7 @@ class SpecValidation:
     endpoint_count: int | None
 
 
-@dataclass
+@dataclass(slots=True)
 class SpecResult:
     """Result of downloading a spec."""
     url: str

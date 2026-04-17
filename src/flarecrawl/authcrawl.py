@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 from .extract import extract_main_content, html_to_markdown
 
 
-@dataclass
+@dataclass(slots=True)
 class CrawlConfig:
     """Configuration for an authenticated crawl."""
     seed_url: str
@@ -36,7 +36,7 @@ class CrawlConfig:
     output_dir: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class CrawlResult:
     """Result of crawling a single page."""
     url: str

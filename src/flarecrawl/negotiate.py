@@ -31,7 +31,7 @@ _CACHE_FILE = "markdown_domains.json"
 _NEGOTIATE_TIMEOUT = 10
 
 
-@dataclass
+@dataclass(slots=True)
 class NegotiationResult:
     """Result of a successful markdown content negotiation."""
 
