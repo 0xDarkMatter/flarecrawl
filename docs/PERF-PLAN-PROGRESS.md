@@ -22,6 +22,22 @@ Methodology: DSP (Design → Spec → Produce) per item, one commit each.
 - Acceptance: `flarecrawl --help` still runs on Windows; if `uvloop` importable (non-win32), `asyncio.get_event_loop_policy()` is `uvloop.EventLoopPolicy`.
 - Test: `tests/test_uvloop_bootstrap.py::test_uvloop_noop_on_windows` — import cli, assert no crash.
 
+**Produce** — see commit `f6cbc33`.
+
+---
+
+## Item 3 — orjson json_compat (done before item 2 for risk sequencing)
+
+**Design**
+- New module `src/flarecrawl/json_compat.py` with `loads`/`dumps`.
+- orjson-first, stdlib fallback. Returns `str` from `dumps` (orjson native is bytes).
+- Not yet wired into batch.py / cache.py / etc. — those follow in a later pass
+  once golden-identity is confirmed. This commit lands the shim + tests only.
+
+**Spec**
+- 16 unit tests: str/bytes loads, indent, sort_keys, unicode, primitives.
+- Zero new runtime deps (orjson is optional under `perf`).
+
 **Produce** — see commit.
 
 ---
