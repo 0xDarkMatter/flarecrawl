@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import threading
 import time
 from collections import defaultdict
@@ -141,6 +142,10 @@ class CDPPage:
     def target_id(self) -> str:
         return self._target_id
 
+    async def send(self, method: str, params: dict | None = None) -> dict:
+        """Send CDP command scoped to this page's session."""
+        return await self._client.send(method, params, session_id=self._session_id)
+
     async def navigate(self, url: str, wait_until: str = "load", timeout: int = 30000) -> dict:
         """Navigate to URL and wait for load event."""
         await self._client.send("Page.enable", session_id=self._session_id)
@@ -252,6 +257,108 @@ class CDPPage:
         result = await self._client.send("Accessibility.getFullAXTree", session_id=self._session_id)
         return result.get("nodes", [])
 
+    async def type(self, selector: str, text: str, delay_range: tuple[int, int] = (50, 150)) -> None:
+        """Type text into an element with human-like keystroke delays."""
+        import random
+
+        # Focus the element
+        await self.evaluate(f'document.querySelector("{selector}").focus()')
+
+        # Clear existing content
+        await self.evaluate(f'document.querySelector("{selector}").value = ""')
+
+        # Type each character with variable delay
+        for char in text:
+            await self.send("Input.dispatchKeyEvent", {
+                "type": "keyDown",
+                "key": char,
+                "text": char,
+            })
+            await self.send("Input.dispatchKeyEvent", {
+                "type": "keyUp",
+                "key": char,
+            })
+            delay_ms = random.randint(delay_range[0], delay_range[1])
+            await asyncio.sleep(delay_ms / 1000)
+
+    async def click(self, selector: str, human_like: bool = True) -> None:
+        """Click an element with optional human-like mouse movement."""
+        import random
+
+        # Get element position
+        box = await self.evaluate(f"""
+            (() => {{
+                const el = document.querySelector("{selector}");
+                if (!el) throw new Error("Element not found: {selector}");
+                const r = el.getBoundingClientRect();
+                return {{x: r.x + r.width/2, y: r.y + r.height/2, width: r.width, height: r.height}};
+            }})()
+        """)
+
+        # Add slight randomness within the element bounds
+        x = box["x"] + random.uniform(-box["width"] * 0.2, box["width"] * 0.2)
+        y = box["y"] + random.uniform(-box["height"] * 0.2, box["height"] * 0.2)
+
+        if human_like:
+            # Move mouse along a curve to the target
+            await self._mouse_move_bezier(x, y)
+
+        # Click sequence: move -> down -> up
+        await self.send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": int(x), "y": int(y)})
+        await asyncio.sleep(random.uniform(0.02, 0.08))
+        await self.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": int(x), "y": int(y), "button": "left", "clickCount": 1})
+        await asyncio.sleep(random.uniform(0.05, 0.15))
+        await self.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": int(x), "y": int(y), "button": "left", "clickCount": 1})
+
+    async def _mouse_move_bezier(self, target_x: float, target_y: float, steps: int = 15) -> None:
+        """Move mouse along a Bezier curve to target position."""
+        import random
+
+        # Start from current or random position
+        start_x = random.uniform(100, 500)
+        start_y = random.uniform(100, 400)
+
+        # Two random control points for cubic Bezier
+        cp1_x = start_x + (target_x - start_x) * random.uniform(0.2, 0.5)
+        cp1_y = start_y + random.uniform(-100, 100)
+        cp2_x = start_x + (target_x - start_x) * random.uniform(0.5, 0.8)
+        cp2_y = target_y + random.uniform(-100, 100)
+
+        for i in range(steps + 1):
+            t = i / steps
+            # Cubic Bezier formula
+            x = (1 - t) ** 3 * start_x + 3 * (1 - t) ** 2 * t * cp1_x + 3 * (1 - t) * t ** 2 * cp2_x + t ** 3 * target_x
+            y = (1 - t) ** 3 * start_y + 3 * (1 - t) ** 2 * t * cp1_y + 3 * (1 - t) * t ** 2 * cp2_y + t ** 3 * target_y
+
+            await self.send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": int(x), "y": int(y)})
+            await asyncio.sleep(random.uniform(0.01, 0.03))
+
+    async def select(self, selector: str, value: str) -> None:
+        """Select a dropdown option by value."""
+        await self.evaluate(f"""
+            (() => {{
+                const el = document.querySelector("{selector}");
+                if (!el) throw new Error("Element not found: {selector}");
+                el.value = "{value}";
+                el.dispatchEvent(new Event("change", {{bubbles: true}}));
+                el.dispatchEvent(new Event("input", {{bubbles: true}}));
+            }})()
+        """)
+
+    async def fill(self, selector: str, value: str) -> None:
+        """Clear and type into a form field with human-like timing."""
+        # Click to focus
+        await self.click(selector, human_like=True)
+        await asyncio.sleep(0.1)
+        # Select all and delete
+        await self.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": "a", "modifiers": 2})  # Ctrl+A
+        await self.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": "a", "modifiers": 2})
+        await self.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Backspace"})
+        await self.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Backspace"})
+        await asyncio.sleep(0.1)
+        # Type new value
+        await self.type(selector, value)
+
     async def close(self) -> None:
         """Close this page target."""
         await self._client.send("Target.closeTarget", {"targetId": self._target_id})
@@ -260,7 +367,10 @@ class CDPPage:
 class _AsyncCDPClient:
     """Async CDP WebSocket client for Cloudflare Browser Run."""
 
-    WS_URL = "wss://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/devtools/browser"
+    WS_URL = os.environ.get(
+        "FLARECRAWL_CDP_ENDPOINT",
+        "wss://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/devtools/browser",
+    )
 
     REST_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering"
 
@@ -283,7 +393,11 @@ class _AsyncCDPClient:
         """Open WebSocket connection with Bearer auth."""
         _require_websockets()
 
-        url = self.WS_URL.format(account_id=self._account_id)
+        custom_endpoint = os.environ.get("FLARECRAWL_CDP_ENDPOINT")
+        if custom_endpoint:
+            url = custom_endpoint
+        else:
+            url = self.WS_URL.format(account_id=self._account_id)
         query: dict[str, Any] = {}
         if keep_alive:
             query["keep_alive"] = str(keep_alive)
@@ -538,6 +652,15 @@ class CDPClient:
         return self._async._ws_url
 
     @property
+    def endpoint(self) -> str:
+        """Return the CDP endpoint URL (for Playwright connection)."""
+        return (
+            self._async._ws_url
+            or os.environ.get("FLARECRAWL_CDP_ENDPOINT")
+            or self._async.WS_URL.format(account_id=self.account_id)
+        )
+
+    @property
     def devtools_url(self) -> str | None:
         """Return the Chrome DevTools frontend URL for live inspection."""
         return self._async.devtools_url
@@ -617,6 +740,22 @@ class SyncCDPPage:
     def get_accessibility_tree(self) -> list[dict]:
         """Get accessibility tree."""
         return self._run(self._page.get_accessibility_tree())
+
+    def type(self, selector: str, text: str, delay_range: tuple[int, int] = (50, 150)) -> None:
+        """Type text with human-like keystroke delays."""
+        self._run(self._page.type(selector, text, delay_range))
+
+    def click(self, selector: str, human_like: bool = True) -> None:
+        """Click an element with optional human-like mouse movement."""
+        self._run(self._page.click(selector, human_like))
+
+    def select(self, selector: str, value: str) -> None:
+        """Select a dropdown option by value."""
+        self._run(self._page.select(selector, value))
+
+    def fill(self, selector: str, value: str) -> None:
+        """Clear and type into a form field with human-like timing."""
+        self._run(self._page.fill(selector, value))
 
     def close(self) -> None:
         """Close this page."""

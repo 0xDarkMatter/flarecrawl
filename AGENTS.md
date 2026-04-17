@@ -95,6 +95,7 @@
 | CDP: session recording | `flarecrawl scrape URL --record --record-output debug.json` |
 | CDP: save cookies after scrape | `flarecrawl scrape URL --cdp --save-cookies session.json` |
 | CDP: load cookies for auth | `flarecrawl scrape URL --cdp --load-cookies session.json --json` |
+| CDP: get WebSocket URL for Playwright | `flarecrawl cdp connect --json` |
 | CDP: list active sessions | `flarecrawl cdp sessions --json` |
 | CDP: close sessions | `flarecrawl cdp close` |
 | Crawl ignoring robots.txt | `flarecrawl crawl URL --wait --limit 50 --ignore-robots` |
@@ -501,6 +502,7 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 42. **`--ignore-robots`** on crawl — bypasses robots.txt and AI Crawl Control directives. CF crawl respects these by default
 43. **Workers max is now 50** (was 10) — CF quadrupled concurrent browser limit to 120. Free tier: use `--workers 3`, paid: up to `--workers 50`. Override with `FLARECRAWL_MAX_WORKERS` env var
 44. **CDP flags auto-promote** — `--interactive`, `--live-view`, `--record`, `--save-cookies`, `--load-cookies`, `--keep-alive` all imply `--cdp`. No need to pass both
+45. **`FLARECRAWL_CDP_ENDPOINT` env var** — override the CDP WebSocket URL to use any CDP backend (Oxylabs Scraping Browser, Bright Data, local Chrome `ws://localhost:9222`). When set, flarecrawl skips CF auth for the browser connection
 
 ## Pricing Reference
 
@@ -522,6 +524,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 | `FLARECRAWL_MAX_RETRIES` | 3 | Max retry attempts on 429/502/503 |
 | `FLARECRAWL_MAX_WORKERS` | 50 | Max parallel workers for batch mode (CF supports 120) |
 | `FLARECRAWL_TIMEOUT` | 120 | Request timeout in seconds |
+| `FLARECRAWL_CDP_ENDPOINT` | — | Override CDP WebSocket URL (Oxylabs, Bright Data, local Chrome) |
 | `FLARECRAWL_PROXY` | - | Default proxy URL (http/https/socks5) |
 | `JINA_API_KEY` | - | Jina API key for `search` command (free at jina.ai) |
 
