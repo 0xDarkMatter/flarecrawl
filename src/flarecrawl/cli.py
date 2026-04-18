@@ -4485,7 +4485,14 @@ def frontier_dead_letter(
     """
     import asyncio as _asyncio
 
+    from ._validate import validate_job_id
     from .dead_letter import dump_dead_letter, format_rows
+
+    try:
+        validate_job_id(job_id)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
 
     rows = _asyncio.run(dump_dead_letter(job_id))
     typer.echo(format_rows(rows, as_json=as_json))
@@ -4528,8 +4535,16 @@ def authcrawl(
     import json as _json
     import os as _os
 
+    from ._validate import validate_job_id
     from .authcrawl import AuthenticatedCrawler, CrawlConfig
     from .telemetry import init_tracing
+
+    if resume is not None:
+        try:
+            validate_job_id(resume)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
 
     # Tracing is opt-in via flag or env var.
     _exp = tracing or _os.environ.get("FLARECRAWL_TRACING", "none")

@@ -51,6 +51,7 @@ from urllib.parse import urlsplit
 
 import aiosqlite
 
+from ._validate import validate_job_id
 from .canon import canonicalize
 from .fingerprint import fingerprint as fp_of
 
@@ -924,6 +925,7 @@ class Frontier:
         any ``in_flight`` rows are flipped to ``pending`` (with a
         WARNING log line if any rolled back).
         """
+        validate_job_id(job_id)
         base = base_dir or default_jobs_dir()
         base.mkdir(parents=True, exist_ok=True)
         db_path = base / f"{job_id}.sqlite"
