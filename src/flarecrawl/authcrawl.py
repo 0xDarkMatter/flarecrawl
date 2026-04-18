@@ -27,6 +27,7 @@ from .frontier_v2 import RETRY_CODES, Frontier, FrontierItem
 from .ratelimit import DomainRateLimiter
 from .robots import RobotsCache
 from . import shutdown as _shutdown
+from .telemetry import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +244,15 @@ class AuthenticatedCrawler:
                                 flush=True,
                             )
                             break
-                        batch = await frontier.queue.next_batch(cfg.workers)
+                        with start_span(
+                            "schedule",
+                            **{
+                                "flarecrawl.phase": "schedule",
+                                "flarecrawl.job_id": job_id,
+                                "batch_size": cfg.workers,
+                            },
+                        ):
+                            batch = await frontier.queue.next_batch(cfg.workers)
                         if not batch:
                             break
 
@@ -282,7 +291,7 @@ class AuthenticatedCrawler:
 
                         semaphore = asyncio.Semaphore(cfg.workers)
                         tasks = [
-                            self._fetch_item(session, item, frontier, semaphore)
+                            self._fetch_item(session, item, frontier, semaphore, job_id)
                             for item in runnable
                         ]
                         results = await asyncio.gather(
@@ -381,6 +390,7 @@ class AuthenticatedCrawler:
         item: FrontierItem,
         frontier: Frontier,
         semaphore: asyncio.Semaphore,
+        job_id: str | None = None,
     ) -> CrawlResult | None:
         """Fetch one FrontierItem, update frontier state, return CrawlResult.
 
@@ -388,6 +398,31 @@ class AuthenticatedCrawler:
         yield to the caller) or when a retry/dead transition fires.
         """
         cfg = self._config
+        with start_span(
+            "fetch",
+            **{
+                "flarecrawl.phase": "fetch",
+                "flarecrawl.job_id": job_id or "",
+                "url.domain": item.hostname or "",
+            },
+        ) as _fetch_span:
+            return await self._fetch_item_body(
+                session, item, frontier, semaphore, job_id, cfg, _fetch_span
+            )
+
+    async def _fetch_item_body(
+        self,
+        session: httpx.AsyncClient,
+        item: FrontierItem,
+        frontier: Frontier,
+        semaphore: asyncio.Semaphore,
+        job_id: str | None,
+        cfg: CrawlConfig,
+        _fetch_span,
+    ) -> CrawlResult | None:
+        """Body of ``_fetch_item`` — extracted so the tracing span can
+        wrap it as a single ``with`` block without rewriting control
+        flow."""
         async with semaphore:
             # Merge conditional headers from VisitedStore.
             cond = await frontier.visited.conditional_headers(item.fp)
@@ -438,6 +473,11 @@ class AuthenticatedCrawler:
 
             elapsed_ms = (time.monotonic() - start) * 1000.0
             sc = resp.status_code
+            try:
+                _fetch_span.set_attribute("http.status", sc)
+                _fetch_span.set_attribute("response_ms", elapsed_ms)
+            except Exception:  # pragma: no cover — no-op span path
+                pass
             etag = resp.headers.get("etag")
             last_modified = resp.headers.get("last-modified")
             content_len = len(resp.content or b"")
@@ -498,7 +538,15 @@ class AuthenticatedCrawler:
             # 2xx / 3xx success.
             ct = resp.headers.get("content-type", "text/html").split(";")[0].strip()
             html = resp.text
-            links = _extract_links(html, item.url) if "html" in ct else []
+            with start_span(
+                "parse",
+                **{
+                    "flarecrawl.phase": "parse",
+                    "flarecrawl.job_id": job_id or "",
+                    "url.domain": item.hostname or "",
+                },
+            ):
+                links = _extract_links(html, item.url) if "html" in ct else []
 
             if cfg.format == "html":
                 content = html
