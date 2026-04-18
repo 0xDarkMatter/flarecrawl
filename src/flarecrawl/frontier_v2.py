@@ -642,11 +642,7 @@ class DomainRegistry:
                 (float(response_ms) / 1000.0, new_ewma, hostname),
             )
             # Trip sick if threshold crossed.
-            await self._db.execute(
-                "UPDATE domain_stats SET sick_until = ?"
-                " WHERE hostname = ? AND consecutive_fails >= ?",
-                (time.time() + _SICK_DEFAULT_S, hostname, _SICK_FAIL_THRESHOLD),
-            )
+            await self._trip_sick_if_threshold(hostname)
 
         if ok and self._adaptive:
             delay_ms = max(
@@ -670,13 +666,21 @@ class DomainRegistry:
             " WHERE hostname = ?",
             (hostname,),
         )
+        await self._trip_sick_if_threshold(hostname)
+        if self._on_write is not None:
+            self._on_write()
+
+    async def _trip_sick_if_threshold(self, hostname: str) -> None:
+        """Set ``sick_until`` if ``consecutive_fails`` crossed the threshold.
+
+        Idempotent — the predicate in the WHERE clause means healthy
+        rows are not touched.
+        """
         await self._db.execute(
             "UPDATE domain_stats SET sick_until = ?"
             " WHERE hostname = ? AND consecutive_fails >= ?",
             (time.time() + _SICK_DEFAULT_S, hostname, _SICK_FAIL_THRESHOLD),
         )
-        if self._on_write is not None:
-            self._on_write()
 
     async def snooze(self, hostname: str, seconds: float) -> None:
         """Short transient backoff. Capped at 120 s."""

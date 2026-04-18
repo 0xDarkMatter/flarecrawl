@@ -409,6 +409,28 @@ async def test_sick_default_600(fr: Frontier) -> None:
 
 
 @pytest.mark.asyncio
+async def test_trip_sick_if_threshold_only_fires_above_limit(fr: Frontier) -> None:
+    # Below threshold — helper is a no-op.
+    await fr.domains.bump_fail("quiet.example")
+    stats = await fr.domains.stats("quiet.example")
+    assert stats["consecutive_fails"] == 1
+    before = stats["sick_until"]
+    await fr.domains._trip_sick_if_threshold("quiet.example")
+    stats = await fr.domains.stats("quiet.example")
+    assert stats["sick_until"] == before  # untouched
+
+    # Cross the threshold explicitly; then calling the helper should stamp sick_until.
+    await fr.domains._db.execute(
+        "UPDATE domain_stats SET consecutive_fails = 99 WHERE hostname = ?",
+        ("quiet.example",),
+    )
+    t0 = time.time()
+    await fr.domains._trip_sick_if_threshold("quiet.example")
+    stats = await fr.domains.stats("quiet.example")
+    assert stats["sick_until"] > t0
+
+
+@pytest.mark.asyncio
 async def test_success_resets_consecutive_and_sick(fr: Frontier) -> None:
     for _ in range(10):
         await fr.domains.bump_fail("a.example")
