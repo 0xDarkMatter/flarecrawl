@@ -1,0 +1,1 @@
+{"ts": "2026-04-18T03:07:47.115+00:00", "level": "warn", "source": "forma-maturity", "msg": "phase2 triage: flarecrawl needs manual fix, 10 import errors (selectolax + other deps) across 721-test suite, beyond budget", "action": "decided", "domain": "pipeline", "target": "flarecrawl"}
