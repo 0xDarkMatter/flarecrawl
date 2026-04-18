@@ -402,3 +402,44 @@ Old `*.sqlite` files created by v1 under
 `$XDG_CACHE_HOME/flarecrawl/jobs/` are incompatible with v2 (different
 primary key, new columns). Safe to delete — v2 creates them on demand.
 Any `.bloom` sidecar will also be rebuilt from scratch on first write.
+
+## Authcrawl Wire-Up
+
+**Design sketch (pre-code).** Replace the in-memory `deque` + `set()`
+pair in `AuthenticatedCrawler.crawl()` with a `Frontier` opened per
+invocation (`resume=False` unless `CrawlConfig.resume_job_id` is
+supplied). The loop still `yield`s `CrawlResult` — keeping the existing
+async-generator contract that callers rely on — but all dedup,
+priority, conditional-header, retry and dead-letter decisions delegate
+to `Frontier`.
+
+**Wiring table.**
+
+| Concern                | Old path                                  | New path                                                        |
+|------------------------|-------------------------------------------|-----------------------------------------------------------------|
+| dedup                  | `visited: set[str]` in memory             | `FrontierQueue.add` (SQLite PK + optional bloom)                |
+| BFS next-hop selection | `deque.popleft()`                         | `FrontierQueue.next_batch(n)` (per-host round-robin)            |
+| revalidation           | none                                      | `VisitedStore.conditional_headers(fp)` → `If-None-Match` etc.   |
+| retry                  | none                                      | `mark_retry` with exponential backoff, `max_attempts` cap       |
+| host health            | none                                      | `DomainRegistry.observe` / `bump_fail` / `snooze` (Retry-After) |
+| adaptive rate          | fixed `cfg.delay`                         | `DomainRegistry(adaptive_mode=True)` — EWMA × factor            |
+| resume                 | impossible (state in RAM)                 | `Frontier.open(resume=True, …)` + `rollback_in_flight()`        |
+| graceful shutdown      | no plumbing                               | `shutdown.install_signal_handlers()` + checkpoint + resume hint |
+
+**New `CrawlConfig` fields.**
+
+- `resume_job_id: str | None` — opens existing job instead of seeding.
+- `max_attempts: int = 3` — passed into `FrontierQueue.add`.
+- `adaptive_delay: bool = False` — toggles EWMA snooze.
+- `refresh_days: int = 7` — stamped into `visited.next_refresh_at`
+  (consumed by delta refresh jobs).
+
+**Preserved surface.** `AuthenticatedCrawler.crawl()` remains an
+`AsyncIterator[CrawlResult]`; the CLI and existing 45 tests do not see
+an API break. Frontier is owned per-invocation via `async with`.
+
+**Deviation from the initial brief.** The brief described a
+`return CrawlResult` shape — retaining the iterator is better because
+downstream CLI consumers already stream results. New integration tests
+live in `tests/test_authcrawl_wire.py`; they assert on the frontier DB
+rather than on crawler internals.
