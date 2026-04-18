@@ -130,3 +130,49 @@ def test_start_span_coerces_non_primitive_attributes() -> None:
 def test_traced_exporter_unknown_value_raises() -> None:
     with pytest.raises(ValueError):
         tel.init_tracing(exporter="bogus")  # type: ignore[arg-type]
+
+
+def test_try_import_returns_module_when_installed() -> None:
+    # json always ships with CPython — use it as a stand-in for an installed dep.
+    mod = tel._try_import("json", "json module")
+    assert mod is not None
+    assert mod.dumps({"a": 1}) == '{"a": 1}'
+
+
+def test_try_import_returns_none_when_missing(monkeypatch) -> None:
+    def _boom(name: str) -> object:
+        raise ImportError(f"no module named {name!r}")
+
+    monkeypatch.setattr(tel.importlib, "import_module", _boom)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = tel._try_import("flarecrawl_no_such_module", "ghost piece")
+
+    assert result is None
+    relevant = [w for w in caught if "flarecrawl.telemetry" in str(w.message)]
+    assert len(relevant) == 1
+    assert "ghost piece" in str(relevant[0].message)
+
+
+def test_try_import_warns_once_per_module(monkeypatch) -> None:
+    calls = {"n": 0}
+
+    def _boom(name: str) -> object:
+        calls["n"] += 1
+        raise ImportError(f"missing {name!r}")
+
+    monkeypatch.setattr(tel.importlib, "import_module", _boom)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tel._try_import("flarecrawl_ghost_a", "ghost a")
+        tel._try_import("flarecrawl_ghost_a", "ghost a")  # same module — no repeat
+        tel._try_import("flarecrawl_ghost_b", "ghost b")  # different — one more
+
+    a_warnings = [w for w in caught if "flarecrawl_ghost_a" in str(w.message)]
+    b_warnings = [w for w in caught if "flarecrawl_ghost_b" in str(w.message)]
+    assert len(a_warnings) == 1
+    assert len(b_warnings) == 1
+    # Import was still attempted each call — warn-once only suppresses the warning.
+    assert calls["n"] == 3

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import functools
+import importlib
 import inspect
 import json
 import logging
@@ -54,6 +55,31 @@ _warned_missing: bool = False
 _lock = threading.Lock()
 _tracer: Any = None
 _provider: Any = None
+_warned_modules: set[str] = set()
+
+
+def _warn_once(message: str, module_key: str) -> None:
+    """Emit a warning exactly once per ``module_key`` across the process."""
+    if module_key in _warned_modules:
+        return
+    _warned_modules.add(module_key)
+    warnings.warn(message, stacklevel=3)
+
+
+def _try_import(module_name: str, what: str) -> Any | None:
+    """Try importing an OTel piece; return module or None.
+
+    Emits a warning the first time each ``module_name`` fails to import,
+    and stays silent on subsequent calls for the same module.
+    """
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as exc:
+        _warn_once(
+            f"flarecrawl.telemetry: {what} unavailable ({module_name}): {exc}",
+            module_name,
+        )
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -187,26 +213,35 @@ def init_tracing(
             logger.debug("init_tracing called again — already initialised")
             return
 
-        try:
-            from opentelemetry import trace as _trace
-            from opentelemetry.sdk.resources import Resource
-            from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import (
-                BatchSpanProcessor,
-                ConsoleSpanExporter,
-                SimpleSpanProcessor,
-            )
-        except ImportError as exc:
+        trace_mod = _try_import("opentelemetry.trace", "trace API")
+        resources_mod = _try_import("opentelemetry.sdk.resources", "SDK resources")
+        sdk_trace_mod = _try_import("opentelemetry.sdk.trace", "SDK trace")
+        sdk_export_mod = _try_import(
+            "opentelemetry.sdk.trace.export", "SDK trace exporters"
+        )
+        if (
+            trace_mod is None
+            or resources_mod is None
+            or sdk_trace_mod is None
+            or sdk_export_mod is None
+        ):
             if not _warned_missing:
                 warnings.warn(
-                    f"OpenTelemetry not installed ({exc}); tracing disabled. "
-                    f"Install with `pip install flarecrawl[perf]`.",
+                    "OpenTelemetry not installed; tracing disabled. "
+                    "Install with `pip install flarecrawl[perf]`.",
                     stacklevel=2,
                 )
                 _warned_missing = True
             _tracer = _NOOP_TRACER
             _initialised = True
             return
+
+        _trace = trace_mod
+        Resource = resources_mod.Resource
+        TracerProvider = sdk_trace_mod.TracerProvider
+        BatchSpanProcessor = sdk_export_mod.BatchSpanProcessor
+        ConsoleSpanExporter = sdk_export_mod.ConsoleSpanExporter
+        SimpleSpanProcessor = sdk_export_mod.SimpleSpanProcessor
 
         resource = Resource.create({"service.name": service_name})
         provider = TracerProvider(resource=resource)
@@ -219,18 +254,15 @@ def init_tracing(
             span_exporter = _build_json_exporter()
             provider.add_span_processor(SimpleSpanProcessor(span_exporter))
         elif exporter == "otlp":
-            try:
-                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-                    OTLPSpanExporter,
-                )
-            except ImportError as exc:
-                warnings.warn(
-                    f"OTLP exporter unavailable ({exc}); falling back to no-op.",
-                    stacklevel=2,
-                )
+            otlp_mod = _try_import(
+                "opentelemetry.exporter.otlp.proto.grpc.trace_exporter",
+                "OTLP exporter",
+            )
+            if otlp_mod is None:
                 _tracer = _NOOP_TRACER
                 _initialised = True
                 return
+            OTLPSpanExporter = otlp_mod.OTLPSpanExporter
             endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
             span_exporter = (
                 OTLPSpanExporter(endpoint=endpoint) if endpoint else OTLPSpanExporter()
@@ -250,13 +282,15 @@ def init_tracing(
         _tracer = provider.get_tracer(service_name)
 
         # Auto-instrument httpx. Best-effort — if the instrumentation
-        # package is missing we carry on without it.
-        try:
-            from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-
-            HTTPXClientInstrumentor().instrument()
-        except Exception as exc:  # pragma: no cover — optional dependency
-            logger.debug("httpx auto-instrumentation skipped: %r", exc)
+        # package is missing we warn-once and carry on without it.
+        httpx_mod = _try_import(
+            "opentelemetry.instrumentation.httpx", "HTTPX instrumentor"
+        )
+        if httpx_mod is not None:
+            try:
+                httpx_mod.HTTPXClientInstrumentor().instrument()
+            except Exception as exc:  # pragma: no cover — optional dependency
+                logger.debug("httpx auto-instrumentation skipped: %r", exc)
 
         _initialised = True
 
@@ -345,6 +379,7 @@ def _reset_for_tests() -> None:
     """Test helper — reset the warn-once latch."""
     global _warned_missing
     _warned_missing = False
+    _warned_modules.clear()
 
 
 # Initialise the no-op tracer eagerly so callers can use `start_span`
