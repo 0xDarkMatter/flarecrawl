@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from flarecrawl.canon import TRACKING_PARAMS, canonicalize
+from flarecrawl.canon import ALLOWED_SCHEMES, TRACKING_PARAMS, canonicalize
 
 
 def test_golden_from_spec() -> None:
@@ -59,9 +59,7 @@ def test_golden_from_spec() -> None:
         ("http://example.com/a", "http://example.com/a"),
         # 16. empty path preserved (no forced '/')
         ("http://example.com", "http://example.com"),
-        # 17. ports on non-default schemes preserved
-        ("ftp://example.com:21/", "ftp://example.com:21/"),
-        # 18. fragments containing '?' still stripped
+        # 17. fragments containing '?' still stripped
         (
             "http://example.com/p?a=1#x?y=2",
             "http://example.com/p?a=1",
@@ -135,3 +133,32 @@ def test_percent_normalisation_in_query() -> None:
     assert "%" not in out or all(
         c.isupper() or not c.isalpha() for c in out.split("%")[1][:2] if c.isalpha()
     )
+
+
+# ---------------------------------------------------------------------------
+# Scheme allow-list (defence-in-depth)
+# ---------------------------------------------------------------------------
+def test_allowed_schemes_constant() -> None:
+    assert "http" in ALLOWED_SCHEMES
+    assert "https" in ALLOWED_SCHEMES
+    assert isinstance(ALLOWED_SCHEMES, frozenset)
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "data:text/html,hi",
+        "gopher://example.com/",
+        "ftp://example.com/pub/file",
+    ],
+)
+def test_disallowed_schemes_raise(bad_url: str) -> None:
+    with pytest.raises(ValueError, match="disallowed scheme"):
+        canonicalize(bad_url)
+
+
+def test_uppercase_http_still_allowed() -> None:
+    assert canonicalize("HTTP://Example.com/") == "http://example.com/"
+    assert canonicalize("HTTPS://Example.com/") == "https://example.com/"

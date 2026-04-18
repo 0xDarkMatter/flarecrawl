@@ -26,7 +26,16 @@ from __future__ import annotations
 import re
 from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
 
-__all__ = ["TRACKING_PARAMS", "canonicalize"]
+__all__ = ["ALLOWED_SCHEMES", "TRACKING_PARAMS", "canonicalize"]
+
+
+#: Scheme allow-list. Only http(s) URLs pass canonicalisation — any
+#: other scheme (``file:``, ``javascript:``, ``data:``, ``ftp:``,
+#: ``gopher:`` etc.) raises ``ValueError``. Upstream callers that
+#: already filter schemes will rarely trip this, but the defence is in
+#: depth: a single missed filter cannot smuggle a bad URL into the
+#: frontier fingerprint or domain registry.
+ALLOWED_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 
 
 #: Default deny-list of query parameters dropped during canonicalisation.
@@ -127,6 +136,8 @@ def canonicalize(url: str) -> str:
         raise ValueError(f"missing scheme in url: {url!r}")
 
     scheme = parts.scheme.lower()
+    if scheme not in ALLOWED_SCHEMES:
+        raise ValueError(f"disallowed scheme: {scheme}")
 
     # Host + port.
     host = _normalise_host(parts.netloc)
