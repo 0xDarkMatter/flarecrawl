@@ -116,6 +116,11 @@
 | Auth status | `flarecrawl auth status --json` |
 | Cache status | `flarecrawl cache status --json` |
 | Clear cache | `flarecrawl cache clear` |
+| Authenticated BFS crawl (Frontier v2) | `flarecrawl authcrawl URL --max-attempts 3 --adaptive-delay` |
+| Resume interrupted crawl | `flarecrawl authcrawl URL --resume JOB_ID` |
+| Weekly-refresh crawl | `flarecrawl authcrawl URL --refresh-days 7` |
+| Enable OpenTelemetry tracing | `flarecrawl authcrawl URL --tracing json` |
+| Inspect dead-letter URLs | `flarecrawl frontier dead-letter JOB_ID --json` |
 
 ## Authentication
 
