@@ -387,6 +387,27 @@ class AuthenticatedCrawler:
                     counts=counts,
                 )
 
+    def _error_result(
+        self, item: FrontierItem, elapsed_s: float, err: str
+    ) -> CrawlResult:
+        """Build a ``CrawlResult`` for a failed fetch.
+
+        ``elapsed_s`` is expected in **seconds** (already rounded or
+        not — we round to 2dp here). ``err`` is the terminal error
+        label that callers would otherwise paste verbatim into the
+        result. Keeps the five near-identical failure branches of
+        ``_fetch_item_body`` from drifting.
+        """
+        return CrawlResult(
+            url=item.url,
+            depth=item.depth,
+            content=None,
+            content_type="",
+            links_found=[],
+            elapsed=round(elapsed_s, 2),
+            error=err,
+        )
+
     async def _fetch_item(
         self,
         session: httpx.AsyncClient,
@@ -440,38 +461,20 @@ class AuthenticatedCrawler:
             except (httpx.TimeoutException, httpx.ConnectError) as exc:
                 await frontier.queue.mark_retry(item.fp, type(exc).__name__)
                 await frontier.domains.bump_fail(item.hostname)
-                return CrawlResult(
-                    url=item.url,
-                    depth=item.depth,
-                    content=None,
-                    content_type="",
-                    links_found=[],
-                    elapsed=round(time.monotonic() - start, 2),
-                    error=type(exc).__name__,
+                return self._error_result(
+                    item, time.monotonic() - start, type(exc).__name__
                 )
             except httpx.HTTPError as exc:
                 await frontier.queue.mark_dead(item.fp, repr(exc))
                 await frontier.domains.bump_fail(item.hostname)
-                return CrawlResult(
-                    url=item.url,
-                    depth=item.depth,
-                    content=None,
-                    content_type="",
-                    links_found=[],
-                    elapsed=round(time.monotonic() - start, 2),
-                    error=str(exc),
+                return self._error_result(
+                    item, time.monotonic() - start, str(exc)
                 )
             except Exception as exc:  # pragma: no cover — defensive
                 await frontier.queue.mark_dead(item.fp, repr(exc))
                 await frontier.domains.bump_fail(item.hostname)
-                return CrawlResult(
-                    url=item.url,
-                    depth=item.depth,
-                    content=None,
-                    content_type="",
-                    links_found=[],
-                    elapsed=round(time.monotonic() - start, 2),
-                    error=repr(exc),
+                return self._error_result(
+                    item, time.monotonic() - start, repr(exc)
                 )
 
             elapsed_ms = (time.monotonic() - start) * 1000.0
@@ -509,15 +512,7 @@ class AuthenticatedCrawler:
                         pass
                 await frontier.queue.mark_retry(item.fp, f"http_{sc}")
                 await frontier.domains.bump_fail(item.hostname)
-                return CrawlResult(
-                    url=item.url,
-                    depth=item.depth,
-                    content=None,
-                    content_type="",
-                    links_found=[],
-                    elapsed=round(elapsed_ms / 1000.0, 2),
-                    error=f"http_{sc}",
-                )
+                return self._error_result(item, elapsed_ms / 1000.0, f"http_{sc}")
 
             # Other 4xx — terminal dead.
             if 400 <= sc < 500:
@@ -528,15 +523,7 @@ class AuthenticatedCrawler:
                     response_ms=elapsed_ms,
                     bytes_received=content_len,
                 )
-                return CrawlResult(
-                    url=item.url,
-                    depth=item.depth,
-                    content=None,
-                    content_type="",
-                    links_found=[],
-                    elapsed=round(elapsed_ms / 1000.0, 2),
-                    error=f"http_{sc}",
-                )
+                return self._error_result(item, elapsed_ms / 1000.0, f"http_{sc}")
 
             # 2xx / 3xx success.
             ct = resp.headers.get("content-type", "text/html").split(";")[0].strip()
