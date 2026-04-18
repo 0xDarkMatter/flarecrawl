@@ -300,3 +300,49 @@ Deferred to a follow-up branch:
   the 45 existing authcrawl tests and was not worth squeezing into this
   pass.
 * Items 14 (process pool), 16 (OpenTelemetry), 17 (Forma journal).
+
+---
+
+## Frontier v2 (branch `perf/frontier-v2`)
+
+Replaces v1 `frontier.py` with a role-separated engine built from the
+spec in `docs/research/FRONTIER-COMPARISON.md`. All code written from
+scratch; no copy-paste from surveyed projects.
+
+**Design (DSP)**
+- Module split: `canon.py` (URL canonicalisation), `fingerprint.py`
+  (blake2b-16 dedup key), `frontier_v2.py` (engine with four role
+  classes — `FrontierQueue`, `VisitedStore`, `DomainRegistry`,
+  `DeadLetter` — fronted by `Frontier` façade), optional
+  `dead_letter.py` CLI helper.
+- Dedup key is `blake2b(method || 0x00 || canonical_url || 0x00 ||
+  blake2b16(body), digest_size=16)` stored as a `BLOB PRIMARY KEY`. Raw
+  URL moves to a data column.
+- Canonicalisation deny-list is exported as `TRACKING_PARAMS` so
+  callers can extend.
+- Scheduler uses a CTE + `ROW_NUMBER() PARTITION BY hostname` to yield
+  at most one URL per host per batch (round-robin fairness).
+- Retry budget: `RETRY_CODES = {408, 429, 500, 502, 503, 504, 522,
+  524}`, exponential backoff `2 ** attempts` capped at 600s, dead
+  after `max_attempts` (default 3).
+- Snooze (≤120s, per-response) vs sick (default 600s, after 10
+  consecutive fails). Success resets `sick_until` but not `snooze_until`.
+- Adaptive delay: EWMA of response_ms with `delayFactor=2.0`,
+  clamped to [200ms, 10_000ms], opt-in via `adaptive_mode=True`.
+- Resume: `Frontier.open(..., resume=True)` rolls back `in_flight →
+  pending` and logs the count via stdlib logging.
+- Schema version `2` seeded into `meta` alongside `canon_version=1`
+  and `fp_algo=blake2b-16`.
+
+**Spec (acceptance)**
+- See "Recommended spec for flarecrawl frontier v2" in
+  `docs/research/FRONTIER-COMPARISON.md`.
+- Golden canonicalisation:
+  `canonicalize("http://Example.COM:80/a?b=2&utm_source=x&a=1#top")
+   == "http://example.com/a?a=1&b=2"`.
+
+**Migration**
+- Existing `*.sqlite` frontier files from v1 are incompatible
+  (different primary key, missing columns) and safe to delete.
+- `delta.py` and the one-line reference to `FrontierItem` are
+  re-pointed at `frontier_v2` during the migration.
