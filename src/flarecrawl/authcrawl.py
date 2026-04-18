@@ -46,6 +46,17 @@ class CrawlConfig:
     # When True, skip robots.txt checks for every URL. CLI exposes this
     # via --ignore-robots on ``crawl`` / ``download``.
     ignore_robots: bool = False
+    # Resume an existing Frontier job. When set, ``Frontier.open`` is
+    # invoked with ``resume=True`` and the seed URL is not re-queued.
+    resume_job_id: str | None = None
+    # Per-URL attempt cap before a row transitions to ``dead``.
+    max_attempts: int = 3
+    # When True, DomainRegistry snoozes each host after every OK fetch
+    # using an EWMA-based delay (instead of the fixed ``delay`` below).
+    adaptive_delay: bool = False
+    # Days until a ``visited`` row is considered stale and eligible for
+    # a revalidation fetch (used by weekly delta refresh jobs).
+    refresh_days: int = 7
 
 
 @dataclass(slots=True)
