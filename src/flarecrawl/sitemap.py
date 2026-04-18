@@ -8,6 +8,7 @@ for seeding into the crawl frontier with a high priority.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -17,8 +18,16 @@ from selectolax.parser import HTMLParser
 
 from . import DEFAULT_USER_AGENT
 
+logger = logging.getLogger(__name__)
+
 _SITEMAP_RE = re.compile(r"^\s*Sitemap:\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 _FETCH_TIMEOUT = 15.0
+
+#: Hard cap on a single sitemap response body. The sitemap protocol
+#: limits uncompressed sitemaps to 50 MiB but most are well under
+#: 10 MiB. 10 MiB balances "accept realistic real-world sitemaps"
+#: with "don't let a hostile origin exhaust memory".
+MAX_SITEMAP_BYTES = 10 * 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -28,10 +37,11 @@ class SitemapEntry:
 
 
 async def _get(
-    url: str, client: httpx.AsyncClient, user_agent: str
+    url: str, client: httpx.AsyncClient, user_agent: str,
+    *, max_bytes: int | None = None,
 ) -> httpx.Response | None:
     try:
-        return await client.get(
+        resp = await client.get(
             url,
             headers={"User-Agent": user_agent},
             timeout=_FETCH_TIMEOUT,
@@ -39,6 +49,20 @@ async def _get(
         )
     except (httpx.HTTPError, httpx.InvalidURL):
         return None
+    if max_bytes is not None:
+        cl = resp.headers.get("content-length")
+        if cl is not None:
+            try:
+                if int(cl) > max_bytes:
+                    logger.debug(
+                        "sitemap at %s exceeds cap (%s bytes); skipping",
+                        url,
+                        cl,
+                    )
+                    return None
+            except ValueError:
+                pass
+    return resp
 
 
 def _origin(url: str) -> str:
@@ -123,7 +147,9 @@ async def discover_sitemap_urls(
             if sm_url in seen_sitemaps:
                 continue
             seen_sitemaps.add(sm_url)
-            resp = await _get(sm_url, client, user_agent)
+            resp = await _get(
+                sm_url, client, user_agent, max_bytes=MAX_SITEMAP_BYTES
+            )
             if resp is None or resp.status_code >= 400:
                 continue
             parsed = parse_sitemap_xml(resp.text)

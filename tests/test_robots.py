@@ -178,3 +178,55 @@ def test_authcrawl_crawl_loop_skips_denied_urls():
     urls = asyncio.run(run())
     # Seed URL blocked by robots — nothing yielded.
     assert urls == []
+
+
+# ---------------------------------------------------------------------------
+# Response size cap (S3)
+# ---------------------------------------------------------------------------
+def _sized_handler(body: str, content_length: int, status: int = 200):
+    def h(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status,
+            text=body,
+            headers={"content-length": str(content_length)},
+        )
+    return h
+
+
+def test_robots_oversize_content_length_skipped():
+    from flarecrawl.robots import MAX_ROBOTS_BYTES
+
+    async def run():
+        # Claim 10 MiB via content-length header; body itself is tiny
+        # but the cap check should short-circuit before parsing.
+        async with _client(_sized_handler(
+            body=SAMPLE_ROBOTS, content_length=MAX_ROBOTS_BYTES + 1
+        )) as c:
+            cache = RobotsCache(user_agent="TestBot")
+            # Allow-all: nothing is restricted when fetch was skipped.
+            assert await cache.can_fetch(
+                "https://example.com/private/foo", client=c
+            )
+
+    asyncio.run(run())
+
+
+def test_robots_within_cap_parses_normally():
+    from flarecrawl.robots import MAX_ROBOTS_BYTES
+
+    async def run():
+        async with _client(_sized_handler(
+            body=SAMPLE_ROBOTS, content_length=MAX_ROBOTS_BYTES - 1
+        )) as c:
+            cache = RobotsCache(user_agent="TestBot")
+            if _PROTEGO_AVAILABLE:
+                # Normal parse → /private/ disallowed.
+                assert not await cache.can_fetch(
+                    "https://example.com/private/foo", client=c
+                )
+            else:
+                assert await cache.can_fetch(
+                    "https://example.com/private/foo", client=c
+                )
+
+    asyncio.run(run())

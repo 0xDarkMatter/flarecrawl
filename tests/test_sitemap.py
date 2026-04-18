@@ -127,3 +127,55 @@ def test_discover_follows_sitemap_index():
         "https://example.com/c",
         "https://example.com/d",
     }
+
+
+# ---------------------------------------------------------------------------
+# Response size cap (S3)
+# ---------------------------------------------------------------------------
+def test_sitemap_oversize_content_length_skipped():
+    from flarecrawl.sitemap import MAX_SITEMAP_BYTES
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        # Pretend the sitemap is bigger than the cap.
+        return httpx.Response(
+            200,
+            text=SITEMAP_XML,
+            headers={"content-length": str(MAX_SITEMAP_BYTES + 1)},
+        )
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as c:
+            entries = await discover_sitemap_urls(
+                "https://example.com", client=c, follow_index=False
+            )
+            assert entries == []
+
+    asyncio.run(run())
+
+
+def test_sitemap_within_cap_parses_normally():
+    from flarecrawl.sitemap import MAX_SITEMAP_BYTES
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            text=SITEMAP_XML,
+            headers={"content-length": str(MAX_SITEMAP_BYTES - 1)},
+        )
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as c:
+            entries = await discover_sitemap_urls(
+                "https://example.com", client=c, follow_index=False
+            )
+            assert len(entries) == 2
+
+    asyncio.run(run())

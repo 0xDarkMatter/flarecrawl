@@ -32,6 +32,13 @@ _DEFAULT_TTL = 3600.0  # 1h
 _FETCH_TIMEOUT = 10.0
 _FALLBACK_LOGGED = False
 
+#: Hard cap on robots.txt response body. The spec-bound upper limit
+#: (Google's reference implementation) is 500 KiB, but real-world
+#: servers occasionally return multi-megabyte files. 2 MiB is a
+#: generous ceiling that still protects the client from unbounded
+#: memory growth on a hostile origin.
+MAX_ROBOTS_BYTES = 2 * 1024 * 1024
+
 
 def _warn_fallback_once() -> None:
     global _FALLBACK_LOGGED
@@ -83,6 +90,19 @@ class RobotsCache:
         if resp.status_code >= 400:
             # 4xx/5xx on robots.txt → allow-all per polite-crawler convention.
             return None
+        # Oversized body → allow-all rather than risk an OOM.
+        cl = resp.headers.get("content-length")
+        if cl is not None:
+            try:
+                if int(cl) > MAX_ROBOTS_BYTES:
+                    logger.debug(
+                        "robots.txt at %s exceeds cap (%s bytes); skipping",
+                        url,
+                        cl,
+                    )
+                    return None
+            except ValueError:
+                pass
         if not _PROTEGO_AVAILABLE:
             return None
         try:
