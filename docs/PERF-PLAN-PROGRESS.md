@@ -443,3 +443,97 @@ an API break. Frontier is owned per-invocation via `async with`.
 downstream CLI consumers already stream results. New integration tests
 live in `tests/test_authcrawl_wire.py`; they assert on the frontier DB
 rather than on crawler internals.
+
+## Phase 4 + Cleanup
+
+**Design sketch (pre-code).** The phase-4 branch lands three
+previously-deferred items — OpenTelemetry tracing (item 16), Forma
+journal integration (item 17), a native `flarecrawl authcrawl`
+subcommand that exposes the new `CrawlConfig` fields — plus a cleanup
+pass that retires the orphan `AuthenticatedCrawler._fetch_page`
+replaced by `_fetch_item` in commit `056a585`.
+
+**Tracing (`src/flarecrawl/telemetry.py`).** A thin shim around the
+OTel SDK:
+
+- `init_tracing(service_name, exporter="none")` is the single
+  entry-point; it is idempotent and falls back to a no-op tracer when
+  OTel is not installed (warn-once, not fatal — perf is an optional
+  extra).
+- Exporters: `"none"` (default, zero overhead), `"console"` (debug),
+  `"json"` (NDJSON under `~/.cache/flarecrawl/traces/<date>.ndjson`,
+  one span per line, suitable for Forma journal ingestion), `"otlp"`
+  (gRPC to `$OTEL_EXPORTER_OTLP_ENDPOINT`).
+- `@traced(name)` decorates sync + async callables; `start_span(name,
+  **attrs)` is a context manager wrapper that accepts keyword attrs
+  and coerces them to OTel-friendly types.
+- `HTTPXClientInstrumentor().instrument()` is invoked once per
+  `init_tracing` call — guarded by a module-level flag so re-init is
+  a no-op.
+
+**Authcrawl wire-in.** Three span sites, none of which change the
+existing behaviour when tracing is off (the no-op tracer returns a
+sentinel span context that short-circuits attribute writes):
+
+- `_fetch_item` → `fetch` span (`flarecrawl.job_id`, `url.domain`,
+  `http.status`, `response_ms`).
+- link extraction inside `_fetch_item` → `parse` span.
+- `frontier.queue.next_batch(...)` → `schedule` span (`batch_size`).
+
+`frontier_v2.py` is deliberately untouched — library purity. Tracing
+is a crawler concern, not a frontier concern.
+
+**Journal (`src/flarecrawl/journal.py`).** Lifecycle-event emitter:
+
+- `emit_event(action, *, domain="crawl", target, level, duration_ms,
+  counts, msg)` writes an NDJSON record with ISO-8601 UTC timestamp
+  and `source="flarecrawl"`.
+- If `forma log emit` is on `$PATH` we shell out to it (one-shot
+  `subprocess.run`, 2s timeout, failures swallowed). Otherwise we
+  append to `${FORMA_HOME:-~/.forma}/logs/<date>.jsonl`. If neither
+  path is writable the call silently no-ops — we never crash a crawl
+  because the journal is broken.
+- Wire points: `AuthenticatedCrawler.crawl()` enter → `started`;
+  natural exit → `completed` with `counts={urls, dead, unchanged}`;
+  shutdown interrupt → `interrupted` with roll-back counts; exception
+  → `failed` with `str(exc)`.
+
+**CLI surface (`flarecrawl authcrawl`).** Mirrors `flarecrawl crawl`
+shape but drives `AuthenticatedCrawler` directly (no Cloudflare
+round-trip). Adds the four `CrawlConfig` fields landed in `6caaec2`
+(`--resume`, `--max-attempts`, `--adaptive-delay / --no-adaptive-
+delay`, `--refresh-days`) plus `--tracing` from item 16. The NDJSON
+default matches `crawl --ndjson` so downstream tooling stays uniform.
+
+**Cleanup — `_fetch_page` retirement.** Commit `056a585` replaced the
+old `_fetch_page` code-path with `_fetch_item`, but the method and two
+test references survived. This branch:
+
+1. Rewrites `TestRateLimiterEnforcesRate` (in `test_authcrawl.py`) and
+   `test_default_user_agent.py` against `_fetch_item` + a stub
+   `FrontierItem`.
+2. Deletes `AuthenticatedCrawler._fetch_page` (56 lines).
+
+**Outcome table.**
+
+| Concern                              | Status   | New tests | Notes                                              |
+|--------------------------------------|----------|-----------|----------------------------------------------------|
+| Item 16 — OpenTelemetry tracing      | landed   | 9         | `init_tracing(exporter=...)`, JSON exporter, decorator coverage |
+| Item 17 — Forma journal              | landed   | 6         | Shell-out to `forma log emit`, NDJSON fallback, lifecycle wiring |
+| CLI — `flarecrawl authcrawl`         | landed   | 5         | `--resume`, `--max-attempts`, `--adaptive-delay`, `--refresh-days`, `--tracing` |
+| Cleanup — retire `_fetch_page`       | landed   | 0         | Tests ported; method + 56 lines deleted           |
+| Item 14 — worker pool refactor       | deferred | 0         | Still blocked on semaphore→queue redesign; see main plan |
+
+**Version + docs.** Version bumped to `0.17.0` in `pyproject.toml`
+and `src/flarecrawl/__init__.py`. README "Recent Updates" table
+gains a v0.17.0 row dated 2026-04-18 summarising the perf campaign
+landing features (uvloop conditional bootstrap, selectolax,
+orjson+json_compat, `@dataclass(slots=True)` across 13 classes,
+httpx pool tuning 100/50, per-domain rate limiter, protego, default
+FlarecrawlBot UA, frontier v2, tracing, journal, `authcrawl`
+subcommand, 200+ new tests).
+
+**Non-negotiables held.** 944-test baseline still green; no edits to
+`sanitise.py`, `paywall.py`, `frontier_v2.py`, `canon.py`, or
+`fingerprint.py`.
+
