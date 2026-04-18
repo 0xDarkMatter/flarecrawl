@@ -1,6 +1,9 @@
 """Tests for authenticated BFS crawler."""
 
 import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
+import pytest
 
 from flarecrawl.authcrawl import (
     CrawlConfig,

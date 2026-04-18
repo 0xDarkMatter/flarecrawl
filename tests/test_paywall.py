@@ -1,5 +1,8 @@
 """Tests for the paywall bypass cascade module."""
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 import json
 from unittest.mock import MagicMock, patch
 

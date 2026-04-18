@@ -1,5 +1,8 @@
 """Tests for HTML extraction utilities."""
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 from flarecrawl.extract import (
     clean_content,
     clean_html,

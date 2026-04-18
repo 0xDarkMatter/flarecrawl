@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 import asyncio
 from pathlib import Path
 

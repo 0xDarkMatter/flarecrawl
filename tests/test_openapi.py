@@ -1,5 +1,8 @@
 """Tests for OpenAPI/Swagger spec discovery and validation."""
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 import json
 
 import pytest

@@ -8,6 +8,9 @@ in-memory attribute on the crawler.
 
 from __future__ import annotations
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 import asyncio
 import os
 import tempfile

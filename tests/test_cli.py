@@ -1,5 +1,8 @@
 """CLI tests for Flarecrawl."""
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 import json
 
 from typer.testing import CliRunner

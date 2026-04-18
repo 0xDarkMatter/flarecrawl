@@ -7,6 +7,9 @@ through into ``CrawlConfig`` without any real network I/O.
 
 from __future__ import annotations
 
+import pytest
+pytest.importorskip("selectolax", reason="optional dep")
+pytest.importorskip("aiosqlite", reason="optional dep")
 from typing import Any
 
 import pytest
