@@ -27,6 +27,7 @@ from .frontier_v2 import RETRY_CODES, Frontier, FrontierItem
 from .ratelimit import DomainRateLimiter
 from .robots import RobotsCache
 from . import shutdown as _shutdown
+from .journal import emit_event
 from .telemetry import start_span
 
 logger = logging.getLogger(__name__)
@@ -220,6 +221,19 @@ class AuthenticatedCrawler:
         except Exception as exc:  # pragma: no cover — best-effort
             logger.debug("shutdown handler install failed: %r", exc)
         page_count = 0
+        # Counters for the completion event.
+        ok_count = 0
+        dead_count = 0
+        unchanged_count = 0
+        target_host = urlparse(cfg.seed_url).hostname or cfg.seed_url
+        _t_start = time.monotonic()
+        emit_event(
+            "started",
+            target=target_host,
+            msg=f"job_id={job_id}",
+        )
+        _interrupted = False
+        _exception: BaseException | None = None
         try:
             async with self._build_session() as session:
                 async with await Frontier.open(
@@ -243,6 +257,7 @@ class AuthenticatedCrawler:
                                 file=sys.stderr,
                                 flush=True,
                             )
+                            _interrupted = True
                             break
                         with start_span(
                             "schedule",
@@ -302,8 +317,14 @@ class AuthenticatedCrawler:
                             if isinstance(result, BaseException):
                                 continue
                             if result is None:
+                                # 304 Not Modified — counted as unchanged.
+                                unchanged_count += 1
                                 continue
                             page_count += 1
+                            if result.error is None:
+                                ok_count += 1
+                            else:
+                                dead_count += 1
                             yield result
                             if page_count >= cfg.max_pages:
                                 break
@@ -331,8 +352,40 @@ class AuthenticatedCrawler:
 
                         if cfg.delay > 0 and not cfg.adaptive_delay:
                             await asyncio.sleep(cfg.delay)
+        except BaseException as exc:
+            _exception = exc
+            raise
         finally:
-            pass
+            duration_ms = int((time.monotonic() - _t_start) * 1000)
+            counts = {
+                "urls": ok_count,
+                "dead": dead_count,
+                "unchanged": unchanged_count,
+            }
+            if _exception is not None and not isinstance(_exception, GeneratorExit):
+                emit_event(
+                    "failed",
+                    target=target_host,
+                    level="error",
+                    duration_ms=duration_ms,
+                    counts=counts,
+                    msg=str(_exception),
+                )
+            elif _interrupted:
+                emit_event(
+                    "interrupted",
+                    target=target_host,
+                    level="warn",
+                    duration_ms=duration_ms,
+                    counts={**counts, "in_flight_rolled_back": 0},
+                )
+            else:
+                emit_event(
+                    "completed",
+                    target=target_host,
+                    duration_ms=duration_ms,
+                    counts=counts,
+                )
 
     async def _fetch_page(
         self,
