@@ -8,7 +8,13 @@
       "Glob(*)",
       "Grep(*)",
       "Skill(pigeon)",
-      "Skill(pigeon:*)"
+      "Skill(pigeon:*)",
+      "Skill(forma-architect)",
+      "Skill(forma-architect:*)",
+      "Skill(forma-verifier)",
+      "Skill(forma-verifier:*)",
+      "Skill(forma-inspector)",
+      "Skill(forma-inspector:*)"
     ]
   }
 }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import httpx
 
-from .frontier import FrontierItem
+from .frontier_v2 import FrontierItem
 
 
 def conditional_headers(item: FrontierItem) -> dict[str, str]:

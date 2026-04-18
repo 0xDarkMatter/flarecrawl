@@ -1,4 +1,8 @@
-"""Tests for delta-crawl helpers (item 11)."""
+"""Tests for delta-crawl helpers (item 11).
+
+Re-pointed at ``flarecrawl.frontier_v2.FrontierItem`` as part of the
+frontier v2 migration.
+"""
 
 from __future__ import annotations
 
@@ -7,41 +11,54 @@ import asyncio
 import httpx
 
 from flarecrawl.delta import conditional_headers, is_unchanged
-from flarecrawl.frontier import FrontierItem
+from flarecrawl.frontier_v2 import FrontierItem
+
+
+def _item(url: str, etag: str | None = None, last_modified: str | None = None) -> FrontierItem:
+    return FrontierItem(
+        fp=b"\x00" * 16,
+        url=url,
+        hostname="example",
+        method="GET",
+        depth=0,
+        attempts=0,
+        etag=etag,
+        last_modified=last_modified,
+    )
 
 
 def test_no_prior_state_no_headers():
-    assert conditional_headers(FrontierItem("https://a/", 0)) == {}
+    assert conditional_headers(_item("https://a/")) == {}
 
 
 def test_etag_only():
-    item = FrontierItem("https://a/", 0, etag='"abc"')
-    assert conditional_headers(item) == {"If-None-Match": '"abc"'}
+    assert conditional_headers(_item("https://a/", etag='"abc"')) == {
+        "If-None-Match": '"abc"'
+    }
 
 
 def test_last_modified_only():
-    item = FrontierItem("https://a/", 0, last_modified="Wed, 21 Oct")
-    assert conditional_headers(item) == {"If-Modified-Since": "Wed, 21 Oct"}
+    assert conditional_headers(_item("https://a/", last_modified="Wed, 21 Oct")) == {
+        "If-Modified-Since": "Wed, 21 Oct"
+    }
 
 
 def test_both_headers():
-    item = FrontierItem("https://a/", 0, etag='"e"', last_modified="Wed")
-    headers = conditional_headers(item)
+    headers = conditional_headers(
+        _item("https://a/", etag='"e"', last_modified="Wed")
+    )
     assert headers == {"If-None-Match": '"e"', "If-Modified-Since": "Wed"}
 
 
 def test_is_unchanged_304():
-    resp = httpx.Response(304)
-    assert is_unchanged(resp)
+    assert is_unchanged(httpx.Response(304))
 
 
 def test_is_unchanged_200_false():
-    resp = httpx.Response(200, text="fresh")
-    assert not is_unchanged(resp)
+    assert not is_unchanged(httpx.Response(200, text="fresh"))
 
 
-def test_conditional_request_returns_304(tmp_path):
-    """End-to-end: a server honouring If-None-Match replies 304."""
+def test_conditional_request_returns_304():
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -56,12 +73,10 @@ def test_conditional_request_returns_304(tmp_path):
     async def run():
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(transport=transport) as client:
-            # First fetch: no headers, get 200 + etag.
             resp1 = await client.get("https://example.com/a")
             assert resp1.status_code == 200
             etag = resp1.headers["etag"]
-            # Second fetch with If-None-Match.
-            item = FrontierItem("https://example.com/a", 0, etag=etag)
+            item = _item("https://example.com/a", etag=etag)
             resp2 = await client.get(
                 "https://example.com/a", headers=conditional_headers(item)
             )
