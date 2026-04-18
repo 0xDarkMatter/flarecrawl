@@ -270,6 +270,123 @@ class AuthenticatedCrawler:
             runnable.append(item)
         return runnable
 
+    async def _run_batch(
+        self,
+        runnable: list[FrontierItem],
+        session: httpx.AsyncClient,
+        frontier: Frontier,
+        job_id: str,
+    ) -> list[CrawlResult | None]:
+        """Fan out ``_fetch_item`` over ``runnable`` with a bounded pool.
+
+        Returns the list of successful results (a ``CrawlResult`` per
+        fetched URL or ``None`` for a 304 short-circuit). ``BaseException``
+        instances raised inside tasks are swallowed here — matching the
+        pre-refactor behaviour — so the caller can stay exception-free.
+        """
+        cfg = self._config
+        semaphore = asyncio.Semaphore(cfg.workers)
+        tasks = [
+            self._fetch_item(session, item, frontier, semaphore, job_id)
+            for item in runnable
+        ]
+        raw = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r for r in raw if not isinstance(r, BaseException)]
+
+    async def _ingest_results(
+        self,
+        results: list[CrawlResult | None],
+        frontier: Frontier,
+        counts: dict[str, int],
+        budget_remaining: int,
+    ) -> AsyncIterator[CrawlResult]:
+        """Emit results to the caller and seed outbound links.
+
+        ``counts`` is mutated in-place with ``ok`` / ``dead`` /
+        ``unchanged`` tallies. The generator stops after
+        ``budget_remaining`` non-None results are yielded — matching
+        the ``page_count >= max_pages`` short-circuit of the legacy
+        inline loop. Seeding for the budget-hitting result is skipped,
+        preserving the original ordering of ``yield`` → cap-check →
+        seed.
+        """
+        cfg = self._config
+        emitted = 0
+        for result in results:
+            if result is None:
+                # 304 Not Modified — counted as unchanged.
+                counts["unchanged"] += 1
+                continue
+            if result.error is None:
+                counts["ok"] += 1
+            else:
+                counts["dead"] += 1
+            emitted += 1
+            yield result
+            if emitted >= budget_remaining:
+                break
+            if result.error is None and result.depth < cfg.max_depth:
+                for link in result.links_found:
+                    if _should_crawl(
+                        link,
+                        cfg.seed_url,
+                        cfg.include_patterns,
+                        cfg.exclude_patterns,
+                    ):
+                        try:
+                            await frontier.queue.add(
+                                link,
+                                depth=result.depth + 1,
+                                max_attempts=cfg.max_attempts,
+                            )
+                        except Exception as exc:  # pragma: no cover
+                            logger.debug("queue.add failed: %r", exc)
+
+    def _emit_terminal(
+        self,
+        reason: str,
+        target_host: str,
+        duration_ms: int,
+        counts: dict[str, int],
+        msg: str | None = None,
+    ) -> None:
+        """Emit the lifecycle journal event for crawl termination.
+
+        ``reason`` is one of ``"completed"``, ``"interrupted"``,
+        ``"failed"``. The counts dict is translated into the legacy
+        journal-event shape (``urls`` = OKs, plus ``dead`` and
+        ``unchanged``).
+        """
+        event_counts = {
+            "urls": counts.get("ok", 0),
+            "dead": counts.get("dead", 0),
+            "unchanged": counts.get("unchanged", 0),
+        }
+        if reason == "failed":
+            emit_event(
+                "failed",
+                target=target_host,
+                level="error",
+                duration_ms=duration_ms,
+                counts=event_counts,
+                msg=msg or "",
+            )
+        elif reason == "interrupted":
+            emit_event(
+                "interrupted",
+                target=target_host,
+                level="warn",
+                duration_ms=duration_ms,
+                counts={**event_counts, "in_flight_rolled_back": 0},
+            )
+        else:
+            emit_event(
+                "completed",
+                target=target_host,
+                duration_ms=duration_ms,
+                counts=event_counts,
+            )
+
     async def crawl(self) -> AsyncIterator[CrawlResult]:
         """BFS crawl from seed_url, yielding CrawlResult per page.
 
@@ -281,146 +398,76 @@ class AuthenticatedCrawler:
         cfg = self._config
         resuming = cfg.resume_job_id is not None
         job_id = cfg.resume_job_id or self._generate_job_id()
-        # Install shutdown handlers for this crawl. Best-effort.
         try:
             _shutdown.install_signal_handlers()
         except Exception as exc:  # pragma: no cover — best-effort
             logger.debug("shutdown handler install failed: %r", exc)
-        page_count = 0
-        # Counters for the completion event.
-        ok_count = 0
-        dead_count = 0
-        unchanged_count = 0
         target_host = urlparse(cfg.seed_url).hostname or cfg.seed_url
-        _t_start = time.monotonic()
-        emit_event(
-            "started",
-            target=target_host,
-            msg=f"job_id={job_id}",
-        )
-        _interrupted = False
-        _exception: BaseException | None = None
+        counts: dict[str, int] = {"ok": 0, "dead": 0, "unchanged": 0}
+        page_count = 0
+        t_start = time.monotonic()
+        interrupted = False
+        exc_raised: BaseException | None = None
+        emit_event("started", target=target_host, msg=f"job_id={job_id}")
         try:
-            async with self._build_session() as session:
-                async with await Frontier.open(
-                    job_id,
-                    resume=resuming,
-                    adaptive_mode=cfg.adaptive_delay,
-                ) as frontier:
-                    if not resuming:
-                        await self._seed_frontier(frontier, session)
-
-                    while page_count < cfg.max_pages:
-                        if _shutdown.is_shutdown_requested():
-                            print(
-                                _shutdown.resume_hint(job_id),
-                                file=sys.stderr,
-                                flush=True,
-                            )
-                            _interrupted = True
-                            break
-                        with start_span(
-                            "schedule",
-                            **{
-                                "flarecrawl.phase": "schedule",
-                                "flarecrawl.job_id": job_id,
-                                "batch_size": cfg.workers,
-                            },
-                        ):
-                            batch = await frontier.queue.next_batch(cfg.workers)
-                        if not batch:
-                            break
-
-                        # Pre-filter batch: robots + same-origin/patterns.
-                        runnable = await self._prefilter_batch(
-                            batch, session, frontier
+            async with self._build_session() as session, \
+                    await Frontier.open(
+                        job_id,
+                        resume=resuming,
+                        adaptive_mode=cfg.adaptive_delay,
+                    ) as frontier:
+                if not resuming:
+                    await self._seed_frontier(frontier, session)
+                while page_count < cfg.max_pages:
+                    if _shutdown.is_shutdown_requested():
+                        print(
+                            _shutdown.resume_hint(job_id),
+                            file=sys.stderr,
+                            flush=True,
                         )
-
-                        if not runnable:
-                            # All items skipped/blocked — keep looping.
-                            continue
-
-                        semaphore = asyncio.Semaphore(cfg.workers)
-                        tasks = [
-                            self._fetch_item(session, item, frontier, semaphore, job_id)
-                            for item in runnable
-                        ]
-                        results = await asyncio.gather(
-                            *tasks, return_exceptions=True
-                        )
-
-                        for result in results:
-                            if isinstance(result, BaseException):
-                                continue
-                            if result is None:
-                                # 304 Not Modified — counted as unchanged.
-                                unchanged_count += 1
-                                continue
-                            page_count += 1
-                            if result.error is None:
-                                ok_count += 1
-                            else:
-                                dead_count += 1
-                            yield result
-                            if page_count >= cfg.max_pages:
-                                break
-
-                            if result.error is None and result.depth < cfg.max_depth:
-                                for link in result.links_found:
-                                    if _should_crawl(
-                                        link,
-                                        cfg.seed_url,
-                                        cfg.include_patterns,
-                                        cfg.exclude_patterns,
-                                    ):
-                                        try:
-                                            await frontier.queue.add(
-                                                link,
-                                                depth=result.depth + 1,
-                                                max_attempts=cfg.max_attempts,
-                                            )
-                                        except Exception as exc:  # pragma: no cover
-                                            logger.debug(
-                                                "queue.add failed: %r", exc
-                                            )
-
-                        await frontier.maybe_checkpoint()
-
-                        if cfg.delay > 0 and not cfg.adaptive_delay:
-                            await asyncio.sleep(cfg.delay)
+                        interrupted = True
+                        break
+                    with start_span(
+                        "schedule",
+                        **{
+                            "flarecrawl.phase": "schedule",
+                            "flarecrawl.job_id": job_id,
+                            "batch_size": cfg.workers,
+                        },
+                    ):
+                        batch = await frontier.queue.next_batch(cfg.workers)
+                    if not batch:
+                        break
+                    runnable = await self._prefilter_batch(batch, session, frontier)
+                    if not runnable:
+                        continue
+                    results = await self._run_batch(
+                        runnable, session, frontier, job_id
+                    )
+                    async for result in self._ingest_results(
+                        results, frontier, counts, cfg.max_pages - page_count
+                    ):
+                        page_count += 1
+                        yield result
+                    await frontier.maybe_checkpoint()
+                    if cfg.delay > 0 and not cfg.adaptive_delay:
+                        await asyncio.sleep(cfg.delay)
         except BaseException as exc:
-            _exception = exc
+            exc_raised = exc
             raise
         finally:
-            duration_ms = int((time.monotonic() - _t_start) * 1000)
-            counts = {
-                "urls": ok_count,
-                "dead": dead_count,
-                "unchanged": unchanged_count,
-            }
-            if _exception is not None and not isinstance(_exception, GeneratorExit):
-                emit_event(
-                    "failed",
-                    target=target_host,
-                    level="error",
-                    duration_ms=duration_ms,
-                    counts=counts,
-                    msg=str(_exception),
+            duration_ms = int((time.monotonic() - t_start) * 1000)
+            if exc_raised is not None and not isinstance(exc_raised, GeneratorExit):
+                self._emit_terminal(
+                    "failed", target_host, duration_ms, counts, msg=str(exc_raised)
                 )
-            elif _interrupted:
-                emit_event(
-                    "interrupted",
-                    target=target_host,
-                    level="warn",
-                    duration_ms=duration_ms,
-                    counts={**counts, "in_flight_rolled_back": 0},
+            elif interrupted:
+                self._emit_terminal(
+                    "interrupted", target_host, duration_ms, counts
                 )
             else:
-                emit_event(
-                    "completed",
-                    target=target_host,
-                    duration_ms=duration_ms,
-                    counts=counts,
+                self._emit_terminal(
+                    "completed", target_host, duration_ms, counts
                 )
 
     def _error_result(
