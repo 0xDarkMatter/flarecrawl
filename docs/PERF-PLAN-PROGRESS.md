@@ -275,3 +275,28 @@ the happy / sick / recover transitions.
 tests. Wiring them into the existing `AuthenticatedCrawler` crawl loop
 is deliberately out-of-scope to protect the 811-test baseline; a follow-up
 branch should do that under its own perf budget.
+
+### Phase 3 outcome
+
+| Item | Status | Module(s) | New tests |
+|------|--------|-----------|-----------|
+| 7 robots.txt | done, wired into authcrawl | `robots.py` | 10 |
+| 8 default UA | done, wired into authcrawl | `__init__.py`, `authcrawl.py` | 4 |
+| 9 SQLite frontier | done, library-level (not yet wired into crawl loop) | `frontier.py` | 12 |
+| 10 rbloom dedup | done, persists beside frontier DB | `_bloom_io.py` | 2 (in test_frontier) |
+| 11 delta crawl | done, library-level | `delta.py` | 7 |
+| 12 sitemap discovery | done, library-level | `sitemap.py` | 5 |
+| 13 graceful shutdown | done, library-level | `shutdown.py` | 7 |
+| 15 circuit breaker | done, embedded in frontier | `frontier.py` | 3 (in test_frontier) |
+
+End-of-phase count: **858 passed, 11 skipped, 1 pre-existing failure**
+(`test_rules_path`, unrelated path-wrap). Delta from phase-2 baseline: **+47
+tests, 0 regressions**.
+
+Deferred to a follow-up branch:
+* Threading `Frontier` / delta / sitemap / shutdown through the BFS loop
+  in `authcrawl.AuthenticatedCrawler.crawl()` (and adding `--resume
+  JOB_ID` to `flarecrawl crawl`) — carries meaningful risk of churning
+  the 45 existing authcrawl tests and was not worth squeezing into this
+  pass.
+* Items 14 (process pool), 16 (OpenTelemetry), 17 (Forma journal).
