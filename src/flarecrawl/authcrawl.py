@@ -387,56 +387,6 @@ class AuthenticatedCrawler:
                     counts=counts,
                 )
 
-    async def _fetch_page(
-        self,
-        session: httpx.AsyncClient,
-        url: str,
-        depth: int,
-        semaphore: asyncio.Semaphore,
-    ) -> CrawlResult:
-        """Fetch a single page and extract content + links."""
-        async with semaphore:
-            start = time.time()
-            try:
-                if self._rate_limiter is not None:
-                    async with self._rate_limiter.for_url(url):
-                        resp = await session.get(url)
-                else:
-                    resp = await session.get(url)
-                resp.raise_for_status()
-                ct = resp.headers.get("content-type", "text/html").split(";")[0].strip()
-                html = resp.text
-                elapsed = round(time.time() - start, 2)
-
-                links = _extract_links(html, url) if "html" in ct else []
-
-                if self._config.format == "html":
-                    content = html
-                elif self._config.format == "markdown":
-                    main_html = extract_main_content(html)
-                    content = html_to_markdown(main_html)
-                else:
-                    content = html
-
-                return CrawlResult(
-                    url=url,
-                    depth=depth,
-                    content=content,
-                    content_type=ct,
-                    links_found=links,
-                    elapsed=elapsed,
-                )
-            except httpx.HTTPError as e:
-                return CrawlResult(
-                    url=url,
-                    depth=depth,
-                    content=None,
-                    content_type="",
-                    links_found=[],
-                    elapsed=round(time.time() - start, 2),
-                    error=str(e),
-                )
-
     async def _fetch_item(
         self,
         session: httpx.AsyncClient,
