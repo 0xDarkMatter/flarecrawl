@@ -203,6 +203,73 @@ class AuthenticatedCrawler:
             except Exception as exc:  # pragma: no cover
                 logger.debug("sitemap add failed: %r", exc)
 
+    async def _seed_frontier(
+        self, frontier: Frontier, session: httpx.AsyncClient
+    ) -> None:
+        """Seed the frontier with the initial URL + sitemap discovery.
+
+        Only called on fresh jobs (not resume). Extracted from ``crawl``.
+        """
+        cfg = self._config
+        await frontier.queue.add(
+            cfg.seed_url,
+            depth=0,
+            priority=10,
+            max_attempts=cfg.max_attempts,
+        )
+        await self._seed_sitemap(frontier, session)
+
+    async def _prefilter_batch(
+        self,
+        batch: list[FrontierItem],
+        session: httpx.AsyncClient,
+        frontier: Frontier,
+    ) -> list[FrontierItem]:
+        """Filter a scheduled batch down to items safe to fetch.
+
+        Applies (in order): max-depth prune, same-origin / include-exclude
+        pattern check, and robots.txt gate. Each filtered-out item is
+        marked on the frontier (``mark_skipped`` for policy, ``mark_dead``
+        with reason ``"robots"`` for robots-denied).
+        """
+        cfg = self._config
+        runnable: list[FrontierItem] = []
+        for item in batch:
+            if item.depth > cfg.max_depth:
+                await frontier.queue.mark_skipped(item.fp)
+                continue
+            if not _should_crawl(
+                item.url,
+                cfg.seed_url,
+                cfg.include_patterns,
+                cfg.exclude_patterns,
+            ):
+                await frontier.queue.mark_skipped(item.fp)
+                continue
+            if self._robots is not None and not cfg.ignore_robots:
+                ua = cfg.user_agent or DEFAULT_USER_AGENT
+                try:
+                    allowed = await self._robots.can_fetch(
+                        item.url, ua, client=session
+                    )
+                except (
+                    httpx.HTTPError,
+                    httpx.InvalidURL,
+                    ValueError,
+                    AttributeError,
+                ) as exc:
+                    logger.debug(
+                        "robots.can_fetch fallback for %s: %r",
+                        item.url,
+                        exc,
+                    )
+                    allowed = True
+                if not allowed:
+                    await frontier.queue.mark_dead(item.fp, "robots")
+                    continue
+            runnable.append(item)
+        return runnable
+
     async def crawl(self) -> AsyncIterator[CrawlResult]:
         """BFS crawl from seed_url, yielding CrawlResult per page.
 
@@ -241,13 +308,7 @@ class AuthenticatedCrawler:
                     adaptive_mode=cfg.adaptive_delay,
                 ) as frontier:
                     if not resuming:
-                        await frontier.queue.add(
-                            cfg.seed_url,
-                            depth=0,
-                            priority=10,
-                            max_attempts=cfg.max_attempts,
-                        )
-                        await self._seed_sitemap(frontier, session)
+                        await self._seed_frontier(frontier, session)
 
                     while page_count < cfg.max_pages:
                         if _shutdown.is_shutdown_requested():
@@ -271,43 +332,9 @@ class AuthenticatedCrawler:
                             break
 
                         # Pre-filter batch: robots + same-origin/patterns.
-                        runnable: list[FrontierItem] = []
-                        for item in batch:
-                            if item.depth > cfg.max_depth:
-                                await frontier.queue.mark_skipped(item.fp)
-                                continue
-                            if not _should_crawl(
-                                item.url,
-                                cfg.seed_url,
-                                cfg.include_patterns,
-                                cfg.exclude_patterns,
-                            ):
-                                await frontier.queue.mark_skipped(item.fp)
-                                continue
-                            if self._robots is not None and not cfg.ignore_robots:
-                                ua = cfg.user_agent or DEFAULT_USER_AGENT
-                                try:
-                                    allowed = await self._robots.can_fetch(
-                                        item.url, ua, client=session
-                                    )
-                                except (
-                                    httpx.HTTPError,
-                                    httpx.InvalidURL,
-                                    ValueError,
-                                    AttributeError,
-                                ) as exc:
-                                    logger.debug(
-                                        "robots.can_fetch fallback for %s: %r",
-                                        item.url,
-                                        exc,
-                                    )
-                                    allowed = True
-                                if not allowed:
-                                    await frontier.queue.mark_dead(
-                                        item.fp, "robots"
-                                    )
-                                    continue
-                            runnable.append(item)
+                        runnable = await self._prefilter_batch(
+                            batch, session, frontier
+                        )
 
                         if not runnable:
                             # All items skipped/blocked — keep looping.
