@@ -21,6 +21,7 @@ from selectolax.parser import HTMLParser
 from . import DEFAULT_USER_AGENT
 from .extract import extract_main_content, html_to_markdown
 from .ratelimit import DomainRateLimiter
+from .robots import RobotsCache
 
 
 @dataclass(slots=True)
@@ -42,6 +43,9 @@ class CrawlConfig:
     # User-Agent header for outbound fetches. ``None`` falls back to the
     # polite FlarecrawlBot default from ``flarecrawl.DEFAULT_USER_AGENT``.
     user_agent: str | None = None
+    # When True, skip robots.txt checks for every URL. CLI exposes this
+    # via --ignore-robots on ``crawl`` / ``download``.
+    ignore_robots: bool = False
 
 
 @dataclass(slots=True)
@@ -112,7 +116,7 @@ class AuthenticatedCrawler:
     Yields CrawlResult objects as pages are visited.
     """
 
-    def __init__(self, config: CrawlConfig):
+    def __init__(self, config: CrawlConfig, robots: RobotsCache | None = None):
         self._config = config
         self._session: httpx.AsyncClient | None = None
         # Per-host rate limiter — guards HTTP fetches so one domain cannot
@@ -122,6 +126,12 @@ class AuthenticatedCrawler:
             if config.rate_limit and config.rate_limit > 0
             else None
         )
+        # Lazy-import to avoid circular and to keep robots optional.
+        if robots is None and not config.ignore_robots:
+            robots = RobotsCache(
+                user_agent=config.user_agent or DEFAULT_USER_AGENT
+            )
+        self._robots: RobotsCache | None = robots
 
     def _build_session(self) -> httpx.AsyncClient:
         from .cookies import cookies_to_httpx
@@ -149,6 +159,17 @@ class AuthenticatedCrawler:
                     url, depth = queue.popleft()
                     if url in visited or depth > cfg.max_depth:
                         continue
+                    if self._robots is not None:
+                        ua = cfg.user_agent or DEFAULT_USER_AGENT
+                        try:
+                            allowed = await self._robots.can_fetch(
+                                url, ua, client=session
+                            )
+                        except Exception:
+                            allowed = True
+                        if not allowed:
+                            visited.add(url)
+                            continue
                     visited.add(url)
                     batch_items.append((url, depth))
 
