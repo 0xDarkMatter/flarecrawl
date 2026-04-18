@@ -169,3 +169,109 @@ in total (2 uvloop + 16 json_compat + 5 ratelimit + 30 selectolax parity +
 5 authcrawl rate wire-up + 2 CLI rate-limit + 1 design, minus baseline
 deltas). Current: 811 passing, 1 pre-existing failure (`test_rules_path`,
 unrelated path-width assertion), 10 skipped. No regressions introduced.
+
+---
+
+## Phase 3 — Items 7-13, 15 (this pass)
+
+Branch: `perf/phase-3`. Baseline: 811 passing.
+
+### Item 7 — protego robots.txt
+
+**Design.** New module `flarecrawl.robots` exposing `RobotsCache` with
+per-hostname TTL (1 h default). `can_fetch(url, ua)` fetches `/robots.txt`
+on demand, parses via `protego.Protego`, caches the parser. `get_crawl_delay`
+returns the per-UA crawl-delay hint (seconds) for feeding into
+`DomainRateLimiter`. Graceful fallback to allow-all when `protego` is not
+importable (logs a single warning). Network fetch timeout 10s; 4xx/5xx on
+robots.txt -> allow-all (standard polite-crawler convention).
+
+**Wire-up.** `AuthenticatedCrawler.__init__` accepts an optional
+`robots: RobotsCache | None`. When set and not explicitly bypassed via
+`ignore_robots`, `crawl()` skips URLs that `can_fetch` rejects (these are
+surfaced as `CrawlResult(error='robots.txt: blocked')` so the caller still
+sees the URL in output).
+
+**Acceptance.** Unit tests cover: allow/deny on sample robots.txt,
+crawl-delay parse, per-host cache hit (one fetch for two calls), TTL
+expiry, fallback when protego unavailable.
+
+### Item 8 — Default User-Agent
+
+**Design.** `flarecrawl.__init__` gains `DEFAULT_USER_AGENT` built from
+`__version__`. `AuthenticatedCrawler._build_session` uses it when no
+`Mozilla/..flarecrawl/0.14.0` (current hardcoded) override is requested.
+`RobotsCache._fetch` uses the same default.
+
+**Acceptance.** Test checks default UA substring matches `FlarecrawlBot/`
+and pins the source of truth at the module constant.
+
+### Item 9 — SQLite frontier
+
+**Design.** New module `flarecrawl.frontier` backed by `aiosqlite`.
+Schema + API as specified in the task brief. Checkpoint runs every
+`N=1000` URLs OR `T=30s` via a background asyncio task launched in
+`Frontier.open()` and cancelled in `close()`. `next_batch(n)` uses a
+single UPDATE…RETURNING statement (SQLite 3.35+) to atomically mark
+rows `in_flight`. WAL mode enabled for concurrent reads.
+
+**Wire-up.** NOT wired into `authcrawl.py` in this pass — doing so would
+require refactoring the BFS loop with risk to the 811-test baseline. The
+module ships with its own tests; wiring is deferred with a note here.
+
+**Acceptance.** Unit tests on a tempfile DB: add/visit idempotency,
+`next_batch` atomic transition, `mark_done` / `mark_failed`, resume via
+`Frontier.open(job_id, resume=True)`, sick-domain filtering.
+
+### Item 10 — rbloom visited dedup
+
+**Design.** Optional import of `rbloom.Bloom` (10M capacity, fpr=0.001).
+Hooked into `Frontier.add` as a pre-check: if bloom says "definitely new",
+skip SQLite uniqueness probe; otherwise fall through to SQLite UPSERT.
+Bloom persisted alongside the SQLite DB (`<job_id>.bloom`) on checkpoint.
+Fallback to `set()` when `rbloom` not importable (documented; on Windows
+wheels may be missing).
+
+### Item 11 — Delta crawl via ETag / Last-Modified
+
+**Design.** `Frontier.next_batch` joins `visited` and emits `(url, depth,
+etag, last_modified)` tuples; callers pass conditional headers on fetch.
+`Frontier.mark_done` stores current etag/last_modified; on 304, caller
+invokes `mark_done` with prior etag (helper `mark_unchanged`).
+
+**Wire-up.** Library API only — consumer code (future authcrawl refactor)
+is out of scope for this pass. Tests demonstrate the conditional-header
+contract against an `httpx.MockTransport`.
+
+### Item 12 — Sitemap-first discovery
+
+**Design.** New helper `flarecrawl.sitemap.discover_sitemap_urls(base_url,
+robots_cache, client)` — walks robots.txt `Sitemap:` entries (falls back
+to `/sitemap.xml`) and parses using `selectolax` (XML mode). Returns
+list of `(url, lastmod|None)` tuples for seeding.
+
+**Wire-up.** Library API only — consumer integration deferred.
+
+### Item 13 — Graceful shutdown
+
+**Design.** New `flarecrawl.shutdown` module: `install_signal_handlers()`
+registers SIGTERM/SIGINT, sets a module-level `asyncio.Event`.
+`is_shutdown_requested()` cheap checker. Long crawl loops poll between
+batches, drain in-flight, then exit 0 with a resume-hint printed to
+stderr. SIGWINCH-safe on Windows (signal handlers degrade to KeyboardInterrupt
+catch).
+
+**Acceptance.** Unit test: mock SIGINT via the event API, confirm the
+event flips, handler does not raise.
+
+### Item 15 — Circuit breaker (stretch)
+
+**Design.** Tracked inside `Frontier.domain_stats`: 10 consecutive
+failures flip `sick_until = now + 600`; `next_batch` filters sick
+hostnames; any success resets the counter. If time permits, tests cover
+the happy / sick / recover transitions.
+
+**Scope notes.** Items 9-12/15 ship as library-level modules with unit
+tests. Wiring them into the existing `AuthenticatedCrawler` crawl loop
+is deliberately out-of-scope to protect the 811-test baseline; a follow-up
+branch should do that under its own perf budget.
