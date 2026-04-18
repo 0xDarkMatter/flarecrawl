@@ -4460,5 +4460,36 @@ def design_diff(
         cdp_client.close()
 
 
+# ---------------------------------------------------------------------
+# Frontier v2 ops subcommands
+# ---------------------------------------------------------------------
+
+frontier_app = typer.Typer(
+    name="frontier",
+    help="Inspect a local frontier v2 job database (see PERF-PLAN-PROGRESS).",
+    no_args_is_help=True,
+)
+app.add_typer(frontier_app, name="frontier")
+
+
+@frontier_app.command("dead-letter")
+def frontier_dead_letter(
+    job_id: Annotated[str, typer.Argument(help="Frontier job ID")],
+    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON instead of a table")] = False,
+) -> None:
+    """Dump the dead-letter rows for a frontier v2 job.
+
+    Example:
+        flarecrawl frontier dead-letter my-job
+        flarecrawl frontier dead-letter my-job --json
+    """
+    import asyncio as _asyncio
+
+    from .dead_letter import dump_dead_letter, format_rows
+
+    rows = _asyncio.run(dump_dead_letter(job_id))
+    typer.echo(format_rows(rows, as_json=as_json))
+
+
 if __name__ == "__main__":
     app()
