@@ -24,7 +24,7 @@ Example
 from __future__ import annotations
 
 import re
-from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
 __all__ = ["ALLOWED_SCHEMES", "TRACKING_PARAMS", "canonicalize"]
 
@@ -181,6 +181,3 @@ def canonicalize(url: str) -> str:
     return urlunsplit((scheme, host, path, query, fragment))
 
 
-def _roundtrip_unquote(value: str) -> str:
-    """Decode percent-escapes in ``value`` (utility for tests/debugging)."""
-    return unquote(value)

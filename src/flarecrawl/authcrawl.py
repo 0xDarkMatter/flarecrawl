@@ -13,9 +13,8 @@ import re
 import sys
 import time
 import uuid
-from collections import deque
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 import httpx
