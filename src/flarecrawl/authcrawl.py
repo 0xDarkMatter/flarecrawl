@@ -18,6 +18,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from selectolax.parser import HTMLParser
 
+from . import DEFAULT_USER_AGENT
 from .extract import extract_main_content, html_to_markdown
 from .ratelimit import DomainRateLimiter
 
@@ -38,6 +39,9 @@ class CrawlConfig:
     # Per-host request rate in req/sec. ``None`` disables the limiter, which
     # is the pre-item-6 behaviour. Item 6 default is 2.0 req/s/host.
     rate_limit: float | None = 2.0
+    # User-Agent header for outbound fetches. ``None`` falls back to the
+    # polite FlarecrawlBot default from ``flarecrawl.DEFAULT_USER_AGENT``.
+    user_agent: str | None = None
 
 
 @dataclass(slots=True)
@@ -122,11 +126,12 @@ class AuthenticatedCrawler:
     def _build_session(self) -> httpx.AsyncClient:
         from .cookies import cookies_to_httpx
         jar = cookies_to_httpx(self._config.cookies or [])
+        ua = self._config.user_agent or DEFAULT_USER_AGENT
         return httpx.AsyncClient(
             cookies=jar,
             follow_redirects=True,
             timeout=30,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; flarecrawl/0.14.0)"},
+            headers={"User-Agent": ua},
         )
 
     async def crawl(self) -> AsyncIterator[CrawlResult]:
