@@ -11,12 +11,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 import httpx
 from selectolax.parser import HTMLParser
 
 from . import DEFAULT_USER_AGENT
+from ._http import ensure_client, origin as _origin_of, polite_get
 
 logger = logging.getLogger(__name__)
 
@@ -40,34 +40,17 @@ async def _get(
     url: str, client: httpx.AsyncClient, user_agent: str,
     *, max_bytes: int | None = None,
 ) -> httpx.Response | None:
-    try:
-        resp = await client.get(
-            url,
-            headers={"User-Agent": user_agent},
-            timeout=_FETCH_TIMEOUT,
-            follow_redirects=True,
-        )
-    except (httpx.HTTPError, httpx.InvalidURL):
-        return None
-    if max_bytes is not None:
-        cl = resp.headers.get("content-length")
-        if cl is not None:
-            try:
-                if int(cl) > max_bytes:
-                    logger.debug(
-                        "sitemap at %s exceeds cap (%s bytes); skipping",
-                        url,
-                        cl,
-                    )
-                    return None
-            except ValueError:
-                pass
-    return resp
+    return await polite_get(
+        url,
+        client=client,
+        user_agent=user_agent,
+        timeout=_FETCH_TIMEOUT,
+        max_bytes=max_bytes,
+    )
 
 
 def _origin(url: str) -> str:
-    p = urlparse(url)
-    return f"{p.scheme}://{p.netloc}"
+    return _origin_of(url)
 
 
 async def sitemap_urls_from_robots(
@@ -129,12 +112,9 @@ async def discover_sitemap_urls(
     If the response is a sitemap-index and ``follow_index`` is true,
     child sitemaps are fetched and merged (up to ``max_sitemaps``).
     """
-    owns_client = client is None
-    if client is None:
-        client = httpx.AsyncClient()
-    try:
+    async with ensure_client(client) as (c, _owns):
         sitemap_urls = await sitemap_urls_from_robots(
-            base_url, client, user_agent
+            base_url, c, user_agent
         )
         if not sitemap_urls:
             sitemap_urls = [f"{_origin(base_url)}/sitemap.xml"]
@@ -148,7 +128,7 @@ async def discover_sitemap_urls(
                 continue
             seen_sitemaps.add(sm_url)
             resp = await _get(
-                sm_url, client, user_agent, max_bytes=MAX_SITEMAP_BYTES
+                sm_url, c, user_agent, max_bytes=MAX_SITEMAP_BYTES
             )
             if resp is None or resp.status_code >= 400:
                 continue
@@ -162,6 +142,3 @@ async def discover_sitemap_urls(
                 continue
             entries.extend(parsed)
         return entries
-    finally:
-        if owns_client:
-            await client.aclose()

@@ -12,11 +12,11 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from . import DEFAULT_USER_AGENT
+from ._http import ensure_client, origin as _origin_of, polite_get
 
 logger = logging.getLogger(__name__)
 
@@ -77,42 +77,29 @@ class RobotsCache:
         self, origin: str, client: httpx.AsyncClient
     ) -> Any:
         url = f"{origin}/robots.txt"
-        try:
-            resp = await client.get(
-                url,
-                headers={"User-Agent": self.user_agent},
-                timeout=_FETCH_TIMEOUT,
-                follow_redirects=True,
-            )
-        except (httpx.HTTPError, httpx.InvalidURL):
-            # Network error → treat as no robots.txt (allow-all).
+        resp = await polite_get(
+            url,
+            client=client,
+            user_agent=self.user_agent,
+            timeout=_FETCH_TIMEOUT,
+            max_bytes=MAX_ROBOTS_BYTES,
+        )
+        if resp is None:
+            # Network error or size cap tripped → allow-all.
             return None
         if resp.status_code >= 400:
             # 4xx/5xx on robots.txt → allow-all per polite-crawler convention.
             return None
-        # Oversized body → allow-all rather than risk an OOM.
-        cl = resp.headers.get("content-length")
-        if cl is not None:
-            try:
-                if int(cl) > MAX_ROBOTS_BYTES:
-                    logger.debug(
-                        "robots.txt at %s exceeds cap (%s bytes); skipping",
-                        url,
-                        cl,
-                    )
-                    return None
-            except ValueError:
-                pass
         if not _PROTEGO_AVAILABLE:
             return None
         try:
             return Protego.parse(resp.text)
-        except Exception:  # pragma: no cover — defensive, protego is lenient
+        except Exception as exc:  # pragma: no cover — defensive, protego is lenient
+            logger.debug("protego parse failed for %s: %r", url, exc)
             return None
 
     def _origin(self, url: str) -> str:
-        p = urlparse(url)
-        return f"{p.scheme}://{p.netloc}"
+        return _origin_of(url)
 
     async def _get(
         self, url: str, client: httpx.AsyncClient | None = None
@@ -122,14 +109,8 @@ class RobotsCache:
         entry = self._cache.get(origin)
         if entry is not None and (now - entry.fetched_at) < self.ttl:
             return entry.parser
-        owns_client = client is None
-        if client is None:
-            client = httpx.AsyncClient()
-        try:
-            parser = await self._fetch_and_parse(origin, client)
-        finally:
-            if owns_client:
-                await client.aclose()
+        async with ensure_client(client) as (c, _owns):
+            parser = await self._fetch_and_parse(origin, c)
         self._cache[origin] = _Entry(parser=parser, fetched_at=now)
         return parser
 
