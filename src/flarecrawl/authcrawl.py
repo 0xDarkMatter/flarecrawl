@@ -499,7 +499,7 @@ class AuthenticatedCrawler:
 
             # 304 Not Modified — fast-path, no re-fetch yielded.
             if sc == 304:
-                await frontier.queue.mark_unchanged(item.fp)
+                await frontier.queue.mark_done(item.fp)
                 await frontier.visited.touch_unchanged(item.fp)
                 await frontier.domains.observe(
                     item.hostname,

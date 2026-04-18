@@ -563,7 +563,7 @@ async def test_conditional_headers_from_visited(fr: Frontier) -> None:
 
 
 @pytest.mark.asyncio
-async def test_mark_unchanged_updates_fetched_at(fr: Frontier) -> None:
+async def test_mark_done_after_304_refreshes_fetched_at(fr: Frontier) -> None:
     await fr.queue.add("http://a.example/x", depth=0)
     [item] = await fr.queue.next_batch(1)
     await fr.visited.record(item.fp, item.url, 200, etag='"abc"')
@@ -573,7 +573,7 @@ async def test_mark_unchanged_updates_fetched_at(fr: Frontier) -> None:
     before = (await cur.fetchone())[0]
     await asyncio.sleep(0.01)
     await fr.visited.touch_unchanged(item.fp)
-    await fr.queue.mark_unchanged(item.fp)
+    await fr.queue.mark_done(item.fp)
     cur = await fr._db.execute(
         "SELECT fetched_at, status_code FROM visited WHERE fp = ?", (item.fp,)
     )

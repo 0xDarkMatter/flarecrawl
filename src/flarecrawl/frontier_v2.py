@@ -381,14 +381,12 @@ class FrontierQueue:
         ]
 
     async def mark_done(self, fp: bytes) -> None:
-        """Transition a fingerprint from ``in_flight`` to ``done``."""
-        await self._db.execute(
-            "UPDATE frontier SET status='done' WHERE fp = ?", (fp,)
-        )
-        self._note_write()
+        """Transition a fingerprint from ``in_flight`` to ``done``.
 
-    async def mark_unchanged(self, fp: bytes) -> None:
-        """304 response: mark done (visited row refreshed elsewhere)."""
+        Also invoked by the 304-response path — a not-modified result is
+        semantically a successful fetch for the frontier (the visited
+        row's ``fetched_at`` is refreshed elsewhere).
+        """
         await self._db.execute(
             "UPDATE frontier SET status='done' WHERE fp = ?", (fp,)
         )
