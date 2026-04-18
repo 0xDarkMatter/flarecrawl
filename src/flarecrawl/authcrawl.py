@@ -387,6 +387,34 @@ class AuthenticatedCrawler:
                 counts=event_counts,
             )
 
+    @staticmethod
+    def _install_shutdown() -> None:
+        """Best-effort install of SIGINT/SIGTERM handlers for this crawl."""
+        try:
+            _shutdown.install_signal_handlers()
+        except Exception as exc:  # pragma: no cover — best-effort
+            logger.debug("shutdown handler install failed: %r", exc)
+
+    def _finalise(
+        self,
+        *,
+        exc_raised: BaseException | None,
+        interrupted: bool,
+        target_host: str,
+        t_start: float,
+        counts: dict[str, int],
+    ) -> None:
+        """Resolve which lifecycle event to emit after crawl termination."""
+        duration_ms = int((time.monotonic() - t_start) * 1000)
+        if exc_raised is not None and not isinstance(exc_raised, GeneratorExit):
+            self._emit_terminal(
+                "failed", target_host, duration_ms, counts, msg=str(exc_raised)
+            )
+        elif interrupted:
+            self._emit_terminal("interrupted", target_host, duration_ms, counts)
+        else:
+            self._emit_terminal("completed", target_host, duration_ms, counts)
+
     async def crawl(self) -> AsyncIterator[CrawlResult]:
         """BFS crawl from seed_url, yielding CrawlResult per page.
 
@@ -398,10 +426,7 @@ class AuthenticatedCrawler:
         cfg = self._config
         resuming = cfg.resume_job_id is not None
         job_id = cfg.resume_job_id or self._generate_job_id()
-        try:
-            _shutdown.install_signal_handlers()
-        except Exception as exc:  # pragma: no cover — best-effort
-            logger.debug("shutdown handler install failed: %r", exc)
+        self._install_shutdown()
         target_host = urlparse(cfg.seed_url).hostname or cfg.seed_url
         counts: dict[str, int] = {"ok": 0, "dead": 0, "unchanged": 0}
         page_count = 0
@@ -456,19 +481,13 @@ class AuthenticatedCrawler:
             exc_raised = exc
             raise
         finally:
-            duration_ms = int((time.monotonic() - t_start) * 1000)
-            if exc_raised is not None and not isinstance(exc_raised, GeneratorExit):
-                self._emit_terminal(
-                    "failed", target_host, duration_ms, counts, msg=str(exc_raised)
-                )
-            elif interrupted:
-                self._emit_terminal(
-                    "interrupted", target_host, duration_ms, counts
-                )
-            else:
-                self._emit_terminal(
-                    "completed", target_host, duration_ms, counts
-                )
+            self._finalise(
+                exc_raised=exc_raised,
+                interrupted=interrupted,
+                target_host=target_host,
+                t_start=t_start,
+                counts=counts,
+            )
 
     def _error_result(
         self, item: FrontierItem, elapsed_s: float, err: str
