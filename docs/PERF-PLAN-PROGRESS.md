@@ -346,3 +346,59 @@ scratch; no copy-paste from surveyed projects.
   (different primary key, missing columns) and safe to delete.
 - `delta.py` and the one-line reference to `FrontierItem` are
   re-pointed at `frontier_v2` during the migration.
+
+**Produce — outcome**
+
+| Spec bullet | Status |
+|---|---|
+| `canon.canonicalize` (8 steps, `TRACKING_PARAMS` export) | done, 32 tests |
+| `fingerprint.fingerprint` (blake2b-16 of method/url/body) | done, 11 tests |
+| `frontier_v2.FrontierQueue` + per-host round-robin | done |
+| `frontier_v2.VisitedStore` (conditional headers, refresh) | done |
+| `frontier_v2.DomainRegistry` (snooze/sick/EWMA/budget) | done |
+| `frontier_v2.DeadLetter` (async iterator) | done |
+| `Frontier.open(resume=True)` rollback + WARN log | done |
+| Retry budget + `RETRY_CODES` constant | done |
+| Schema version 2 + `meta` seed | done |
+| `FLARECRAWL_FRONTIER_DIR` env override | done |
+| `dead_letter` helper module + CLI subcommand | done |
+| `flarecrawl frontier dead-letter JOB_ID [--json]` | done |
+| Delete v1 `frontier.py` + v1 tests | done |
+| Migrate `delta.py` / `test_delta.py` to v2 `FrontierItem` | done |
+| Wire `authcrawl.py` to use v2 Frontier (BFS rewrite) | **deferred** |
+| CLI flags `--resume / --max-attempts / --adaptive-delay / --refresh-days` on `flarecrawl crawl` | **deferred** (belongs with the authcrawl wiring) |
+
+Tests: **baseline 858 → 933 passing** (+75 new, zero regressions, same 1
+pre-existing `test_rules_path` failure).
+
+Commits on `perf/frontier-v2` (6):
+1. `docs(perf): DSP note for Frontier v2`
+2. `feat(perf): canon.canonicalize for frontier v2 dedup`
+3. `feat(perf): fingerprint module for frontier v2`
+4. `feat(perf): frontier_v2 engine with role-separated classes`
+5. `refactor(perf): migrate delta to frontier_v2, delete v1`
+6. `feat(perf): dead_letter module + flarecrawl frontier dead-letter CLI`
+
+**Deferred / follow-up work**
+
+The `authcrawl.AuthenticatedCrawler.crawl()` BFS loop does not yet
+consume `Frontier`. Wiring it in (plus the four new `flarecrawl crawl`
+flags) carries meaningful churn against the 45 existing `test_authcrawl`
+tests and was intentionally split into a subsequent branch to keep this
+one review-sized. The hooks are in place:
+
+- `Frontier.open(resume=True, adaptive_mode=...)` — drop-in for the
+  crawler's session setup.
+- `VisitedStore.conditional_headers(fp)` → feed `delta.conditional_headers`
+  for 304 short-circuits.
+- `DomainRegistry.is_available(host)` as the belt-and-braces gate on
+  each fetch (scheduler already filters).
+- `shutdown.install_handlers()` already exists; the follow-up will
+  call `Frontier.close()` inside its drain callback.
+
+**Migration note (ops)**
+
+Old `*.sqlite` files created by v1 under
+`$XDG_CACHE_HOME/flarecrawl/jobs/` are incompatible with v2 (different
+primary key, new columns). Safe to delete — v2 creates them on demand.
+Any `.bloom` sidecar will also be rebuilt from scratch on first write.
