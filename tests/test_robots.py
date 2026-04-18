@@ -230,3 +230,43 @@ def test_robots_within_cap_parses_normally():
                 )
 
     asyncio.run(run())
+
+
+# ---------------------------------------------------------------------------
+# Narrowed exception handling (Q1/Q2)
+# ---------------------------------------------------------------------------
+@pytest.mark.skipif(not _PROTEGO_AVAILABLE, reason="protego not installed")
+def test_can_fetch_allows_on_parser_exception(monkeypatch):
+    """When parser.can_fetch raises a narrowable error, allow (default-allow)."""
+    async def run():
+        async with _client(_handler()) as c:
+            cache = RobotsCache(user_agent="TestBot")
+            # Prime the cache.
+            await cache.can_fetch("https://example.com/a", client=c)
+            # Force the parser to raise an AttributeError.
+            entry = list(cache._cache.values())[0]
+            class _BadParser:
+                def can_fetch(self, *_a, **_k):
+                    raise AttributeError("boom")
+            entry.parser = _BadParser()
+            assert await cache.can_fetch("https://example.com/a", client=c)
+
+    asyncio.run(run())
+
+
+@pytest.mark.skipif(not _PROTEGO_AVAILABLE, reason="protego not installed")
+def test_crawl_delay_none_on_parser_exception():
+    async def run():
+        async with _client(_handler()) as c:
+            cache = RobotsCache(user_agent="TestBot")
+            await cache.can_fetch("https://example.com/a", client=c)
+            entry = list(cache._cache.values())[0]
+            class _BadParser:
+                def crawl_delay(self, *_a, **_k):
+                    raise ValueError("boom")
+            entry.parser = _BadParser()
+            assert await cache.get_crawl_delay(
+                "https://example.com/a", "TestBot", client=c
+            ) is None
+
+    asyncio.run(run())

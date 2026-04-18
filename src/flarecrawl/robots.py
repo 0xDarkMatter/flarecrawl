@@ -132,7 +132,11 @@ class RobotsCache:
         ua = user_agent or self.user_agent
         try:
             return bool(parser.can_fetch(url, ua))
-        except Exception:
+        except (AttributeError, ValueError, KeyError, TypeError) as exc:
+            # Defensive: protego can occasionally raise on malformed
+            # rules. We default to *allow* (polite-crawler convention),
+            # but surface the fallback via DEBUG so it's not silent.
+            logger.debug("protego can_fetch fallback for %s: %r", url, exc)
             return True
 
     async def get_crawl_delay(
@@ -148,7 +152,8 @@ class RobotsCache:
         ua = user_agent or self.user_agent
         try:
             delay = parser.crawl_delay(ua)
-        except Exception:
+        except (AttributeError, ValueError, KeyError, TypeError) as exc:
+            logger.debug("crawl_delay fallback for %s: %r", url, exc)
             return None
         if delay is None:
             return None

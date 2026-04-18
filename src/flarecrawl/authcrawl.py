@@ -291,7 +291,17 @@ class AuthenticatedCrawler:
                                     allowed = await self._robots.can_fetch(
                                         item.url, ua, client=session
                                     )
-                                except Exception:
+                                except (
+                                    httpx.HTTPError,
+                                    httpx.InvalidURL,
+                                    ValueError,
+                                    AttributeError,
+                                ) as exc:
+                                    logger.debug(
+                                        "robots.can_fetch fallback for %s: %r",
+                                        item.url,
+                                        exc,
+                                    )
                                     allowed = True
                                 if not allowed:
                                     await frontier.queue.mark_dead(
