@@ -267,6 +267,44 @@ class TestStatus:
         assert "api_token" in s["missing"]
         assert "account_id" not in s.get("missing", [])
 
+    def test_status_eagerly_migrates_both_keys(self, monkeypatch, tmp_path):
+        """Regression: status() must trigger migration for BOTH credentials.
+
+        Previously only account_id (fetched for masked display) migrated, leaving
+        api_token in plaintext while status reported source=keyring.
+        """
+        monkeypatch.delenv("FLARECRAWL_ACCOUNT_ID", raising=False)
+        monkeypatch.delenv("FLARECRAWL_API_TOKEN", raising=False)
+        legacy = tmp_path / "config.json"
+        legacy.write_text(
+            json.dumps({"account_id": "legacy-acct", "api_token": "legacy-tok", "usage": {"d": 1}})
+        )
+        monkeypatch.setattr("flarecrawl.credentials._legacy_config_path", lambda: legacy)
+        keyring_store: dict = {}
+        monkeypatch.setattr(
+            "flarecrawl.credentials.keyring.get_password",
+            lambda svc, key: keyring_store.get((svc, key)),
+        )
+        monkeypatch.setattr(
+            "flarecrawl.credentials.keyring.set_password",
+            lambda svc, key, val: keyring_store.__setitem__((svc, key), val),
+        )
+        monkeypatch.setattr("flarecrawl.credentials.KEYRING_AVAILABLE", True)
+
+        from flarecrawl.credentials import CredentialStore
+        s = CredentialStore(env_file=tmp_path / ".env").status()
+
+        assert s["authenticated"] is True
+        assert s["source"] == "keyring"
+        # Both creds must be in keyring after status()
+        assert keyring_store[("forma-flarecrawl", "account_id")] == "legacy-acct"
+        assert keyring_store[("forma-flarecrawl", "api_token")] == "legacy-tok"
+        # Both removed from legacy JSON, usage preserved
+        remaining = json.loads(legacy.read_text())
+        assert "account_id" not in remaining
+        assert "api_token" not in remaining
+        assert remaining["usage"] == {"d": 1}
+
 
 # ---------------------------------------------------------------------------
 # set / delete

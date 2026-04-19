@@ -126,7 +126,16 @@ class CredentialStore:
         return "none"
 
     def status(self) -> dict:
-        """Auth status — checks both account_id and api_token together."""
+        """Auth status — checks both account_id and api_token together.
+
+        Eagerly resolves both credentials first so any pending legacy → keyring
+        migration runs before we report the source. Without this, a status check
+        could report `source: keyring` while one of the two credentials is still
+        sitting in the legacy plaintext config.json.
+        """
+        # Force per-key migration before probing source
+        self.get("account_id")
+        self.get("api_token")
         account_source = self.get_source("account_id")
         token_source = self.get_source("api_token")
         if account_source != "none" and token_source != "none":

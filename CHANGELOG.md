@@ -5,6 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-04-21
+
+### Fixed
+- `auth status` now eagerly migrates **both** credentials from legacy config.json on first call. Previously only `account_id` migrated (the one fetched for the masked display) while `api_token` stayed in plaintext until some other command happened to need it. Status would misleadingly report `source: keyring` while half the credentials were still on disk
+
 ## [0.22.0] - 2026-04-21
 
 ### Added

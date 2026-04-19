@@ -1,6 +1,6 @@
 """Flarecrawl - Cloudflare Browser Run CLI."""
 
-__version__ = "0.22.0"
+__version__ = "0.22.1"
 
 # Polite-crawling default: bot identifies itself and points at a
 # contactable homepage. Override per-call via --user-agent.
