@@ -1188,3 +1188,27 @@ class TestNegotiateFlag:
             except Exception:
                 pass
             mock_neg.assert_not_called()
+
+
+class TestBrowserCookies:
+    """Test --browser-cookies flag on scrape, interact, design extract."""
+
+    def test_scrape_help_has_browser_cookies(self):
+        result = runner.invoke(app, ["scrape", "--help"])
+        assert result.exit_code == 0
+        assert "--browser-cookies" in result.output
+
+    def test_interact_help_has_browser_cookies(self):
+        result = runner.invoke(app, ["interact", "--help"])
+        assert result.exit_code == 0
+        assert "--browser-cookies" in result.output
+
+    def test_design_extract_help_has_browser_cookies(self):
+        result = runner.invoke(app, ["design", "extract", "--help"])
+        assert result.exit_code == 0
+        assert "--browser-cookies" in result.output
+
+    def test_apply_browser_cookies_returns_none_when_falsy(self):
+        from flarecrawl.cli import _apply_browser_cookies
+        assert _apply_browser_cookies(None, "https://example.com") is None
+        assert _apply_browser_cookies("", "https://example.com") is None

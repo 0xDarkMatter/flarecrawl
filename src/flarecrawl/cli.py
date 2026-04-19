@@ -173,6 +173,37 @@ def _enrich_cdp_error(e: FlareCrawlError, url: str | None = None) -> FlareCrawlE
     return FlareCrawlError(enriched, code=e.code)
 
 
+def _apply_browser_cookies(
+    browser_cookies: str | None,
+    url: str,
+    as_json: bool = False,
+) -> Path | None:
+    """Grab cookies from a local browser, write to temp file, return path.
+
+    Returns the temp file path so the caller can pass it as --session /
+    --load-cookies.  Caller is responsible for setting ``cdp = True``
+    (browser-cookies implies CDP).  Returns *None* when *browser_cookies*
+    is falsy.
+    """
+    if not browser_cookies:
+        return None
+    try:
+        from .browser_cookies import grab_cookies
+    except ImportError:
+        _error(
+            "Browser cookie extraction requires rookiepy. Install with: uv pip install rookiepy",
+            "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
+        )
+        return None  # unreachable — _error raises
+    cookies = grab_cookies(browser_cookies, url)
+    import tempfile
+    tmp = Path(tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w").name)
+    tmp.write_text(json.dumps(cookies), encoding="utf-8")
+    if not as_json:
+        console.print(f"[dim]Grabbed {len(cookies)} cookies from {browser_cookies}[/dim]")
+    return tmp
+
+
 def _validate_url(url: str, as_json: bool = False) -> None:
     """Validate URL format."""
     parsed = urlparse(url)
@@ -1407,6 +1438,7 @@ def scrape(
     save_cookies_file: Annotated[Path | None, typer.Option("--save-cookies", help="Save browser cookies to file after navigation (implies --cdp)")] = None,
     load_cookies_file: Annotated[Path | None, typer.Option("--load-cookies", help="Load cookies from file before navigation (implies --cdp)")] = None,
     tabs: Annotated[int, typer.Option("--tabs", help="Reuse one CDP session across N URLs (reduces cost, implies --cdp)")] = 1,
+    browser_cookies: Annotated[str | None, typer.Option("--browser-cookies", help="Grab cookies from local browser (chrome|firefox)")] = None,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1427,6 +1459,13 @@ def scrape(
     # Flags that require CDP
     if any([keep_alive, record, live_view, interactive, save_cookies_file, load_cookies_file, tabs > 1]):
         cdp = True
+
+    # Grab cookies from local browser
+    if browser_cookies:
+        _bc_path = _apply_browser_cookies(browser_cookies, urls[0] if urls else "", as_json=json_output)
+        if _bc_path:
+            load_cookies_file = _bc_path
+            cdp = True
 
     # Stdin mode: process local HTML without API call
     if stdin_mode:
@@ -4007,6 +4046,7 @@ def interact(
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL")] = None,
     stagehand: Annotated[bool, typer.Option("--stagehand", help="Use AI to find elements by intent (coming soon)")] = False,
+    browser_cookies: Annotated[str | None, typer.Option("--browser-cookies", help="Grab cookies from local browser (chrome|firefox)")] = None,
 ):
     """Interact with a web page: fill forms, click buttons, select dropdowns.
 
@@ -4027,6 +4067,12 @@ def interact(
         console.print("[dim]For now, Stagehand works directly via Playwright + CF Browser Run.[/dim]")
         console.print("[dim]See: https://developers.cloudflare.com/browser-run/stagehand/[/dim]")
         raise typer.Exit(0)
+
+    # Grab cookies from local browser
+    if browser_cookies:
+        _bc_path = _apply_browser_cookies(browser_cookies, url, as_json=json_output)
+        if _bc_path:
+            load_cookies = _bc_path
 
     _validate_url(url, json_output)
     cdp_client = _get_cdp_client(as_json=json_output, keep_alive=keep_alive, proxy=proxy)
@@ -4283,11 +4329,18 @@ def design_extract(
     session: Annotated[Path | None, typer.Option("--session", help="Load cookies for auth")] = None,
     proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL")] = None,
     keep_alive: Annotated[int, typer.Option("--keep-alive", help="Keep browser alive (seconds)")] = 0,
+    browser_cookies: Annotated[str | None, typer.Option("--browser-cookies", help="Grab cookies from local browser (chrome|firefox)")] = None,
 ):
     """Extract design tokens from a website into DESIGN.md or HTML preview."""
     from .design import EXTRACT_JS, format_design_md, format_preview_html, process_tokens, score_coherence
 
     _validate_url(url, json_output)
+
+    # Grab cookies from local browser
+    if browser_cookies:
+        _bc_path = _apply_browser_cookies(browser_cookies, url, as_json=json_output)
+        if _bc_path:
+            session = _bc_path
 
     # --full enables all capture modes
     if full:
@@ -4693,23 +4746,9 @@ def videos(
 
     # Grab cookies from local browser
     if browser_cookies:
-        try:
-            from .browser_cookies import grab_cookies
-            _local_cookies = grab_cookies(browser_cookies, url)
-            if not session:
-                # Write to a temp file and use as session
-                import tempfile
-                _tf = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w")
-                json.dump(_local_cookies, _tf)
-                _tf.close()
-                session = Path(_tf.name)
-                console.print(f"[dim]Grabbed {len(_local_cookies)} cookies from {browser_cookies}[/dim]")
-        except ImportError:
-            _error(
-                f"Browser cookie extraction requires rookiepy. Install with: uv pip install rookiepy",
-                "MISSING_DEPENDENCY", EXIT_ERROR, as_json=json_output,
-            )
-            return
+        _bc_path = _apply_browser_cookies(browser_cookies, url, as_json=json_output)
+        if _bc_path and not session:
+            session = _bc_path
 
     # Interactive mode auto-promotes to CDP
     if interactive:
