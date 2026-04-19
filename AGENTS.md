@@ -522,9 +522,11 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 39. **`--keep-alive N` for session reuse** — holds browser open N seconds. Sessions persist across invocations. Use `flarecrawl cdp sessions` to list and `flarecrawl cdp close` to clean up
 40. **`--record` for session recordings** — saves rrweb-format recording JSON. Use `--record-output path.json` to specify location. Implies `--cdp`
 41. **`--save-cookies`/`--load-cookies`** — persist and reuse browser cookies. `--save-cookies session.json` after scrape, `--load-cookies session.json` on next run. Both imply `--cdp`
-42. **`--ignore-robots`** on crawl — bypasses robots.txt and AI Crawl Control directives. CF crawl respects these by default
+42. **`--ignore-robots`** on crawl — CF `/crawl` always respects robots.txt (no API parameter exists). Passing `--ignore-robots` on `crawl` prints a warning pointing at `spider`/`authcrawl` which support it. Use `flarecrawl spider URL --ignore-robots` or `flarecrawl authcrawl URL --ignore-robots`
 43. **Workers max is now 50** (was 10) — CF quadrupled concurrent browser limit to 120. Free tier: use `--workers 3`, paid: up to `--workers 50`. Override with `FLARECRAWL_MAX_WORKERS` env var
-44. **CDP flags auto-promote** — `--interactive`, `--live-view`, `--record`, `--save-cookies`, `--load-cookies`, `--keep-alive` all imply `--cdp`. No need to pass both
+44. **CDP flags auto-promote** — `--interactive`, `--live-view`, `--record`, `--save-cookies`, `--load-cookies`, `--keep-alive`, `--browser-cookies` all imply `--cdp`. No need to pass both
+45. **`--browser-cookies chrome|firefox`** works on `scrape`, `interact`, `design extract`, and `videos` — grabs cookies from your local browser and auto-promotes to CDP
+46. **`--session` on crawl** — pass cookies to CF `/crawl` for authenticated crawling. Supports file path or `@NAME` for saved sessions
 45. **`FLARECRAWL_CDP_ENDPOINT` env var** — override the CDP WebSocket URL to use any CDP backend (Oxylabs Scraping Browser, Bright Data, local Chrome `ws://localhost:9222`). When set, flarecrawl skips CF auth for the browser connection
 
 ## Pricing Reference

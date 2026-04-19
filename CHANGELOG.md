@@ -5,6 +5,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-04-20
+
+### Added
+
+- `--browser-cookies chrome|firefox` flag on `scrape`, `interact`, `design extract` (parity with `videos`)
+- `--session` flag on `crawl` for authenticated crawls (was missing)
+- Live test suite for design extraction (`tests/live/test_design_live.py`)
+- `frontier` listed in `[tool.forma].resources`; `status = "experimental"` field
+
+### Fixed
+
+- `--ignore-robots` on `crawl` no longer silently fails — prints warning pointing at `spider`/`authcrawl` (CF `/crawl` API has no robots bypass parameter)
+- Design extract file writes now use UTF-8 encoding (fixes UnicodeEncodeError on Windows from block chars in coherence bars)
+
 ## [0.20.0] - 2026-04-20
 
 ### Added

@@ -14,11 +14,11 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.21.0** | 2026-04-20 | **Auth + crawl fixes.** `--browser-cookies` on scrape/interact/design (was videos-only). `--session` on crawl. `--ignore-robots` made actionable. Live test suite for design extraction |
 | **v0.20.0** | 2026-04-20 | **Actionable CDP errors.** `_enrich_cdp_error` detects bot detection, timeouts, redirects, network errors, auth failures and appends suggestions. CHANGELOG.md restored as source of truth |
 | **v0.19.0** | 2026-04-19 | **Video discovery.** `flarecrawl videos` finds video URLs (mp4, webm, m3u8, YouTube, Vimeo embeds, OpenGraph, JSON-LD). `--export-cookies` for yt-dlp Netscape cookie format. Works behind login with --session/--interactive. Pipe to yt-dlp for downloading |
 | **v0.18.0** | 2026-04-18 | **Security hardening.** Path-traversal fix on `--resume JOB_ID`, blocks non-http(s) URLs, caps robots.txt/sitemap downloads. Crawl loop refactored. PEP 561 `py.typed` marker. 1027 tests |
 | **v0.17.0** | 2026-04-18 | **Industrial-scale crawling.** `flarecrawl authcrawl` — resumable, weekly-refresh, fair scheduling, adaptive politeness, circuit breaker, robots.txt. selectolax/orjson/uvloop/tuned httpx. OpenTelemetry tracing. 967 tests |
-| **v0.16.0** | 2026-04-17 | **Design system extraction.** `flarecrawl design extract` generates DESIGN.md — colors, typography, spacing, shadows, radii, layout, CSS variables. 9-category coherence scoring (A-F). `design diff` for comparison. CDP-backed computed styles |
 
 For older releases, see [CHANGELOG.md](CHANGELOG.md).
 
