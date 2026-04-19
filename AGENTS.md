@@ -120,6 +120,9 @@
 | Resume interrupted crawl | `flarecrawl authcrawl URL --resume JOB_ID` |
 | Weekly-refresh crawl | `flarecrawl authcrawl URL --refresh-days 7` |
 | Enable OpenTelemetry tracing | `flarecrawl authcrawl URL --tracing json` |
+| Discover videos on page | `flarecrawl videos URL --json` |
+| Videos behind login | `flarecrawl videos URL --interactive --export-cookies cookies.txt --json` |
+| Videos + yt-dlp pipeline | `flarecrawl videos URL --json \| jq -r '.data[].url' \| yt-dlp -a -` |
 | Inspect dead-letter URLs | `flarecrawl frontier dead-letter JOB_ID --json` |
 
 ## Authentication
