@@ -83,8 +83,8 @@ class CredentialStore:
             try:
                 keyring.set_password(self.KEYRING_SERVICE, key, value)
                 return
-            except KeyringError:
-                pass
+            except Exception:
+                pass  # keyring denied/locked/broken — fall through to .env
 
         # Fallback to .env
         self._set_in_dotenv(key, value)

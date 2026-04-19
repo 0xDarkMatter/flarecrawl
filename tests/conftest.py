@@ -11,9 +11,14 @@ def mock_credentials(monkeypatch):
 
 
 @pytest.fixture
-def no_credentials(monkeypatch):
-    """Ensure no credentials are available (env vars AND config file)."""
+def no_credentials(monkeypatch, tmp_path):
+    """Ensure no credentials are available (env vars, keyring, .env, legacy config)."""
     monkeypatch.delenv("FLARECRAWL_ACCOUNT_ID", raising=False)
     monkeypatch.delenv("FLARECRAWL_API_TOKEN", raising=False)
-    # Also block the config file from returning stored creds
+    # Block legacy config.json and keyring
     monkeypatch.setattr("flarecrawl.config.load_config", lambda: {})
+    monkeypatch.setattr("flarecrawl.credentials.KEYRING_AVAILABLE", False)
+    monkeypatch.setattr("flarecrawl.credentials._legacy_config_path", lambda: tmp_path / "nonexistent.json")
+    # Reset singleton so fresh store is created
+    import flarecrawl.credentials as _creds
+    monkeypatch.setattr(_creds, "_store", None)

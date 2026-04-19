@@ -181,11 +181,15 @@ def mock_credentials(monkeypatch):
 
 
 @pytest.fixture
-def no_credentials(monkeypatch):
+def no_credentials(monkeypatch, tmp_path):
     """Ensure no credentials are available."""
     monkeypatch.delenv("FLARECRAWL_ACCOUNT_ID", raising=False)
     monkeypatch.delenv("FLARECRAWL_API_TOKEN", raising=False)
     monkeypatch.setattr("flarecrawl.config.load_config", lambda: {})
+    monkeypatch.setattr("flarecrawl.credentials.KEYRING_AVAILABLE", False)
+    monkeypatch.setattr("flarecrawl.credentials._legacy_config_path", lambda: tmp_path / "nonexistent.json")
+    import flarecrawl.credentials as _creds
+    monkeypatch.setattr(_creds, "_store", None)
 
 
 # ---------------------------------------------------------------------------
