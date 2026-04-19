@@ -6,6 +6,8 @@ import platform
 import tempfile
 from pathlib import Path
 
+from .credentials import get_credential_store
+
 APP_NAME = "flarecrawl"
 
 
@@ -88,43 +90,28 @@ def save_config(config: dict) -> None:
 
 
 def get_account_id() -> str | None:
-    """Get Cloudflare account ID.
-
-    Checks: FLARECRAWL_ACCOUNT_ID env var → config file.
-    """
-    env_val = os.environ.get("FLARECRAWL_ACCOUNT_ID", "").strip()
-    if env_val:
-        return env_val
-
-    config = load_config()
-    stored = config.get("account_id", "")
-    return stored.strip() if stored else None
+    """Cloudflare account ID (env -> keyring -> .env -> legacy)."""
+    return get_credential_store().get("account_id")
 
 
 def get_api_token() -> str | None:
-    """Get Cloudflare API token.
-
-    Checks: FLARECRAWL_API_TOKEN env var → config file.
-    """
-    env_val = os.environ.get("FLARECRAWL_API_TOKEN", "").strip()
-    if env_val:
-        return env_val
-
-    config = load_config()
-    stored = config.get("api_token", "")
-    return stored.strip() if stored else None
+    """Cloudflare API token (env -> keyring -> .env -> legacy)."""
+    return get_credential_store().get("api_token")
 
 
 def save_credentials(account_id: str, api_token: str) -> None:
-    """Save both credentials to config."""
-    config = load_config()
-    config["account_id"] = account_id
-    config["api_token"] = api_token
-    save_config(config)
+    """Persist credentials (keyring preferred, .env fallback)."""
+    store = get_credential_store()
+    store.set("account_id", account_id)
+    store.set("api_token", api_token)
 
 
 def clear_credentials() -> None:
-    """Clear stored credentials."""
+    """Remove credentials from keyring AND .env AND legacy config.json."""
+    store = get_credential_store()
+    store.delete("account_id")
+    store.delete("api_token")
+    # Also clean legacy config.json (preserve usage/sessions data)
     config = load_config()
     config.pop("account_id", None)
     config.pop("api_token", None)
@@ -155,34 +142,13 @@ def track_usage(ms: int) -> None:
 
 
 def get_auth_status() -> dict:
-    """Get authentication status."""
-    account_id = get_account_id()
-    api_token = get_api_token()
-
-    if account_id and api_token:
-        # Determine source
-        if os.environ.get("FLARECRAWL_API_TOKEN"):
-            source = "environment"
-        else:
-            source = "config"
-
-        return {
-            "authenticated": True,
-            "source": source,
-            "account_id": account_id[:8] + "..." if len(account_id) > 8 else account_id,
-        }
-
-    missing = []
-    if not account_id:
-        missing.append("account_id")
-    if not api_token:
-        missing.append("api_token")
-
-    return {
-        "authenticated": False,
-        "source": "none",
-        "missing": missing,
-    }
+    """Auth status with source disclosure for ``flarecrawl auth status``."""
+    store = get_credential_store()
+    base = store.status()
+    if base["authenticated"]:
+        account_id = get_account_id() or ""
+        base["account_id"] = account_id[:8] + "..." if len(account_id) > 8 else account_id
+    return base
 
 
 # ------------------------------------------------------------------
