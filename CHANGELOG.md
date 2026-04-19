@@ -1,5 +1,127 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+## [0.20.0] - 2026-04-20
+
+### Added
+
+- `_enrich_cdp_error()` helper that detects known CDP failure patterns (bot detection, timeouts, redirects, network errors, WebSocket issues, auth failures) and appends actionable `Suggestions:` block with CLI flags to try
+- Applied CDP error enrichment at all CDP call sites: scrape, interact, design extract, design coherence, design diff, and videos commands
+- 18 unit tests for CDP error enrichment
+
+### Changed
+
+- CHANGELOG.md restored as source of truth — README Recent Updates trimmed to last 5 releases
+
+## [0.19.0] - 2026-04-19
+
+### Added
+
+- `flarecrawl videos` command — discover video URLs on web pages (mp4, webm, m3u8, YouTube, Vimeo embeds, OpenGraph `og:video`, JSON-LD `VideoObject`)
+- Video discovery across 21 platforms including YouTube, Vimeo, Dailymotion, Twitch, Wistia, Brightcove, Vidyard, Loom, and more
+- `--export-cookies` flag for yt-dlp Netscape cookie format export
+- `--browser-cookies chrome|firefox` flag for local browser cookie extraction via rookiepy
+- `--download` and `--download-dir` flags for direct yt-dlp integration
+- `--depth N` for multi-page video discovery
+- `spider` command alias for `authcrawl`
+
+### Fixed
+
+- 7 broken `console.print(err=True)` calls corrected to `console.print(..., stderr=True)`
+
+## [0.18.0] - 2026-04-18
+
+### Fixed
+
+- Path-traversal vulnerability on `--resume JOB_ID` — job IDs are now sanitised
+- Non-http(s) URLs (`file:`, `javascript:`, `data:`) blocked from entering the crawler
+- Robots.txt and sitemap downloads capped to prevent hostile server OOM
+
+### Changed
+
+- Crawl loop refactored to ~half its previous size
+- PEP 561 `py.typed` marker added for downstream type hint support
+- 1027 tests
+
+## [0.17.0] - 2026-04-18
+
+### Added
+
+- `flarecrawl authcrawl` command — industrial-scale authenticated BFS crawler for millions of URLs across tens of thousands of domains
+- `--resume JOB_ID` to resume interrupted crawls, picking up exactly where you left off
+- `--refresh-days N` weekly-refresh mode — only re-fetch pages changed since last run (ETag/Last-Modified)
+- Fair round-robin scheduling across domains
+- `--adaptive-delay` automatic politeness tuning based on server response times
+- Auto-retry with exponential backoff and dead-letter inspector (`flarecrawl frontier dead-letter JOB_ID`)
+- Circuit breaker — pauses domains after 10 consecutive failures
+- Robots.txt compliance via protego
+- `--tracing console|json|otlp` OpenTelemetry tracing for production observability
+- URL canonicalisation with tracking-param stripping (`?utm_source=...` deduplication)
+
+### Changed
+
+- selectolax parser (10-30x faster than BeautifulSoup on hot paths), orjson, uvloop, tuned httpx pool — typical crawls 2-5x faster end-to-end
+- 967 tests
+
+## [0.16.0] - 2026-04-17
+
+### Added
+
+- `flarecrawl design extract` — generates DESIGN.md from any website with colors, typography, spacing, shadows, radii, layout, CSS variables, media queries, z-index
+- 9-category Design Coherence scoring (A-F grades)
+- `flarecrawl design coherence` for standalone scoring
+- `flarecrawl design diff` for side-by-side design comparison
+- HTML preview with visual swatches (`--preview`)
+- `--session` support for authenticated design extraction
+- CDP-backed live computed style extraction
+
+## [0.15.0] - 2026-04-17
+
+### Added
+
+- `flarecrawl webmcp discover` and `flarecrawl webmcp call` for structured tool discovery on WebMCP-enabled sites
+- `flarecrawl interact` command with `--fill`, `--click`, `--select` and human-like timing (Bezier mouse curves, variable keystroke delays)
+- `flarecrawl cdp connect` — prints WebSocket URL for Playwright/Puppeteer integration
+- `FLARECRAWL_CDP_ENDPOINT` env var for custom CDP backends (Oxylabs, Bright Data, local Chrome)
+- `--tabs` flag for multi-URL session reuse
+- `--stagehand` stub for future AI element finding
+- Free tier warnings when approaching daily limits
+
+### Fixed
+
+- Live View URLs corrected to use `live.browser.run` hosted UI
+- Session listing/close now uses real CF REST API
+- Recording retrieval via `/recording/{session_id}`
+- `keep_alive` capped at 600s (CF maximum)
+- 740 tests
+
+## [0.14.1] - 2026-04-16
+
+### Added
+
+- CDP WebSocket integration — `--cdp` flag for persistent browser sessions via Chrome DevTools Protocol
+- `--interactive` human-in-the-loop auth flow (login in DevTools, cookies auto-saved)
+- `--live-view` real-time browser debugging via Chrome DevTools
+- Proper `--js-eval` via `Runtime.evaluate` (replaces addScriptTag hack)
+- Real `--har` network capture via `Network.enable`
+- `--record` session recordings (rrweb format)
+- `--keep-alive N` persistent sessions with cross-invocation reuse
+- `--save-cookies`/`--load-cookies` for authenticated scraping
+- `--ignore-robots` on crawl
+- `flarecrawl cdp sessions` and `flarecrawl cdp close` session management commands
+
+### Changed
+
+- Workers max increased from 10 to 50 (CF now supports 120 concurrent browsers)
+- Rebranded to Cloudflare Browser Run
+- 723 tests
+
+---
+
 ## v0.14.0 — 2026-04-16
 
 ### New Modules
