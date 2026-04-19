@@ -2323,6 +2323,7 @@ def crawl(
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
     ignore_robots: Annotated[bool, typer.Option("--ignore-robots", help="Ignore robots.txt and AI Crawl Control directives")] = False,
     rate_limit: Annotated[float, typer.Option("--rate-limit", help="Max requests/sec per hostname (0 disables)")] = 2.0,
+    session: Annotated[str | None, typer.Option("--session", help="Cookie file or @NAME for saved session")] = None,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -2357,6 +2358,23 @@ def crawl(
 
     # Start new crawl
     _validate_url(url_or_job_id, json_output)
+
+    # Resolve session cookies
+    _session_cookies = None
+    if session:
+        if session.startswith("@"):
+            from .config import load_session as _load_session
+            try:
+                _session_cookies = _load_session(session[1:])
+            except FileNotFoundError:
+                _error(f"Session not found: {session[1:]}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+        else:
+            from .cookies import load_cookies
+            try:
+                _session_cookies = load_cookies(Path(session))
+            except (OSError, json.JSONDecodeError, ValueError) as e:
+                _error(f"Cannot read session file: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+
     raw_body = _parse_body(body, json_output)
     auth_dict = _parse_auth(auth, json_output)
     custom_headers = _parse_headers(headers, json_output)
@@ -2398,6 +2416,8 @@ def crawl(
             kwargs.update(auth_dict)
         if user_agent:
             kwargs["user_agent"] = user_agent
+        if _session_cookies:
+            kwargs["cookies"] = _session_cookies
         if ignore_robots:
             # CF /crawl always respects robots.txt — no API parameter exists
             console.print(

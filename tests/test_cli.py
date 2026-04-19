@@ -1243,3 +1243,29 @@ class TestIgnoreRobotsCrawl:
                 client.crawl_start("https://example.com", ignore_robots=True, limit=10)
                 call_body = mock_post.call_args[0][1]
                 assert "ignoreRobots" not in call_body
+
+
+class TestCrawlSession:
+    """Test --session flag on crawl command."""
+
+    def test_crawl_help_has_session(self):
+        result = runner.invoke(app, ["crawl", "--help"])
+        assert result.exit_code == 0
+        assert "--session" in result.output
+
+    def test_crawl_session_at_name_resolves(self):
+        """Passing --session @testsession resolves via saved session store."""
+        from unittest.mock import patch, MagicMock
+        with patch("flarecrawl.cli._require_auth"), \
+             patch("flarecrawl.cli.Client") as MockClient, \
+             patch("flarecrawl.config.load_session") as mock_load:
+            mock_client = MagicMock()
+            mock_client.crawl_start.return_value = "fake-job-id"
+            MockClient.return_value = mock_client
+            mock_load.return_value = [{"name": "sid", "value": "abc", "domain": ".example.com"}]
+            result = runner.invoke(app, [
+                "crawl", "https://example.com", "--wait", "--limit", "5",
+                "--session", "@testsession",
+            ])
+            # Should attempt to load the saved session
+            mock_load.assert_called_once_with("testsession")
