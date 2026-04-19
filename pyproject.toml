@@ -64,7 +64,7 @@ testpaths = ["tests"]
 
 [tool.forma]
 description = "Cloudflare Browser Rendering - scrape, crawl, map, download, extract, screenshot, pdf, favicon"
-resources = ["scrape", "crawl", "download", "extract", "screenshot", "pdf", "favicon", "search", "discover", "schema", "map", "fetch", "openapi", "cdp", "webmcp", "interact", "negotiate", "rules", "session", "design", "videos"]
+resources = ["scrape", "crawl", "download", "extract", "screenshot", "pdf", "favicon", "search", "discover", "schema", "map", "fetch", "frontier", "openapi", "cdp", "webmcp", "interact", "negotiate", "rules", "session", "design", "videos"]
 auth = "api_key"
 origin = "forma"
 install = "uv tool install --editable ."
@@ -72,3 +72,4 @@ command = "flarecrawl"
 env-key = "FLARECRAWL_API_TOKEN"
 api-url = "https://dash.cloudflare.com/"
 maturity = "scaffold"
+status = "experimental"
