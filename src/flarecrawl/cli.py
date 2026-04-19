@@ -4405,14 +4405,14 @@ def design_extract(
         elif preview:
             html = format_preview_html(tokens, coherence, url)
             if output:
-                output.write_text(html)
+                output.write_text(html, encoding="utf-8")
                 console.print(f"[dim]Preview saved to {output}[/dim]")
             else:
                 print(html)
         else:
             md = format_design_md(tokens, coherence, url)
             if output:
-                output.write_text(md)
+                output.write_text(md, encoding="utf-8")
                 console.print(f"[dim]DESIGN.md saved to {output}[/dim]")
             else:
                 print(md)
