@@ -145,7 +145,7 @@ export FLARECRAWL_API_TOKEN="your-api-token"
 
 # Check auth
 flarecrawl auth status --json
-# Returns: {"data": {"authenticated": true, "source": "config", "account_id": "5e08..."}}
+# Returns: {"data": {"authenticated": true, "source": "keyring", "account_id": "5e08...", "keyring_available": true}}
 ```
 
 **Token setup:** https://dash.cloudflare.com/profile/api-tokens → "Browser Rendering - Edit" permission.
@@ -527,7 +527,8 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 44. **CDP flags auto-promote** — `--interactive`, `--live-view`, `--record`, `--save-cookies`, `--load-cookies`, `--keep-alive`, `--browser-cookies` all imply `--cdp`. No need to pass both
 45. **`--browser-cookies chrome|firefox`** works on `scrape`, `interact`, `design extract`, and `videos` — grabs cookies from your local browser and auto-promotes to CDP
 46. **`--session` on crawl** — pass cookies to CF `/crawl` for authenticated crawling. Supports file path or `@NAME` for saved sessions
-45. **`FLARECRAWL_CDP_ENDPOINT` env var** — override the CDP WebSocket URL to use any CDP backend (Oxylabs Scraping Browser, Bright Data, local Chrome `ws://localhost:9222`). When set, flarecrawl skips CF auth for the browser connection
+47. **`FLARECRAWL_CDP_ENDPOINT` env var** — override the CDP WebSocket URL to use any CDP backend (Oxylabs Scraping Browser, Bright Data, local Chrome `ws://localhost:9222`). When set, flarecrawl skips CF auth for the browser connection
+48. **Credential storage** — by default credentials live in OS keyring (`forma-flarecrawl` namespace) when the `keyring` package is installed, falling back to `.env` then legacy `~/.config/flarecrawl/config.json`. Check `flarecrawl auth status --json` to see which source is active via `data.source` (`environment | keyring | dotenv | config-legacy | none`)
 
 ## Pricing Reference
 
@@ -556,7 +557,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (723+ tests, no API calls)
+# Unit tests (1112+ tests, no API calls)
 pytest tests/ -v
 
 # Agent-safety tests only (137 tests including corpus validation)

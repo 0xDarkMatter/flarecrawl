@@ -5,6 +5,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-04-21
+
+### Added
+- `src/flarecrawl/credentials.py` with `CredentialStore` (env -> keyring -> .env -> legacy config.json priority)
+- `secure` optional extra: `pip install flarecrawl[secure]` enables OS keyring storage (Forma protocol §07)
+- `keyring_available` field in `auth status` JSON output
+
+### Changed
+- **BREAKING (minor)**: `auth status --json` `source` field now returns `keyring | environment | dotenv | config-legacy | none` (was: `environment | config | none`). Scripts checking for the literal `"config"` need to handle `"config-legacy"` instead
+- Legacy plaintext credentials in `~/.config/flarecrawl/config.json` are auto-migrated to keyring on first read after upgrade. Usage tracking and session data in the same file are preserved
+
+### Security
+- API tokens no longer stored in plaintext when `keyring` is installed
+- Migration is one-shot and idempotent — re-running has no effect
+
 ## [0.21.0] - 2026-04-20
 
 ### Added
