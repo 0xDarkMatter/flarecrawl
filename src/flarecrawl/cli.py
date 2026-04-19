@@ -143,6 +143,36 @@ def _handle_api_error(e: FlareCrawlError, as_json: bool = False) -> None:
     _error(str(e), e.code, exit_code, as_json=as_json)
 
 
+def _enrich_cdp_error(e: FlareCrawlError, url: str | None = None) -> FlareCrawlError:
+    """Enrich CDP error messages with actionable suggestions.
+
+    Inspects the error message for known failure patterns and appends
+    a ``Suggestions:`` block.  Returns a new FlareCrawlError preserving
+    the original code.
+    """
+    msg = str(e).lower()
+    suggestions: list[str] = []
+
+    if "execution context" in msg or "navigation" in msg or "detached" in msg:
+        suggestions.append("Site may have bot detection. Try: --stealth or --paywall")
+    if "timeout" in msg or "timed out" in msg:
+        suggestions.append("Page took too long. Try: --timeout 60000 or check site reachability")
+    if "redirect" in msg:
+        suggestions.append("Too many redirects. Try: --browser-cookies chrome to reuse your session")
+    if "network error" in msg or "net::" in msg or "connection" in msg:
+        suggestions.append("Network issue. Try: --proxy or check if site blocks CF IPs")
+    if "websocket" in msg or "ws " in msg:
+        suggestions.append("CDP WebSocket failure. Run: flarecrawl cdp sessions, then flarecrawl cdp close")
+    if "cookies" in msg or "auth" in msg or "401" in msg or "403" in msg:
+        suggestions.append("Auth failed. Try: --interactive to log in, or --browser-cookies chrome")
+
+    if not suggestions:
+        return e
+
+    enriched = f"{e}\n\nSuggestions:\n" + "\n".join(f"  - {s}" for s in suggestions)
+    return FlareCrawlError(enriched, code=e.code)
+
+
 def _validate_url(url: str, as_json: bool = False) -> None:
     """Validate URL format."""
     parsed = urlparse(url)
@@ -1757,6 +1787,8 @@ def scrape(
                         _output_text(content)
                     else:
                         _output_json(content)
+        except FlareCrawlError as e:
+            _handle_api_error(_enrich_cdp_error(e), json_output)
         finally:
             cdp_client.close()
         return
@@ -4096,7 +4128,7 @@ def interact(
 
         page.close()
     except FlareCrawlError as e:
-        _handle_api_error(e, json_output)
+        _handle_api_error(_enrich_cdp_error(e, url), json_output)
     finally:
         cdp_client.close()
 
@@ -4308,7 +4340,7 @@ def design_extract(
 
         page.close()
     except FlareCrawlError as e:
-        _handle_api_error(e, json_output)
+        _handle_api_error(_enrich_cdp_error(e, url), json_output)
     finally:
         cdp_client.close()
 
@@ -4367,7 +4399,7 @@ def design_coherence(
 
         page.close()
     except FlareCrawlError as e:
-        _handle_api_error(e, json_output)
+        _handle_api_error(_enrich_cdp_error(e, url), json_output)
     finally:
         cdp_client.close()
 
@@ -4452,7 +4484,7 @@ def design_diff(
 
         page.close()
     except FlareCrawlError as e:
-        _handle_api_error(e, json_output)
+        _handle_api_error(_enrich_cdp_error(e), json_output)
     finally:
         cdp_client.close()
 
@@ -4757,6 +4789,8 @@ def videos(
                 save_cookies.write_text(json.dumps(cookies_data, indent=2), encoding="utf-8")
             if not _browser_cookies:
                 _browser_cookies = page.get_cookies()()
+        except FlareCrawlError as e:
+            _handle_api_error(_enrich_cdp_error(e, url), json_output)
         finally:
             cdp_client.close()
     else:
