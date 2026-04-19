@@ -10,6 +10,7 @@ No external dependencies - works with:
 Compatible with Forma workspaces but doesn't require forma-cli.
 """
 
+import json
 import os
 import platform
 import sys
@@ -23,8 +24,9 @@ try:
 
     KEYRING_AVAILABLE = True
 except ImportError:
+    keyring = None  # type: ignore[assignment]
+    KeyringError = Exception  # type: ignore[misc,assignment]
     KEYRING_AVAILABLE = False
-    KeyringError = Exception  # type: ignore
 
 
 def _legacy_config_path() -> Path:
@@ -59,7 +61,7 @@ class CredentialStore:
             return value
 
         # 2. OS Keyring
-        if KEYRING_AVAILABLE:
+        if KEYRING_AVAILABLE and keyring is not None:
             try:
                 if value := keyring.get_password(self.KEYRING_SERVICE, key):
                     return value
@@ -79,7 +81,7 @@ class CredentialStore:
 
     def set(self, key: str, value: str) -> None:
         """Store credential in keyring, or .env if unavailable."""
-        if KEYRING_AVAILABLE:
+        if KEYRING_AVAILABLE and keyring is not None:
             try:
                 keyring.set_password(self.KEYRING_SERVICE, key, value)
                 return
@@ -93,7 +95,7 @@ class CredentialStore:
         """Delete credential from keyring and .env."""
         deleted = False
 
-        if KEYRING_AVAILABLE:
+        if KEYRING_AVAILABLE and keyring is not None:
             try:
                 keyring.delete_password(self.KEYRING_SERVICE, key)
                 deleted = True
@@ -110,7 +112,7 @@ class CredentialStore:
         if os.environ.get(self._env_var(key)):
             return "environment"
 
-        if KEYRING_AVAILABLE:
+        if KEYRING_AVAILABLE and keyring is not None:
             try:
                 if keyring.get_password(self.KEYRING_SERVICE, key):
                     return "keyring"
@@ -208,15 +210,13 @@ class CredentialStore:
     def _get_from_legacy_config(self, key: str) -> Optional[str]:
         """Read from legacy config.json (plaintext store)."""
         try:
-            import json as _json
-
             legacy = _legacy_config_path()
             if not legacy.exists():
                 return None
-            data = _json.loads(legacy.read_text(encoding="utf-8"))
+            data = json.loads(legacy.read_text(encoding="utf-8"))
             val = data.get(key, "")
             return val.strip() if val else None
-        except (OSError, _json.JSONDecodeError, AttributeError):
+        except (OSError, json.JSONDecodeError, AttributeError):
             return None
 
     def _migrate_legacy(self, key: str, value: str) -> None:
@@ -225,14 +225,13 @@ class CredentialStore:
             # Write to keyring (or .env if keyring unavailable)
             self.set(key, value)
             # Remove from legacy JSON (preserve other keys: usage, sessions, etc.)
-            import json as _json
 
             legacy = _legacy_config_path()
             if legacy.exists():
-                data = _json.loads(legacy.read_text(encoding="utf-8"))
+                data = json.loads(legacy.read_text(encoding="utf-8"))
                 if key in data:
                     del data[key]
-                    legacy.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+                    legacy.write_text(json.dumps(data, indent=2), encoding="utf-8")
             sys.stderr.write(f"[flarecrawl] Migrated {key} from legacy config.json -> keyring\n")
         except OSError:
             pass  # migration failed — value still works, will retry next call

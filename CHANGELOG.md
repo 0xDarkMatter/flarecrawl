@@ -5,6 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.2] - 2026-04-21
+
+### Fixed
+- Type-safety holes in `credentials.py` flagged by Pyright: `keyring` symbol now correctly bound to `None` in the `ImportError` fallback (was undefined), and `_json` local was unused/inconsistent — replaced with module-level `import json`. Runtime behaviour unchanged
+
 ## [0.22.1] - 2026-04-21
 
 ### Fixed
