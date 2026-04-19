@@ -108,6 +108,11 @@
 | Interact: fill form fields | `flarecrawl interact URL --fill "#name=John" --fill "#email=j@e.com" --click "button[type=submit]" --json` |
 | Interact: with screenshot | `flarecrawl interact URL --fill "#q=search" --click "#go" --screenshot result.png` |
 | CDP: multi-URL session reuse | `flarecrawl scrape URL1 URL2 URL3 --cdp --tabs 3 --json` |
+| Spider: direct HTTP crawl (no browser) | `flarecrawl spider URL --limit 500` |
+| Spider: with cookies | `flarecrawl spider URL --cookies session.json --limit 200` |
+| Spider: resume interrupted job | `flarecrawl spider URL --resume JOB_ID` |
+| Spider: high concurrency | `flarecrawl spider URL --limit 1000 --workers 10 --rate-limit 5` |
+| Spider: adaptive per-host delay | `flarecrawl spider URL --adaptive-delay --limit 500` |
 | Crawl ignoring robots.txt | `flarecrawl crawl URL --wait --limit 50 --ignore-robots` |
 | Skip content negotiation | `flarecrawl scrape URL --no-negotiate` |
 | View negotiate domain cache | `flarecrawl negotiate status --json` |

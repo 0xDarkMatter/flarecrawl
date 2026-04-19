@@ -1623,9 +1623,9 @@ def scrape(
         if live_view or interactive:
             dt_url = cdp_client.devtools_url
             if dt_url:
-                console.print(f"[cyan]Live View:[/cyan] {dt_url}", err=True)
+                console.print(f"[cyan]Live View:[/cyan] {dt_url}")
             if cdp_client.session_id:
-                console.print(f"[dim]Session ID: {cdp_client.session_id}[/dim]", err=True)
+                console.print(f"[dim]Session ID: {cdp_client.session_id}[/dim]")
 
         try:
             results = []
@@ -1638,11 +1638,9 @@ def scrape(
                 page.navigate(url, wait_until="load", timeout=timeout or 30000)
                 console.print(
                     f"\n[bold yellow]Interactive mode:[/bold yellow] Browser is navigated to [cyan]{url}[/cyan]",
-                    err=True,
                 )
                 console.print(
                     "Complete authentication in the browser, then press [bold]Enter[/bold] to continue...",
-                    err=True,
                 )
                 try:
                     input()
@@ -1654,7 +1652,6 @@ def scrape(
                 session_path = _save_session("interactive", cookies)
                 console.print(
                     f"[green]Saved {len(cookies)} cookies to:[/green] {session_path}",
-                    err=True,
                 )
 
                 # Continue scraping with the authenticated page
@@ -1726,10 +1723,10 @@ def scrape(
                     from datetime import datetime
                     rec_path = record_output or Path(f"recording-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json")
                     rec_path.write_text(json.dumps(recording_data, indent=2, default=str), encoding="utf-8")
-                    console.print(f"[green]Recording saved to:[/green] {rec_path}", err=True)
+                    console.print(f"[green]Recording saved to:[/green] {rec_path}")
 
             if live_view:
-                console.print("[dim]Session active — press Ctrl+C to close[/dim]", err=True)
+                console.print("[dim]Session active — press Ctrl+C to close[/dim]")
                 try:
                     while True:
                         _time.sleep(1)
@@ -4499,11 +4496,12 @@ def frontier_dead_letter(
 
 
 # ============================================================
-# authcrawl — direct BFS via AuthenticatedCrawler (no CF round-trip)
+# spider / authcrawl — direct BFS via AuthenticatedCrawler (no CF round-trip)
 # ============================================================
 
 
-@app.command("authcrawl")
+@app.command("spider")
+@app.command("authcrawl", hidden=True)
 def authcrawl(
     url: Annotated[str, typer.Argument(help="Seed URL to crawl")],
     limit: Annotated[int, typer.Option("--limit", help="Max pages")] = 50,
@@ -4524,13 +4522,24 @@ def authcrawl(
     tracing: Annotated[str, typer.Option("--tracing", help="OpenTelemetry exporter: none, console, json, otlp")] = "none",
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Write NDJSON results to file")] = None,
 ):
-    """Authenticated BFS crawl driven by the flarecrawl Frontier v2.
+    """Direct HTTP spider — no browser rendering, no CF cost.
 
-    Unlike ``flarecrawl crawl`` (which hits the Cloudflare Browser Run
-    API), ``authcrawl`` fetches pages directly via ``httpx`` while
-    carrying a cookie jar — ideal for session-gated sites. Dedup,
-    retries, conditional headers, adaptive delay, and resume are all
-    delegated to the frontier.
+    Crawls via httpx (not CF Browser Run), carrying cookies for
+    authenticated sites. Orders of magnitude faster and cheaper than
+    browser-based crawling. Use for sites that don't need JS rendering.
+
+    Features: BFS with depth control, per-host rate limiting, robots.txt
+    (protego), adaptive delay, resume, per-URL retry budget, NDJSON output.
+
+    When to use spider vs crawl:
+        spider — static HTML sites, docs, APIs (fast, free, 50-100 concurrent)
+        crawl  — SPAs, JS-rendered content (slower, costs browser time)
+
+    Example:
+        flarecrawl spider https://docs.example.com --limit 500
+        flarecrawl spider https://docs.example.com --limit 1000 --workers 10 --format markdown
+        flarecrawl spider https://private.example.com --cookies session.json --limit 200
+        flarecrawl spider https://docs.example.com --resume JOB_ID
     """
     import json as _json
     import os as _os
@@ -4662,7 +4671,7 @@ def videos(
                 json.dump(_local_cookies, _tf)
                 _tf.close()
                 session = Path(_tf.name)
-                console.print(f"[dim]Grabbed {len(_local_cookies)} cookies from {browser_cookies}[/dim]", err=True)
+                console.print(f"[dim]Grabbed {len(_local_cookies)} cookies from {browser_cookies}[/dim]")
         except ImportError:
             _error(
                 f"Browser cookie extraction requires rookiepy. Install with: uv pip install rookiepy",
@@ -4691,15 +4700,13 @@ def videos(
             if interactive:
                 dt_url = cdp_client.devtools_url
                 if dt_url:
-                    console.print(f"[cyan]Live View:[/cyan] {dt_url}", err=True)
+                    console.print(f"[cyan]Live View:[/cyan] {dt_url}")
                 page.navigate(url, wait_until="load", timeout=30000)
                 console.print(
                     f"\n[bold yellow]Interactive mode:[/bold yellow] Browser is navigated to [cyan]{url}[/cyan]",
-                    err=True,
                 )
                 console.print(
                     "Complete authentication in the browser, then press [bold]Enter[/bold] to continue...",
-                    err=True,
                 )
                 try:
                     input()
@@ -4710,7 +4717,6 @@ def videos(
                 session_path = _save_session("interactive", _browser_cookies)
                 console.print(
                     f"[green]Saved {len(browser_cookies)} cookies to:[/green] {session_path}",
-                    err=True,
                 )
             else:
                 wait_until = "networkidle0" if js else "load"
@@ -4825,7 +4831,6 @@ def videos(
         cookies_to_netscape(_browser_cookies, export_cookies)
         console.print(
             f"[green]Exported {len(browser_cookies)} cookies to:[/green] {export_cookies}",
-            err=True,
         )
 
     # Download via yt-dlp
@@ -4842,7 +4847,7 @@ def videos(
         if export_cookies and export_cookies.exists():
             cookie_args = ["--cookies", str(export_cookies)]
         for v in all_videos:
-            console.print(f"[cyan]Downloading:[/cyan] {v.url}", err=True)
+            console.print(f"[cyan]Downloading:[/cyan] {v.url}")
             cmd = [ytdlp, "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                    "--merge-output-format", "mp4",
                    "-o", str(dl_dir / "%(title)s.%(ext)s"),
@@ -4856,7 +4861,7 @@ def videos(
         result = {"data": video_dicts, "meta": {"url": url, "count": len(video_dicts)}}
         if output:
             output.write_text(json.dumps(result, indent=2), encoding="utf-8")
-            console.print(f"[green]Saved to:[/green] {output}", err=True)
+            console.print(f"[green]Saved to:[/green] {output}")
         else:
             _output_json(result)
     else:
@@ -4872,7 +4877,7 @@ def videos(
             )
         if output:
             output.write_text(json.dumps(video_dicts, indent=2), encoding="utf-8")
-            console.print(f"[green]Saved to:[/green] {output}", err=True)
+            console.print(f"[green]Saved to:[/green] {output}")
 
 
 if __name__ == "__main__":

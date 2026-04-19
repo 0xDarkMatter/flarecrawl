@@ -57,7 +57,7 @@ _SCRIPT_VIDEO_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Embed URL patterns
+# Embed URL patterns — major platforms
 _YOUTUBE_EMBED_RE = re.compile(
     r"https?://(?:www\.)?(?:youtube\.com|youtube-nocookie\.com)/embed/([A-Za-z0-9_-]+)"
 )
@@ -67,6 +67,58 @@ _VIMEO_EMBED_RE = re.compile(
 _DAILYMOTION_EMBED_RE = re.compile(
     r"https?://(?:www\.)?dailymotion\.com/embed/video/([A-Za-z0-9]+)"
 )
+
+# Additional platform embed patterns
+_PLATFORM_EMBEDS: list[tuple[re.Pattern, str, str]] = [
+    # (regex, format_name, canonical_url_template)  — group(1) is the ID
+    (re.compile(r"https?://fast\.wistia\.(?:net|com)/embed/iframe/([A-Za-z0-9]+)"), "wistia", "https://fast.wistia.net/embed/iframe/{id}"),
+    (re.compile(r"https?://(?:www\.)?loom\.com/embed/([A-Za-z0-9]+)"), "loom", "https://www.loom.com/share/{id}"),
+    (re.compile(r"https?://clips\.twitch\.tv/embed\?clip=([A-Za-z0-9_-]+)"), "twitch", "https://clips.twitch.tv/{id}"),
+    (re.compile(r"https?://(?:www\.)?twitch\.tv/(?:videos|[^/]+/clip)/([A-Za-z0-9_-]+)"), "twitch", "https://www.twitch.tv/videos/{id}"),
+    (re.compile(r"https?://(?:www\.)?tiktok\.com/embed/(?:v2/)?(\d+)"), "tiktok", "https://www.tiktok.com/video/{id}"),
+    (re.compile(r"https?://(?:www\.)?facebook\.com/plugins/video"), "facebook", None),
+    (re.compile(r"https?://play\.vidyard\.com/([A-Za-z0-9]+)"), "vidyard", "https://play.vidyard.com/{id}"),
+    (re.compile(r"https?://(?:www\.)?rumble\.com/embed/([A-Za-z0-9]+)"), "rumble", "https://rumble.com/embed/{id}"),
+    (re.compile(r"https?://(?:www\.)?bitchute\.com/embed/([A-Za-z0-9]+)"), "bitchute", "https://www.bitchute.com/video/{id}"),
+    (re.compile(r"https?://player\.bilibili\.com/player\.html\?.*?bvid=([A-Za-z0-9]+)"), "bilibili", "https://www.bilibili.com/video/{id}"),
+    (re.compile(r"https?://coub\.com/embed/([A-Za-z0-9]+)"), "coub", "https://coub.com/view/{id}"),
+    (re.compile(r"https?://open\.spotify\.com/embed/episode/([A-Za-z0-9]+)"), "spotify", "https://open.spotify.com/episode/{id}"),
+]
+
+# Page URL patterns (detect the page itself is a video)
+_YOUTUBE_PAGE_RE = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]+)"
+)
+_VIMEO_PAGE_RE = re.compile(
+    r"https?://(?:www\.)?vimeo\.com/(\d+)"
+)
+
+# Additional page URL patterns — sites where the URL IS the video
+# These are detected from base_url so yt-dlp can handle them
+_PAGE_URL_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # Social media
+    (re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/\w+/status/(\d+)"), "twitter"),
+    (re.compile(r"https?://(?:www\.)?instagram\.com/(?:reel|p)/([A-Za-z0-9_-]+)"), "instagram"),
+    (re.compile(r"https?://(?:www\.)?tiktok\.com/@[^/]+/video/(\d+)"), "tiktok"),
+    (re.compile(r"https?://(?:www\.)?facebook\.com/(?:watch/?\?v=|reel/|.*?/videos/)(\d+)"), "facebook"),
+    (re.compile(r"https?://fb\.watch/([A-Za-z0-9_-]+)"), "facebook"),
+    # Video hosting
+    (re.compile(r"https?://(?:www\.)?streamable\.com/([A-Za-z0-9]+)"), "streamable"),
+    (re.compile(r"https?://(?:www\.)?dailymotion\.com/video/([A-Za-z0-9]+)"), "dailymotion"),
+    (re.compile(r"https?://(?:www\.)?twitch\.tv/videos/(\d+)"), "twitch"),
+    (re.compile(r"https?://clips\.twitch\.tv/([A-Za-z0-9_-]+)"), "twitch"),
+    (re.compile(r"https?://(?:www\.)?rumble\.com/v([A-Za-z0-9_-]+)"), "rumble"),
+    (re.compile(r"https?://(?:www\.)?bitchute\.com/video/([A-Za-z0-9]+)"), "bitchute"),
+    # Image/GIF sites with video
+    (re.compile(r"https?://(?:www\.)?imgur\.com/(?:a/)?([A-Za-z0-9]+)"), "imgur"),
+    # Chinese platforms
+    (re.compile(r"https?://(?:www\.)?bilibili\.com/video/(BV[A-Za-z0-9]+)"), "bilibili"),
+    # Professional
+    (re.compile(r"https?://(?:www\.)?linkedin\.com/(?:posts|feed/update)/([^\s?]+)"), "linkedin"),
+    (re.compile(r"https?://(?:www\.)?loom\.com/share/([A-Za-z0-9]+)"), "loom"),
+    # Reddit
+    (re.compile(r"https?://(?:www\.|old\.)?reddit\.com/r/\w+/comments/([A-Za-z0-9]+)"), "reddit"),
+]
 
 # Data attributes that may contain video URLs
 _DATA_ATTRS = ("data-src", "data-video-url", "data-video-id")
@@ -101,6 +153,33 @@ def extract_videos(html: str, base_url: str) -> list[VideoResult]:
     soup = BeautifulSoup(html, "lxml")
     seen: set[str] = set()
     results: list[VideoResult] = []
+
+    # 0. Detect if the page URL itself is a video page (YouTube, Vimeo)
+    yt_page = _YOUTUBE_PAGE_RE.search(base_url)
+    if yt_page:
+        results.append(VideoResult(
+            url=f"https://www.youtube.com/watch?v={yt_page.group(1)}",
+            type="page", format="youtube", source_element="url",
+        ))
+        seen.add(results[-1].url)
+    vm_page = _VIMEO_PAGE_RE.search(base_url)
+    if vm_page:
+        results.append(VideoResult(
+            url=f"https://vimeo.com/{vm_page.group(1)}",
+            type="page", format="vimeo", source_element="url",
+        ))
+        seen.add(results[-1].url)
+
+    # Check additional page URL patterns (Twitter, Instagram, TikTok, etc.)
+    if not results:  # only if YouTube/Vimeo didn't match
+        for pattern, fmt in _PAGE_URL_PATTERNS:
+            m = pattern.search(base_url)
+            if m:
+                results.append(VideoResult(
+                    url=base_url, type="page", format=fmt, source_element="url",
+                ))
+                seen.add(base_url)
+                break
 
     def _add(url: str, vtype: str, fmt: str, **kwargs) -> None:
         if not url or url in seen:
@@ -160,6 +239,46 @@ def extract_videos(html: str, base_url: str) -> list[VideoResult]:
         if m:
             _add(f"https://www.dailymotion.com/video/{m.group(1)}", "embed", "dailymotion",
                  source_element="iframe")
+            continue
+        # Check additional platform embeds
+        for pattern, fmt, canonical in _PLATFORM_EMBEDS:
+            m = pattern.search(str(src))
+            if m:
+                if canonical and m.lastindex and m.lastindex >= 1:
+                    url = canonical.format(id=m.group(1))
+                else:
+                    url = str(src) if not canonical else str(src)
+                _add(url, "embed", fmt, source_element="iframe")
+                break
+
+    # 2b. Twitter/X player cards (meta tags)
+    for meta in soup.find_all("meta", attrs={"name": re.compile(r"^twitter:player")}):
+        name = meta.get("name", "")
+        content = meta.get("content")
+        if content:
+            content = str(content)
+            if name == "twitter:player:stream":
+                _add(urljoin(base_url, content), "direct", _guess_format(content),
+                     source_element="meta[twitter:player:stream]")
+            elif name == "twitter:player":
+                _add(urljoin(base_url, content), "embed", "twitter",
+                     source_element="meta[twitter:player]")
+
+    # 2c. Wistia script embeds (<script src="fast.wistia.com/embed/medias/ID.jsonp">)
+    for script in soup.find_all("script", src=re.compile(r"fast\.wistia\.(?:com|net)/embed/medias/")):
+        src = str(script.get("src", ""))
+        m = re.search(r"medias/([A-Za-z0-9]+)", src)
+        if m:
+            _add(f"https://fast.wistia.net/embed/iframe/{m.group(1)}", "embed", "wistia",
+                 source_element="script[wistia]")
+
+    # 2d. Brightcove <video-js> elements
+    for vjs in soup.find_all("video-js"):
+        video_id = vjs.get("data-video-id")
+        account = vjs.get("data-account")
+        if video_id and account:
+            _add(f"https://players.brightcove.net/{account}/default_default/index.html?videoId={video_id}",
+                 "embed", "brightcove", source_element="video-js")
 
     # 3. <a href> links to video files
     for a in soup.find_all("a", href=True):
@@ -221,8 +340,15 @@ def extract_videos(html: str, base_url: str) -> list[VideoResult]:
             abs_url = m.group(0)
             _add(abs_url, "script", _guess_format(abs_url), source_element="script")
 
-    # Sort: direct first, then embed, then others
-    type_order = {"direct": 0, "embed": 1, "og": 2, "jsonld": 3, "script": 4}
-    results.sort(key=lambda r: type_order.get(r.type, 5))
+    # 8. CSS inline style background: url(...) with video extensions
+    for el in soup.find_all(style=True):
+        style = str(el.get("style", ""))
+        for m in re.finditer(r'url\(["\']?([^"\')\s]+\.(?:mp4|webm|m3u8|mpd))["\']?\)', style, re.IGNORECASE):
+            abs_url = urljoin(base_url, m.group(1))
+            _add(abs_url, "direct", _guess_format(abs_url), source_element="style[background]")
+
+    # Sort: page first, then direct, then embed, then others
+    type_order = {"page": 0, "direct": 1, "embed": 2, "og": 3, "jsonld": 4, "script": 5}
+    results.sort(key=lambda r: type_order.get(r.type, 6))
 
     return results

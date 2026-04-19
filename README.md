@@ -62,7 +62,7 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 | **Real HAR capture** | No | **Yes** (CDP `Network.enable`) |
 | **Custom CDP backends** | No | **Yes** (`FLARECRAWL_CDP_ENDPOINT` — Oxylabs, Bright Data, local Chrome) |
 | **Batch mode** | Limited | **Yes** (file input, NDJSON output, up to 50 workers) |
-| **Large-scale BFS crawler** | Single-engine | **`flarecrawl authcrawl`** — built for millions of URLs across tens of thousands of domains |
+| **Direct HTTP spider** | Single-engine | **`flarecrawl spider`** — direct HTTP, no browser cost, 50-100 concurrent, built for millions of URLs |
 | **Resume interrupted crawls** | No | **Yes** (`--resume JOB_ID`) — kill the process, come back hours later, pick up exactly where you left off |
 | **Weekly-refresh mode** | No | **Yes** (`--refresh-days 7`) — only re-fetch pages that changed since last run; unchanged = zero browser cost |
 | **Fair multi-domain scheduling** | No | **Yes** — round-robin so one fast site can't starve 53,999 others |
