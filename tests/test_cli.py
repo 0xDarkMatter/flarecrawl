@@ -1212,3 +1212,34 @@ class TestBrowserCookies:
         from flarecrawl.cli import _apply_browser_cookies
         assert _apply_browser_cookies(None, "https://example.com") is None
         assert _apply_browser_cookies("", "https://example.com") is None
+
+
+class TestIgnoreRobotsCrawl:
+    """Test --ignore-robots warns on crawl (CF /crawl has no such API key)."""
+
+    def test_crawl_ignore_robots_warns(self):
+        """Invoking crawl --ignore-robots prints a warning pointing at spider."""
+        from unittest.mock import patch, MagicMock
+        with patch("flarecrawl.cli._require_auth"), \
+             patch("flarecrawl.cli.Client") as MockClient:
+            mock_client = MagicMock()
+            mock_client.crawl_start.return_value = "fake-job-id"
+            MockClient.return_value = mock_client
+            result = runner.invoke(app, [
+                "crawl", "https://example.com", "--ignore-robots", "--limit", "10",
+            ])
+            assert result.exit_code == 0
+            assert "spider" in result.output.lower() or "authcrawl" in result.output.lower()
+
+    def test_crawl_ignore_robots_does_not_send_key(self):
+        """ignore_robots should NOT be passed to the CF API body."""
+        from flarecrawl.client import Client
+        from unittest.mock import patch, MagicMock
+        with patch.object(Client, "__init__", lambda self, **kw: None):
+            client = Client()
+            client.browser_ms_used = 0
+            with patch.object(client, "_post_json") as mock_post:
+                mock_post.return_value = {"result": "job-id"}
+                client.crawl_start("https://example.com", ignore_robots=True, limit=10)
+                call_body = mock_post.call_args[0][1]
+                assert "ignoreRobots" not in call_body

@@ -362,8 +362,10 @@ class Client:
             body["maxAge"] = kwargs.pop("max_age")
         if "modified_since" in kwargs:
             body["modifiedSince"] = kwargs.pop("modified_since")
-        if "ignore_robots" in kwargs:
-            body["ignoreRobots"] = kwargs.pop("ignore_robots")
+        # CF /crawl always respects robots.txt — no API key exists.
+        # ignore_robots is consumed by CLI (prints warning); pop to avoid
+        # sending an unrecognised key that triggers a CF 400 error.
+        kwargs.pop("ignore_robots", None)
 
         # Crawl options (nested under 'options')
         crawl_opts = {}

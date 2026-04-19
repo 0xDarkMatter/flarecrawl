@@ -2399,7 +2399,13 @@ def crawl(
         if user_agent:
             kwargs["user_agent"] = user_agent
         if ignore_robots:
-            kwargs["ignore_robots"] = True
+            # CF /crawl always respects robots.txt — no API parameter exists
+            console.print(
+                "[yellow]Warning:[/yellow] CF /crawl always respects robots.txt (blocked URLs get status 'disallowed').\n"
+                "  To crawl ignoring robots.txt, use:\n"
+                f"    flarecrawl spider {url_or_job_id} --ignore-robots --limit {limit or 50}\n"
+                f"    flarecrawl authcrawl {url_or_job_id} --ignore-robots",
+            )
 
         try:
             job_id = client.crawl_start(url_or_job_id, **kwargs)
