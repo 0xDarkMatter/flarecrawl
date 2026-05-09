@@ -128,7 +128,17 @@
 | Discover videos on page | `flarecrawl videos URL --json` |
 | Videos behind login | `flarecrawl videos URL --interactive --export-cookies cookies.txt --json` |
 | Videos + yt-dlp pipeline | `flarecrawl videos URL --json \| jq -r '.data[].url' \| yt-dlp -a -` |
+| Videos + yt-dlp registry resolution (v0.25.0) | `flarecrawl videos URL --yt-dlp --json` |
 | Inspect dead-letter URLs | `flarecrawl frontier dead-letter JOB_ID --json` |
+| **Hard target stack (v0.23.0+)** ||
+| Local Chromium backend | `flarecrawl scrape URL --js --browser local --headed` |
+| Capture XHR bodies (CSV/JSON) | `flarecrawl scrape URL --js --capture-pattern "*.csv,*.json" --capture-dir ./out/` |
+| Mass-download from captured manifest | `flarecrawl scrape URL --then-fetch-from x.csv --then-fetch-column "Link" --then-fetch-output ./files/` |
+| Auto-discover data sources | `flarecrawl scrape URL --js --auto-data --json` (on by default) |
+| Stealth-TLS binary download | `flarecrawl fetch URL -o file.pdf --stealth` |
+| Run YAML recipe | `flarecrawl recipe scrape-flow.yml` |
+| Recipe dry-run | `flarecrawl recipe scrape-flow.yml --dry-run` |
+| Recipe resume after failure | `flarecrawl recipe scrape-flow.yml --resume` |
 
 ## Authentication
 
@@ -186,6 +196,38 @@ flarecrawl scrape URL --json --fields url,content
 ```
 
 **Key flags:** `--format`, `--json`, `--output`, `--timing`, `--timeout`, `--fields`, `--batch`, `--workers`, `--input`, `--wait-for`, `--body`, `--agent-safe`
+
+#### Hard targets (v0.23.0+)
+
+For sites that fingerprint TLS, return 293-byte stubs to CF Browser
+Rendering, or hide their data layer in JS state, the following flags
+compose into a "hard target stack":
+
+```bash
+# Local Chromium backend (bypass CF stub)
+flarecrawl scrape URL --js --browser local --headed       # v0.24.0 P2.2b
+# (--headed is needed for Akamai-tier targets; headless works for most others)
+
+# Capture response bodies fetched on init (CSV/JSON/XHR)
+flarecrawl scrape URL --js --capture-pattern "*.csv,*.json" --capture-dir ./out/   # v0.24.0 P2.1
+# Auto-promotes to --cdp. Patterns are fnmatch globs.
+
+# Mass-download a list of URLs reusing browser session + stealth TLS
+flarecrawl scrape URL --then-fetch-from manifest.csv \
+  --then-fetch-column "PDF | Image Link" \
+  --then-fetch-output ./files/ --then-fetch-workers 8                          # v0.24.0 P2.3
+# CSV column extraction. Or --then-fetch URL1,URL2,...
+# Optional: --then-fetch-organize-by extension|content-type|thumbnail|flat (v0.25.1)
+
+# Surface structured-data URLs the page fetched on init
+flarecrawl scrape URL --js --auto-data --json
+# meta.data_sources[] populated with CSV/JSON/XLSX response URLs    # v0.25.0 P3.3
+
+# Run typed JS in the page (auto-promotes to --cdp)
+flarecrawl scrape URL --js-eval "Array.from(document.querySelectorAll('h2')).map(h => h.textContent)"   # v0.23.0 P1.2
+```
+
+Worked example end-to-end: see [docs/HARD-TARGETS.md](docs/HARD-TARGETS.md).
 
 ### crawl
 
@@ -325,6 +367,67 @@ flarecrawl usage
 
 flarecrawl usage --json
 # Returns: {"data": {"today_ms": 154, "today_seconds": 0.2, "today_percent_of_free": 0.0, ...}}
+```
+
+### recipe
+
+Run a multi-step browser flow declaratively from a YAML file. (v0.25.0)
+
+```bash
+flarecrawl recipe path/to/flow.yml
+flarecrawl recipe path/to/flow.yml --dry-run     # validate + print plan
+flarecrawl recipe path/to/flow.yml --resume      # skip already-completed steps
+flarecrawl recipe path/to/flow.yml --json
+```
+
+Recipe format (v1):
+
+```yaml
+version: 1
+goto: https://example.com
+browser: local        # cf | local
+headed: true          # for local browser only
+timeout: 30000
+
+steps:
+  - wait_for: ".loaded"
+  - capture:
+      pattern: "*.csv,*.json"
+      to: ./out/
+  - capture_download:           # v0.25.1
+      to: ./downloads/
+  - for_each:                   # v0.25.1
+      selector: "[data-row]"
+      max: 100
+      steps:
+        - click: "@current"     # @current → the current iteration target
+        - wait_for: ".modal"
+        - click: ".modal-download"
+        - press: Escape
+        - wait: 500ms
+  - eval: "document.title"
+  - get_content: page_html
+  - screenshot:
+      to: ./shot.png
+      full_page: true
+```
+
+Step kinds: `click`, `fill`, `press`, `wait`, `wait_for`, `eval`, `capture`,
+`screenshot`, `get_content`, `for_each`, `capture_download`.
+
+Resume: each completed step is journaled to `.recipe-state-<hash>.ndjson`
+next to the recipe. `--resume` skips up to the last successful step.
+
+Examples in [examples/recipes/](examples/recipes/).
+
+### Optional extras
+
+```bash
+pip install flarecrawl[stealth]         # curl_cffi for TLS impersonation (P1.4)
+pip install flarecrawl[local-browser]   # Playwright Chromium for --browser local (P2.2)
+pip install flarecrawl[recipes]         # PyYAML for the recipe runner (P3.1)
+pip install flarecrawl[videos]          # yt-dlp for --yt-dlp passthrough (P3.2)
+pip install flarecrawl[secure]          # OS keyring for credential storage
 ```
 
 ## JSON Output Shapes

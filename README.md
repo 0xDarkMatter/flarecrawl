@@ -14,11 +14,13 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v0.26.0** | 2026-05-09 | **Headless evasion.** `humanize` module — synthesised mouse moves + scrolls + idle gaps, auto-on for headless `--browser local`. 8 additional `stealth_init.js` evasions (chrome.runtime.id, AudioContext noise, voices, Battery, WebGL2, MediaDevices, outerW/H). `SyncCDPPage.send()` for raw CDP from sync code. Idempotent CDP close. 730 tests |
+| **v0.25.1** | 2026-05-09 | **Recipe + organize-by polish.** `for_each` and `capture_download` recipe steps. `--then-fetch-organize-by extension/content-type/thumbnail` for sub-categorised downloads. Windows cp1252 console fallback in `_output_text` |
+| **v0.25.0** | 2026-05-09 | **Productivity.** YAML interaction recipes (`flarecrawl recipe ...`) with resume support. `--yt-dlp` passthrough on `videos` command resolves provider-specific embeds (DVIDS, Vimeo with auth, Twitch, etc.). `--auto-data` surfaces structured-data XHRs (CSV/JSON/XLSX) in `meta.data_sources` |
+| **v0.24.0** | 2026-05-09 | **Capabilities for hard targets.** `--capture-pattern`/`--capture-dir` save XHR response bodies via `Network.getResponseBody`. Vendored `stealth_init.js` auto-applied before navigation. `--browser local --headed` Playwright Chromium backend bypasses CF stub. `--then-fetch-from`/`--then-fetch-column` for cookie-handed-off mass downloads via curl_cffi |
+| **v0.23.0** | 2026-05-09 | **Foundation fixes.** CDP `keep_alive` HTTP 400 fixed (CF changed seconds→ms). `--js-eval` auto-promotes to `--cdp` for typed return values. `cacheable_response()` skips empty/non-200/stub responses. `flarecrawl fetch --stealth` now actually works for binary downloads via curl_cffi (was declared but ignored). `CDPAuthError` + `CDPTierError` for clean 401/403/404 surfacing |
 | **v0.22.0** | 2026-04-21 | **Secure credential storage.** OS keyring via `flarecrawl[secure]` (Forma protocol §07). Auto-migrates legacy plaintext config.json. Priority: env > keyring > .env > legacy. 1112 tests |
 | **v0.21.0** | 2026-04-20 | **Auth + crawl fixes.** `--browser-cookies` on scrape/interact/design (was videos-only). `--session` on crawl. `--ignore-robots` made actionable. Live test suite for design extraction |
-| **v0.20.0** | 2026-04-20 | **Actionable CDP errors.** `_enrich_cdp_error` detects bot detection, timeouts, redirects, network errors, auth failures and appends suggestions. CHANGELOG.md restored as source of truth |
-| **v0.19.0** | 2026-04-19 | **Video discovery.** `flarecrawl videos` finds video URLs (mp4, webm, m3u8, YouTube, Vimeo embeds, OpenGraph, JSON-LD). `--export-cookies` for yt-dlp Netscape cookie format. Works behind login with --session/--interactive. Pipe to yt-dlp for downloading |
-| **v0.18.0** | 2026-04-18 | **Security hardening.** Path-traversal fix on `--resume JOB_ID`, blocks non-http(s) URLs, caps robots.txt/sitemap downloads. Crawl loop refactored. PEP 561 `py.typed` marker. 1027 tests |
 
 For older releases, see [CHANGELOG.md](CHANGELOG.md).
 

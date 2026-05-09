@@ -1,0 +1,36 @@
+# Capture the master CSV from the US DoW PURSUE UAP disclosure SPA.
+#
+# This is the dogfood that motivated v0.23.0–v0.25.0. The page is a
+# JS-rendered SPA where 162 records live behind a click-to-open modal,
+# defended by Akamai BMP. Direct httpx fetch returns 403 (TLS fingerprint
+# blocked); CF Browser Rendering's Chromium gets a 293-byte stub
+# (browser fingerprint blocked).
+#
+# Demonstrates: --browser local --headed, stealth init, response body
+# capture (P2.1 + P2.2 + P3.3 stack working together).
+#
+# Run: flarecrawl recipe examples/recipes/war-gov-uap.yml
+
+version: 1
+goto: https://www.war.gov/UFO/
+browser: local
+headed: true
+timeout: 60000
+
+steps:
+  # Capture the master data file the page fetches on init
+  - capture:
+      pattern: "uap-csv.csv"
+      to: ./out/
+
+  # Wait for the data layer to settle
+  - wait: 3s
+
+  # Pull a thumbnail through CDP for sanity
+  - capture:
+      pattern: "*.jpg"
+      to: ./out/thumbnails/
+      content_types: ["image/jpeg"]
+
+  # Wait once more so async XHRs finish
+  - wait: 2s

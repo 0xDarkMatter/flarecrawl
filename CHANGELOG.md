@@ -5,6 +5,253 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-05-09
+
+### Added — Headless evasion (partial)
+
+Continuing the v0.25.0 dogfood: headless `--browser local` still got
+caught by behavioural-fingerprint engines. v0.26.0 adds two layers:
+
+- **Synthetic interaction (`humanize`)** — new `flarecrawl.humanize`
+  module emits believable mouse moves (cubic-Bezier paths between
+  random viewport points), small wheel scrolls, and idle gaps before
+  any meaningful page action. Defeats *post-navigation* behavioural
+  detectors that gate sessions on JS-observable interaction history.
+
+  Three profiles via `--humanize-profile`: `fast` (~700ms, 1 move +
+  1 scroll), `natural` (~1500ms, 2+2), `thorough` (~3000ms, 4+3).
+
+  Auto-on with headless `--browser local`; opt-out with
+  `--no-humanize`. Headed mode skips it (real cursor history comes
+  from the OS).
+
+  The bezier path generator uses two perturbed control points (15-35%
+  off the straight line) so traces don't look mechanical.
+
+- **Extended stealth_init.js patches (8 new evasions)**:
+  - `chrome.runtime.id` defined (real Chrome has it)
+  - AudioContext fingerprint noise injection
+  - `speechSynthesis.getVoices()` returns a plausible non-empty list
+  - `navigator.getBattery()` resolves a real BatteryManager-shape object
+  - WebGL2 vendor/renderer masking (parity with WebGL1)
+  - `MediaDevices.enumerateDevices()` returns generic mic+camera+speaker
+  - `outerWidth`/`outerHeight` patched when 0 (headless tell)
+
+- `SyncCDPPage.send(method, params)` — public sync wrapper for raw CDP
+  commands. Required by `humanize_page()`, `recipe.capture_download`,
+  and any user code that needs `Input.dispatchMouseEvent` etc.
+- 12 new unit tests in `test_humanize.py`
+
+### Empirical findings
+
+`UPGRADE-PLAN-v0.26.0.md` updated with dogfood results: humanize +
+extended stealth init still doesn't defeat **Akamai BMP on war.gov-tier
+targets**. That engine fingerprints at the TLS/transport layer (HTTP 403
+on the initial GET, before any page JS runs), so JS-level evasions can't
+help. `--headed` remains the recommended setting for those sites until
+v0.27.0+ adds TLS-handshake-level mitigations. Humanize **does** help on
+sites that gate on post-load JS — most cf-non-Akamai bot detection.
+
+### Fixed
+
+- **`RuntimeWarning: coroutine '_AsyncCDPClient.close' was never awaited`**
+  no longer fires on cleanup. The CDPClient now tracks a `_closed`
+  flag (idempotent close), and `_run()` cleanly cancels coroutines
+  scheduled against an already-stopped event loop instead of letting
+  Python's GC complain. Closes a long-standing cosmetic warning that
+  surfaced any time a scrape hit an exception or when wrappers double-
+  closed the client
+
+## [0.25.1] - 2026-05-09
+
+### Added
+
+- **Recipe step `for_each`** — iterate sub-steps over a CSS-selector list,
+  with `@current` placeholder substitution targeting the current iteration's
+  element (selector-based, position-stable). Bounded by `max:` to keep
+  runs bounded:
+
+      - for_each:
+          selector: "[data-record-trigger]"
+          max: 200
+          steps:
+            - click: "@current"
+            - wait_for: ".modal"
+            - click: ".modal-download"
+            - press: Escape
+            - wait: 500ms
+
+- **Recipe step `capture_download`** — sets `Page.setDownloadBehavior` to
+  allow downloads to land in the configured directory. Click the trigger
+  button in a subsequent step:
+
+      - capture_download:
+          to: ./pdfs/
+      - click: "button.download"
+
+- **`scrape --then-fetch-organize-by`** flag — sub-categorise downloads
+  into directories. Modes: `flat` (default), `extension`
+  (`pdfs/`, `images/`, `videos/`, `docs/`, `other/`), `content-type`
+  (`image/`, `video/`, `application/`, `audio/`, `other/`), or
+  `thumbnail` (war.gov-style: pulls URLs containing `/thumbnail/` into
+  a separate `thumbnails/` subdir, falls through to extension classes
+  for everything else).
+- New `_classify_url_for_organize()` helper exposed in the CLI module
+- Working recipe in `examples/recipes/war-gov-uap.yml` now demos
+  `for_each`-style flows
+- AGENTS.md: comprehensive update for all v0.23.0–v0.25.0 features
+  (hard-target stack, recipe section, optional extras list)
+- `docs/UPGRADE-PLAN-v0.26.0.md` — planning doc for headless evasion
+  (synthetic interaction + extended stealth patches)
+
+### Fixed
+
+- **Windows console crash on Unicode output.** `_output_text()` previously
+  called `print()` which crashes on cp1252 consoles when scraped content
+  contains characters like primes (`′`), em dashes, smart quotes, or fancy
+  bullets. Now writes via `sys.stdout` with `errors="replace"` fallback —
+  printable approximation lands on the console, full content goes to
+  `--output` files unaltered
+
+## [0.25.0] - 2026-05-09
+
+### Added — Productivity layer
+
+Stops users from writing 40-line wrappers around `flarecrawl scrape`.
+
+- **YAML interaction recipes** (`flarecrawl recipe <path.yml>`).
+  Declarative multi-step browser flows. Step kinds: `click`, `fill`,
+  `press`, `wait`, `wait_for`, `eval`, `capture`, `screenshot`,
+  `get_content`. Resume support via journal file
+  (`.recipe-state-<hash>.ndjson`); `--resume` skips already-completed
+  steps. `--dry-run` validates and prints the step plan.
+
+  Recipe format (v1):
+
+      version: 1
+      goto: https://example.com
+      browser: local
+      headed: true
+      steps:
+        - wait_for: ".loaded"
+        - capture:
+            pattern: "*.csv,*.json"
+            to: ./out/
+        - click: "[data-action]"
+        - wait: 500ms
+
+  Optional dep: `pip install flarecrawl[recipes]`
+- **yt-dlp passthrough on `videos`** (`--yt-dlp`). After DOM-based
+  discovery, run candidate URLs (YouTube, Vimeo, DVIDS, TikTok, Twitch,
+  Wistia, Loom, etc. — 16 host families) through yt-dlp's extractor
+  registry. Resolves provider-specific embeds that DOM scraping can't
+  unwrap (e.g. DVIDS `iframe[src=...]` → direct mp4 URL with auth).
+  `resolve_via_yt_dlp()` exposed at the Python level. Optional dep:
+  `pip install flarecrawl[videos]`
+- **Auto data-discovery** (`--auto-data` / `--no-auto-data`, on by
+  default). When CDP is in use, passively detects structured-data
+  responses (CSV, JSON, XLSX, YAML, XML) the page fetched on init —
+  without downloading their bodies. Emits `meta.data_sources` array
+  on every scrape result. Same-origin filter on by default.
+  `DataSourceProbe` exposed at the Python level
+- 23 new unit tests across `test_recipe.py`,
+  `test_videos_yt_dlp.py`, and `test_data_source_probe.py`
+- New optional extras: `recipes` (PyYAML), `videos` (yt-dlp)
+
+### Changed
+
+- `_AsyncCDPPage.enable_network()` accepts a `data_probe: DataSourceProbe`
+  arg in addition to `body_capture`. Both can be passed simultaneously
+- `extract_videos(html, base_url, *, use_yt_dlp=False)` gains the
+  `use_yt_dlp` keyword arg
+
+## [0.24.0] - 2026-05-09
+
+### Added — Capabilities for hard targets
+
+This release closes the gap between flarecrawl and bespoke
+Playwright + curl_cffi + yt-dlp wrappers for heavily-defended SPAs.
+Dogfood: scraping the war.gov UAP disclosure page (162 records hidden
+behind a JS-rendered modal flow) goes from "must drop into Python" to a
+single CLI invocation.
+
+- **Response body interception** (`--capture-pattern`, `--capture-dir`).
+  Save subresources fetched by JS during page load (CSV, JSON, XHR
+  payloads). Pattern is comma-separated fnmatch globs; optional
+  `--capture-content-type` for MIME filtering. Auto-promotes to `--cdp`.
+  The dogfood case (war.gov's 185 KB `uap-csv.csv`) drops to:
+  `flarecrawl scrape https://www.war.gov/UFO/ --js --browser local
+  --headed --capture-pattern uap-csv.csv --capture-dir ./out/`
+- **Stealth init script auto-applied via CDP** (`Page.addScriptToEvaluateOnNewDocument`).
+  Patches `navigator.webdriver`, `window.chrome`, plugins, languages,
+  WebGL vendor/renderer, hardware concurrency, etc. — the fingerprints
+  Cloudflare Bot Management / DataDome / Akamai BMP / PerimeterX
+  commonly check. Idempotent. Fails open if asset is missing
+- **Local Chromium backend** (`--browser local`, `--headed`). Spawns a
+  Playwright-managed Chromium with `--remote-debugging-port`, exposes
+  its CDP WebSocket via the existing `FLARECRAWL_CDP_ENDPOINT`
+  override, and tears down on scrape exit. Bypasses the 293-byte stub
+  CF Browser Rendering returns on hard targets. Optional dep:
+  `pip install flarecrawl[local-browser]`. Headed mode (`--headed`) is
+  the recommended setting for war.gov-class targets where headless is
+  detected
+- **`--then-fetch` flow** for cookie-handed-off mass downloads. Pulls
+  cookies from the live CDP session and parallel-downloads a list of
+  URLs via `curl_cffi` (Chrome 131 TLS impersonation):
+  - `--then-fetch URL1,URL2,...` — inline list
+  - `--then-fetch-from FILE` — one URL per line
+  - `--then-fetch-from FILE --then-fetch-column "Col Name"` — CSV column
+    extraction (handles spaces and special chars in column names)
+  - `--then-fetch-output DIR` — destination
+  - `--then-fetch-workers N` — parallel workers (default 4)
+  Resume-safe: existing files with non-zero size are skipped
+- `BodyCapture` and `LocalBrowser` exposed at the Python API level for
+  programmatic use
+- `stealth` and `local-browser` optional extras in `pyproject.toml`
+- 18 new unit tests across `test_body_capture.py` and `test_then_fetch.py`
+
+### Changed
+
+- `_AsyncCDPPage.enable_network()` now accepts an optional
+  `body_capture: BodyCapture` arg. The synchronous wrapper
+  `SyncCDPPage.enable_network(body_capture=...)` is the public path
+- `apply_stealth()` is invoked automatically before navigation in CDP
+  scrape mode. Best-effort: never fails the scrape if stealth init
+  encounters issues
+
+### Known limitations
+
+- Headless local Chromium (`--browser local` without `--headed`) still
+  gets blocked by Akamai BMP on war.gov-tier targets. Use `--headed`
+  for those. Improving headless evasion is on the v0.25.0+ roadmap
+
+## [0.23.0] - 2026-05-09
+
+### Fixed
+
+- **CDP keep_alive rejected with HTTP 400.** Cloudflare's Browser Rendering CDP changed its `keep_alive` query parameter to require milliseconds (was seconds), with a 10-second minimum. flarecrawl was sending raw seconds, so any `--keep-alive`, `--interactive`, `--live-view`, `--record`, `--save-cookies`, or `--load-cookies` invocation rejected at the WebSocket handshake. CDP now converts seconds → milliseconds internally and clamps below 10 s up to the minimum
+- `flarecrawl fetch` previously caught `httpx.HTTPError` even though `httpx` wasn't imported in `cli.py`, raising a `NameError` from inside the exception handler when any HTTP error occurred. Now imports lazily
+
+### Added
+
+- `CDPAuthError` (exit code 2) and `CDPTierError` (exit code 5) distinguish 401/403/404 WebSocket failures from generic connection errors. Surface a one-line actionable message instead of a stack trace
+- `flarecrawl fetch --stealth` now actually works for binary downloads. Routes through `curl_cffi` with Chrome 131 TLS impersonation, defeating JA3/JA4 bot detection on sites like war.gov that previously returned 403 to direct fetches. The flag was previously declared but ignored on the binary path
+- `flarecrawl fetch --paywall` flag — implies `--stealth` for binaries (the paywall cascade is HTML-oriented; the stealth tier within it is what binaries need)
+- `flarecrawl fetch --impersonate <profile>` — choose curl_cffi browser profile (`chrome131`, `chrome120`, `safari17`, etc.). Default `chrome131`
+- `download_binary_stealth()` in `flarecrawl.fetch` for programmatic use
+- `cacheable_response()` predicate in `flarecrawl.cache` — skips persisting empty bodies, non-200 responses, and HTML/markdown stubs under 1 KB. Prevents the "cached error masquerading as real content for an hour" footgun
+- `cache.put(..., allow_empty=True)` opt-in flag preserves the legacy behaviour for callers that intentionally want to cache empty responses
+
+### Changed
+
+- `--js-eval` now auto-promotes `scrape` to `--cdp` mode. Without CDP the REST `/scrape` endpoint silently dropped the eval return value; the new behaviour matches `--interactive`, `--live-view`, `--record`, etc. A dim notice prints in non-`--json` mode
+- `detect_content_type()` accepts `stealth=True` to route the HEAD probe through curl_cffi too — needed for sites that fingerprint TLS even on HEAD requests
+- `cache.put()` now returns `bool` (was `None`) — `False` indicates the response was rejected by the gating predicate. Callers that ignore the return value see no behavioural change
+
+### Security
+
+- API tokens with insufficient permissions for CDP (Browser Rendering Edit) now surface a clear "permission required" message instead of leaking the WebSocket failure trace
+
 ## [0.22.2] - 2026-04-21
 
 ### Fixed

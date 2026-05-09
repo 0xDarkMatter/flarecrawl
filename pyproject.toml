@@ -1,6 +1,6 @@
 [project]
 name = "flarecrawl"
-version = "0.22.2"
+version = "0.26.0"
 description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,10 @@ dev = [
 cdp = ["websockets>=13.0"]
 cookies = ["browser-cookie3>=0.20"]
 secure = ["keyring>=24.0"]
+stealth = ["curl_cffi>=0.7.0"]
+local-browser = ["playwright>=1.40.0"]
+videos = ["yt-dlp>=2024.1.0"]
+recipes = ["pyyaml>=6.0"]
 perf = [
   "uvloop>=0.19.0; sys_platform != 'win32'",
   "orjson>=3.9.0",
