@@ -5,9 +5,30 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass
+from typing import Iterable
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
+
+
+# Hosts where yt-dlp typically has working extractors that beat DOM scraping.
+# Used to filter which iframe URLs we send through yt-dlp.extract_info.
+_YT_DLP_HOSTS = (
+    "youtube.com", "youtu.be", "youtube-nocookie.com",
+    "vimeo.com", "player.vimeo.com",
+    "dailymotion.com",
+    "twitch.tv", "clips.twitch.tv",
+    "tiktok.com",
+    "facebook.com",
+    "dvidshub.net", "api.dvidshub.net",
+    "wistia.com", "fast.wistia.net",
+    "loom.com",
+    "soundcloud.com",
+    "rumble.com",
+    "bitchute.com",
+    "odysee.com",
+    "twitter.com", "x.com",
+)
 
 
 @dataclass
@@ -143,7 +164,67 @@ def _normalise_vimeo(video_id: str) -> str:
     return f"https://vimeo.com/{video_id}"
 
 
-def extract_videos(html: str, base_url: str) -> list[VideoResult]:
+def resolve_via_yt_dlp(urls: Iterable[str]) -> list[VideoResult]:
+    """v0.25.0 P3.2: enrich discovered URLs with yt-dlp's extractor registry.
+
+    yt-dlp has 1500+ extractors that resolve provider-specific URLs
+    (DVIDS, YouTube unlisted, Vimeo with auth, TikTok, Twitch, etc.) to
+    direct media URLs. We use it as a fallback enrichment pass, not a
+    replacement: DOM scraping is much faster for the common case.
+
+    Returns a list of VideoResult entries for URLs that yt-dlp could
+    extract media info from. URLs it can't handle are silently skipped.
+
+    Returns an empty list if yt-dlp isn't installed.
+    """
+    try:
+        import yt_dlp  # type: ignore[import-untyped]
+    except ImportError:
+        return []
+
+    out: list[VideoResult] = []
+    opts: dict = {"quiet": True, "no_warnings": True, "skip_download": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        for url in urls:
+            try:
+                info = ydl.extract_info(url, download=False)
+            except Exception:
+                continue  # extractor errored — skip silently
+            if not info:
+                continue
+            # extract_info may return playlist-like structures
+            entries = info.get("entries") if isinstance(info, dict) else None
+            items = entries if entries else [info]
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                media_url = item.get("url") or item.get("webpage_url")
+                if not media_url:
+                    continue
+                ext = item.get("ext", "unknown")
+                title = item.get("title")
+                thumbnail = item.get("thumbnail")
+                duration = item.get("duration_string") or (
+                    str(item.get("duration")) if item.get("duration") else None
+                )
+                out.append(VideoResult(
+                    url=media_url,
+                    type="yt-dlp",
+                    format=ext,
+                    title=title,
+                    thumbnail=thumbnail,
+                    duration=duration,
+                    source_element=item.get("extractor", "yt-dlp"),
+                ))
+    return out
+
+
+def is_yt_dlp_candidate(url: str) -> bool:
+    """True if a URL is plausibly handled by yt-dlp's registry."""
+    return any(host in url.lower() for host in _YT_DLP_HOSTS)
+
+
+def extract_videos(html: str, base_url: str, *, use_yt_dlp: bool = False) -> list[VideoResult]:
     """Extract video URLs from HTML.
 
     Checks <video>, <iframe> embeds, <a> links, data-* attributes,
@@ -347,8 +428,18 @@ def extract_videos(html: str, base_url: str) -> list[VideoResult]:
             abs_url = urljoin(base_url, m.group(1))
             _add(abs_url, "direct", _guess_format(abs_url), source_element="style[background]")
 
+    # v0.25.0 P3.2: yt-dlp enrichment pass — resolve provider-specific URLs
+    # (DVIDS, YouTube, etc.) that DOM scraping found but couldn't unwrap.
+    if use_yt_dlp:
+        candidate_urls = [r.url for r in results if is_yt_dlp_candidate(r.url)]
+        if candidate_urls:
+            for vr in resolve_via_yt_dlp(candidate_urls):
+                if vr.url not in seen:
+                    seen.add(vr.url)
+                    results.append(vr)
+
     # Sort: page first, then direct, then embed, then others
-    type_order = {"page": 0, "direct": 1, "embed": 2, "og": 3, "jsonld": 4, "script": 5}
+    type_order = {"page": 0, "direct": 1, "embed": 2, "og": 3, "jsonld": 4, "script": 5, "yt-dlp": 7}
     results.sort(key=lambda r: type_order.get(r.type, 6))
 
     return results

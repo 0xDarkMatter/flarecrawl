@@ -41,8 +41,30 @@ class CDPError(FlareCrawlError):
 class CDPConnectionError(FlareCrawlError):
     """WebSocket connection error."""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str, *, http_status: int | None = None):
         super().__init__(message, code="CDP_CONNECTION_ERROR")
+        self.http_status = http_status
+
+
+class CDPAuthError(CDPConnectionError):
+    """CDP rejected the API token (401/403)."""
+
+    def __init__(self, message: str, *, http_status: int | None = None):
+        super().__init__(message, http_status=http_status)
+        self.code = "CDP_AUTH_ERROR"
+
+
+class CDPTierError(CDPConnectionError):
+    """CDP feature requires a paid Cloudflare tier the account doesn't have."""
+
+    def __init__(self, message: str, *, http_status: int | None = None):
+        super().__init__(message, http_status=http_status)
+        self.code = "CDP_TIER_ERROR"
+
+
+# Cloudflare's Browser Rendering CDP rejects keep_alive values below this
+# threshold (in milliseconds). Discovered by probing 2026-05-09.
+MIN_KEEP_ALIVE_MS = 10_000
 
 
 class NetworkCollector:
@@ -126,6 +148,222 @@ class NetworkCollector:
         }
 
 
+class BodyCapture:
+    """Captures response bodies for URLs matching glob patterns.
+
+    v0.24.0 P2.1: enables ``--capture-pattern '*.csv,*.json'`` workflows
+    that mine SPA data layers (the war.gov UAP page fetches a 185KB
+    ``uap-csv.csv`` on init — capturing it bypasses the entire scraping
+    problem).
+
+    Only available in CDP mode (REST has no body-fetch hook). Body fetch
+    is async — calls ``Network.getResponseBody`` after the response
+    completes.
+    """
+
+    def __init__(
+        self,
+        patterns: list[str],
+        output_dir: Any,  # Path; typed as Any to avoid pulling pathlib at module load
+        *,
+        max_body_bytes: int = 50 * 1024 * 1024,
+        content_types: list[str] | None = None,
+    ) -> None:
+        from fnmatch import fnmatch
+
+        self._patterns = patterns
+        self._fnmatch = fnmatch
+        self._output_dir = output_dir
+        self._max_bytes = max_body_bytes
+        self._content_type_filter = (
+            [ct.lower() for ct in content_types] if content_types else None
+        )
+        self._captured: list[dict] = []
+        # Track requestId → response metadata while waiting for loadingFinished
+        self._pending: dict[str, dict] = {}
+
+    @property
+    def captured(self) -> list[dict]:
+        return self._captured
+
+    def _matches(self, url: str, content_type: str) -> bool:
+        # Strip query string for pattern matching against the path tail
+        from urllib.parse import urlparse
+
+        path = urlparse(url).path
+        name = path.rsplit("/", 1)[-1] or path
+        if not any(self._fnmatch(name, pat) or self._fnmatch(url, pat) for pat in self._patterns):
+            return False
+        if self._content_type_filter is not None:
+            ct = content_type.lower()
+            if not any(allowed in ct for allowed in self._content_type_filter):
+                return False
+        return True
+
+    def _on_response_received(self, params: dict) -> None:
+        """Stash response metadata. Body is fetched on loadingFinished."""
+        req_id = params.get("requestId", "")
+        response = params.get("response", {})
+        url = response.get("url", "")
+        ct = response.get("mimeType", "") or ""
+        if self._matches(url, ct):
+            self._pending[req_id] = {
+                "url": url,
+                "content_type": ct,
+                "status": response.get("status", 0),
+            }
+
+    async def fetch_pending_bodies(self, page: CDPPage) -> None:
+        """Resolve pending bodies via Network.getResponseBody."""
+        from pathlib import Path
+
+        for req_id, info in list(self._pending.items()):
+            try:
+                result = await page.send(
+                    "Network.getResponseBody", {"requestId": req_id}
+                )
+            except CDPError:
+                # Request may have been cancelled / unavailable
+                continue
+            body = result.get("body", "")
+            is_b64 = result.get("base64Encoded", False)
+            if is_b64:
+                try:
+                    raw = base64.b64decode(body)
+                except (ValueError, TypeError):
+                    continue
+            else:
+                raw = body.encode("utf-8", errors="replace")
+            if len(raw) > self._max_bytes:
+                continue
+
+            # Choose filename — prefer URL path, fall back to a hash
+            from urllib.parse import urlparse
+
+            path_tail = urlparse(info["url"]).path.rsplit("/", 1)[-1]
+            if not path_tail or "." not in path_tail:
+                # Use first 12 chars of req_id as fallback
+                ext = ".bin"
+                if "json" in info["content_type"]:
+                    ext = ".json"
+                elif "csv" in info["content_type"]:
+                    ext = ".csv"
+                elif "html" in info["content_type"]:
+                    ext = ".html"
+                path_tail = f"capture-{req_id[:12]}{ext}"
+
+            output_dir = Path(self._output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            dest = output_dir / path_tail
+            # Collision handling: append .1, .2, etc.
+            if dest.exists():
+                stem, suffix = dest.stem, dest.suffix
+                for i in range(1, 1000):
+                    candidate = output_dir / f"{stem}.{i}{suffix}"
+                    if not candidate.exists():
+                        dest = candidate
+                        break
+            try:
+                dest.write_bytes(raw)
+            except OSError:
+                continue
+            self._captured.append({
+                "url": info["url"],
+                "path": str(dest),
+                "size": len(raw),
+                "content_type": info["content_type"],
+                "status": info["status"],
+            })
+            self._pending.pop(req_id, None)
+
+
+class DataSourceProbe:
+    """v0.25.0 P3.3: lightweight detector for structured-data XHRs.
+
+    Sibling to ``BodyCapture`` but doesn't download bodies — just records
+    URL + content-type + size in ``self.detected``. Use this as a free
+    enrichment pass on every CDP scrape: SPA pages frequently fetch their
+    data layer (``uap-csv.csv``, ``manifest.json``, an XLSX export, etc.)
+    on init, and surfacing those URLs in ``meta.data_sources`` collapses
+    discovery for downstream tooling.
+    """
+
+    # Default allowlist — structured data MIME types worth flagging.
+    DEFAULT_TYPES = (
+        "text/csv",
+        "application/csv",
+        "application/json",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/x-yaml",
+        "application/yaml",
+        "text/tab-separated-values",
+        "application/xml",
+    )
+
+    def __init__(
+        self,
+        *,
+        min_size: int = 1024,
+        content_types: tuple[str, ...] | list[str] | None = None,
+        same_origin_only: bool = True,
+        page_origin: str | None = None,
+    ) -> None:
+        self._min_size = min_size
+        self._content_types = tuple(ct.lower() for ct in (content_types or self.DEFAULT_TYPES))
+        self._same_origin_only = same_origin_only
+        self._page_origin = self._origin(page_origin) if page_origin else None
+        self.detected: list[dict] = []
+        self._seen_urls: set[str] = set()
+
+    @staticmethod
+    def _origin(url: str | None) -> str | None:
+        if not url:
+            return None
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        if not p.netloc:
+            return None
+        return f"{p.scheme}://{p.netloc}"
+
+    def set_page_origin(self, url: str) -> None:
+        self._page_origin = self._origin(url)
+
+    def _on_response_received(self, params: dict) -> None:
+        response = params.get("response", {}) or {}
+        url = response.get("url", "") or ""
+        if not url or url in self._seen_urls:
+            return
+        ct = (response.get("mimeType", "") or "").lower()
+        if not any(ct.startswith(t) for t in self._content_types):
+            return
+        # Size threshold — encodedDataLength populates after loadingFinished;
+        # at responseReceived we have the announced Content-Length
+        headers = response.get("headers", {}) or {}
+        size_raw = (
+            headers.get("content-length")
+            or headers.get("Content-Length")
+            or response.get("encodedDataLength", 0)
+        )
+        try:
+            size = int(size_raw) if size_raw is not None else 0
+        except (TypeError, ValueError):
+            size = 0
+        if size and size < self._min_size:
+            return
+        # Same-origin filter — drop tracking pixels and CDN telemetry
+        if self._same_origin_only and self._page_origin:
+            if self._origin(url) != self._page_origin:
+                return
+        self._seen_urls.add(url)
+        self.detected.append({
+            "url": url,
+            "content_type": ct,
+            "size": size,
+            "status": response.get("status", 0),
+        })
+
+
 class CDPPage:
     """A browser page controlled via CDP."""
 
@@ -145,6 +383,28 @@ class CDPPage:
     async def send(self, method: str, params: dict | None = None) -> dict:
         """Send CDP command scoped to this page's session."""
         return await self._client.send(method, params, session_id=self._session_id)
+
+    async def apply_stealth(self) -> None:
+        """Inject the stealth init script before any user JS runs.
+
+        Patches navigator.webdriver, window.chrome, plugins, languages, WebGL
+        vendor, etc. — the fingerprints Cloudflare Bot Management / DataDome /
+        Akamai BMP / PerimeterX commonly check. Idempotent.
+
+        Should be called once per page, *before* navigation. v0.24.0 P2.2a.
+        """
+        try:
+            from importlib.resources import files
+            script = (files("flarecrawl") / "assets" / "stealth_init.js").read_text(
+                encoding="utf-8"
+            )
+        except (ImportError, FileNotFoundError, ModuleNotFoundError):
+            return  # Asset missing — fail open, scrape still works
+        await self._client.send(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": script},
+            session_id=self._session_id,
+        )
 
     async def navigate(self, url: str, wait_until: str = "load", timeout: int = 30000) -> dict:
         """Navigate to URL and wait for load event."""
@@ -242,14 +502,36 @@ class CDPPage:
         """Set browser cookies."""
         await self._client.send("Network.setCookies", {"cookies": cookies}, session_id=self._session_id)
 
-    async def enable_network(self) -> NetworkCollector:
-        """Enable network tracking and return a collector."""
+    async def enable_network(
+        self,
+        body_capture: BodyCapture | None = None,
+        data_probe: DataSourceProbe | None = None,
+    ) -> NetworkCollector:
+        """Enable network tracking and return a collector.
+
+        Args:
+            body_capture: Optional BodyCapture to also subscribe to response
+                received events. After navigation completes, call
+                ``body_capture.fetch_pending_bodies(page)`` to resolve bodies.
+            data_probe: Optional DataSourceProbe (v0.25.0 P3.3) — passive
+                detector for structured-data URLs. Records metadata only,
+                never fetches bodies. Use the ``data_probe.detected``
+                attribute after navigation completes.
+        """
         collector = NetworkCollector()
         await self._client.send("Network.enable", session_id=self._session_id)
         self._client.subscribe("Network.requestWillBeSent", lambda p: collector._on_request(p))
         self._client.subscribe("Network.responseReceived", lambda p: collector._on_response(p))
         self._client.subscribe("Network.loadingFinished", lambda p: collector._on_finished(p))
         self._client.subscribe("Network.loadingFailed", lambda p: collector._on_failed(p))
+        if body_capture is not None:
+            self._client.subscribe(
+                "Network.responseReceived", lambda p: body_capture._on_response_received(p)
+            )
+        if data_probe is not None:
+            self._client.subscribe(
+                "Network.responseReceived", lambda p: data_probe._on_response_received(p)
+            )
         return collector
 
     async def get_accessibility_tree(self) -> list[dict]:
@@ -420,7 +702,14 @@ class _AsyncCDPClient:
         self._ws_url: str | None = None
 
     async def connect(self, keep_alive: int = 0, recording: bool = False) -> None:
-        """Open WebSocket connection with Bearer auth."""
+        """Open WebSocket connection with Bearer auth.
+
+        Args:
+            keep_alive: seconds to hold the browser session open after disconnect.
+                Cloudflare's API takes milliseconds with a 10s minimum; this method
+                accepts seconds and converts internally. Values <10s are bumped to 10s.
+            recording: enable rrweb recording on the session.
+        """
         _require_websockets()
 
         custom_endpoint = os.environ.get("FLARECRAWL_CDP_ENDPOINT")
@@ -430,7 +719,9 @@ class _AsyncCDPClient:
             url = self.WS_URL.format(account_id=self._account_id)
         query: dict[str, Any] = {}
         if keep_alive:
-            query["keep_alive"] = str(keep_alive)
+            # CF's API takes milliseconds with a 10s minimum. CLI/users pass seconds.
+            keep_alive_ms = max(int(keep_alive) * 1000, MIN_KEEP_ALIVE_MS)
+            query["keep_alive"] = str(keep_alive_ms)
         if recording:
             query["recording"] = "true"
         if query:
@@ -448,7 +739,37 @@ class _AsyncCDPClient:
                 max_size=50 * 1024 * 1024,
             )
         except Exception as exc:
-            raise CDPConnectionError(f"WebSocket connection failed: {exc}") from exc
+            # websockets raises InvalidStatus with a `.response` carrying status + body
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            body_bytes = getattr(getattr(exc, "response", None), "body", b"") or b""
+            try:
+                body = body_bytes.decode("utf-8", errors="replace")[:500]
+            except Exception:
+                body = ""
+            if status in (401, 403):
+                raise CDPAuthError(
+                    f"CDP rejected your API token. The token must have "
+                    f"'Browser Rendering - Edit' permission. (HTTP {status})",
+                    http_status=status,
+                ) from exc
+            if status == 400:
+                hint = ""
+                if "keep_alive" in body or "keep-alive" in body.lower():
+                    hint = " (keep_alive must be ≥10s)"
+                raise CDPConnectionError(
+                    f"CDP request rejected: HTTP 400{hint}. Body: {body}",
+                    http_status=status,
+                ) from exc
+            if status == 404:
+                raise CDPTierError(
+                    "CDP endpoint not found. Browser Rendering CDP may require "
+                    "a paid Workers tier or be unavailable in your region. "
+                    "REST scrape (default) still works on free tier.",
+                    http_status=status,
+                ) from exc
+            raise CDPConnectionError(
+                f"WebSocket connection failed: {exc}", http_status=status
+            ) from exc
 
         self._connected = True
         self._recv_task = asyncio.ensure_future(self._recv_loop())
@@ -685,9 +1006,22 @@ class CDPClient:
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
         self._async = _AsyncCDPClient(self.account_id, self.api_token, timeout=timeout)
+        self._closed = False
 
     def _run(self, coro: Any) -> Any:
-        """Run coroutine on the event loop thread."""
+        """Run coroutine on the event loop thread.
+
+        If the event loop is already stopped (e.g. after ``close()``),
+        cancel the coroutine *cleanly* — closing it on the calling thread —
+        to suppress the ``RuntimeWarning: coroutine ... was never awaited``
+        Python emits during garbage collection.
+        """
+        if not self._loop.is_running():
+            try:
+                coro.close()
+            except (AttributeError, RuntimeError):
+                pass
+            raise RuntimeError("CDP client event loop is stopped (already closed?)")
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout=60)
 
     def connect(self, keep_alive: int = 0, recording: bool = False) -> None:
@@ -720,10 +1054,21 @@ class CDPClient:
         return SyncCDPPage(page, self._run)
 
     def close(self) -> None:
-        """Close all pages and disconnect."""
-        self._run(self._async.close())
-        self._loop.call_soon_threadsafe(self._loop.stop)
-        self._thread.join(timeout=5)
+        """Close all pages and disconnect. Idempotent."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._run(self._async.close())
+        except RuntimeError:
+            # Loop already stopped — nothing to await
+            pass
+        finally:
+            try:
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            except RuntimeError:
+                pass
+            self._thread.join(timeout=5)
 
     @property
     def session_id(self) -> str | None:
@@ -787,6 +1132,14 @@ class SyncCDPPage:
         """Navigate to URL."""
         return self._run(self._page.navigate(url, wait_until=wait_until, timeout=timeout))
 
+    def send(self, method: str, params: dict | None = None) -> dict:
+        """Send a raw CDP command scoped to this page (sync wrapper).
+
+        Useful for low-level commands that don't have a dedicated wrapper
+        (Input.dispatchMouseEvent, Page.setDownloadBehavior, etc.).
+        """
+        return self._run(self._page.send(method, params))
+
     def evaluate(self, expression: str, await_promise: bool = True) -> Any:
         """Evaluate JavaScript expression."""
         return self._run(self._page.evaluate(expression, await_promise=await_promise))
@@ -819,9 +1172,24 @@ class SyncCDPPage:
         """Set browser cookies."""
         self._run(self._page.set_cookies(cookies))
 
-    def enable_network(self) -> NetworkCollector:
-        """Enable network tracking."""
-        return self._run(self._page.enable_network())
+    def enable_network(
+        self,
+        body_capture: BodyCapture | None = None,
+        data_probe: DataSourceProbe | None = None,
+    ) -> NetworkCollector:
+        """Enable network tracking, optionally with response body capture
+        and/or data-source probe (v0.25.0 P3.3)."""
+        return self._run(
+            self._page.enable_network(body_capture=body_capture, data_probe=data_probe)
+        )
+
+    def fetch_captured_bodies(self, body_capture: BodyCapture) -> None:
+        """Fetch any pending bodies for the given BodyCapture."""
+        self._run(body_capture.fetch_pending_bodies(self._page))
+
+    def apply_stealth(self) -> None:
+        """Apply stealth init script — call before navigation. v0.24.0 P2.2a."""
+        self._run(self._page.apply_stealth())
 
     def get_accessibility_tree(self) -> list[dict]:
         """Get accessibility tree."""

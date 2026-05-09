@@ -83,8 +83,25 @@ def _output_ndjson(record: dict) -> None:
 
 
 def _output_text(text: str) -> None:
-    """Output raw text to stdout."""
-    print(text)
+    """Output raw text to stdout — Windows-safe.
+
+    Windows consoles default to cp1252 and crash on common Unicode chars
+    (em dashes, primes, smart quotes, fancy bullets) that show up in
+    real-world scraped pages. Encode with the stdout codec, replacing
+    unmappable chars rather than aborting the whole pipeline.
+    """
+    if not text:
+        return
+    enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        sys.stdout.write(text)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    except UnicodeEncodeError:
+        # Fall back to encode-replace at the byte level
+        sys.stdout.buffer.write(text.encode(enc, errors="replace"))
+        sys.stdout.buffer.write(b"\n")
+        sys.stdout.buffer.flush()
 
 
 def _filter_fields(data, fields: str | None):
@@ -138,6 +155,8 @@ def _handle_api_error(e: FlareCrawlError, as_json: bool = False) -> None:
         "VALIDATION_ERROR": EXIT_VALIDATION,
         "FORBIDDEN": EXIT_FORBIDDEN,
         "RATE_LIMITED": EXIT_RATE_LIMITED,
+        "CDP_AUTH_ERROR": EXIT_AUTH_REQUIRED,
+        "CDP_TIER_ERROR": EXIT_FORBIDDEN,
     }
     exit_code = code_map.get(e.code, EXIT_ERROR)
     _error(str(e), e.code, exit_code, as_json=as_json)
@@ -763,6 +782,205 @@ def rules_path():
 # ------------------------------------------------------------------
 
 
+def _classify_url_for_organize(url: str, mode: str) -> str:
+    """Pick a subdirectory name for a URL given an organize-by mode.
+
+    Modes:
+        flat        → "" (everything in then_fetch_output)
+        extension   → "pdfs" / "images" / "videos" / "docs" / "other"
+        content-type → "image" / "application" / "text" / "video" / "audio"
+                      (best-effort from the URL extension; refined by
+                      Content-Type at fetch time isn't worth the round trip)
+        thumbnail   → war.gov-style: pull URLs containing "/thumbnail/" into
+                      a thumbnails/ subdir; everything else by extension.
+    """
+    from urllib.parse import urlparse
+
+    if mode in (None, "flat"):
+        return ""
+    name = Path(urlparse(url.split("?")[0]).path).name.lower()
+    ext = Path(name).suffix or ""
+
+    is_thumb = "/thumbnail/" in url.lower() or "thumbnail" in name
+
+    if mode == "thumbnail":
+        if is_thumb:
+            return "thumbnails"
+        # fall through to extension behaviour
+        mode = "extension"
+
+    if mode == "extension":
+        if ext == ".pdf":
+            return "pdfs"
+        if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"):
+            return "images"
+        if ext in (".mp4", ".webm", ".mov", ".avi", ".mkv", ".m3u8"):
+            return "videos"
+        if ext in (".doc", ".docx", ".xlsx", ".csv", ".xls", ".ppt", ".pptx", ".txt"):
+            return "docs"
+        return "other"
+
+    if mode == "content-type":
+        if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"):
+            return "image"
+        if ext in (".mp4", ".webm", ".mov", ".avi", ".mkv"):
+            return "video"
+        if ext in (".mp3", ".wav", ".ogg"):
+            return "audio"
+        if ext in (".pdf", ".doc", ".docx", ".xlsx", ".csv"):
+            return "application"
+        return "other"
+
+    return ""
+
+
+def _run_then_fetch(
+    *,
+    cdp_client: "CDPClient",
+    then_fetch: str | None,
+    then_fetch_from: Path | None,
+    then_fetch_column: str | None,
+    then_fetch_output: Path,
+    then_fetch_workers: int,
+    json_output: bool,
+    then_fetch_organize_by: str | None = None,
+) -> dict:
+    """v0.24.0 P2.3: mass-download URLs reusing browser session + stealth TLS.
+
+    Cookies extracted from the live CDP browser are handed off to a
+    curl_cffi thread pool (Chrome 131 impersonation). Resume-safe — files
+    that already exist with non-zero size are skipped.
+
+    Returns a summary dict for inclusion in scrape result metadata.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from .fetch import download_binary_stealth
+
+    # ── 1. Resolve URL list ──────────────────────────────────────────────
+    urls: list[str] = []
+    if then_fetch:
+        urls.extend(u.strip() for u in then_fetch.split(",") if u.strip())
+    if then_fetch_from:
+        if not then_fetch_from.exists():
+            _error(
+                f"--then-fetch-from file not found: {then_fetch_from}",
+                "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output,
+            )
+        text = then_fetch_from.read_text(encoding="utf-8-sig")
+        if then_fetch_column:
+            # CSV mode
+            import csv
+            import io
+            reader = csv.DictReader(io.StringIO(text))
+            if then_fetch_column not in (reader.fieldnames or []):
+                _error(
+                    f"Column '{then_fetch_column}' not found. "
+                    f"Available: {reader.fieldnames}",
+                    "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+                )
+            for row in reader:
+                val = (row.get(then_fetch_column) or "").strip()
+                if val and val.lower().startswith(("http://", "https://")):
+                    urls.append(val)
+        else:
+            # One URL per line
+            for line in text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    urls.append(line)
+
+    # Dedupe while preserving order
+    seen: set = set()
+    deduped: list[str] = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            deduped.append(u)
+    urls = deduped
+
+    if not urls:
+        _error(
+            "--then-fetch produced no URLs to download",
+            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+        )
+
+    # ── 2. Extract cookies via a temporary page ──────────────────────────
+    cookies: list[dict] = []
+    try:
+        cookie_page = cdp_client.new_page()
+        try:
+            cookies = cookie_page.get_cookies()
+        finally:
+            cookie_page.close()
+    except Exception as e:
+        if not json_output:
+            console.print(f"[yellow]Warning: cookie extraction failed ({e}); proceeding without[/yellow]")
+
+    # ── 3. Output dir ────────────────────────────────────────────────────
+    then_fetch_output.mkdir(parents=True, exist_ok=True)
+    if not json_output:
+        console.print(
+            f"[dim]then-fetch: {len(urls)} URLs, {then_fetch_workers} workers, "
+            f"output={then_fetch_output}[/dim]"
+        )
+
+    # ── 4. Parallel downloads ───────────────────────────────────────────
+    def _do_one(url: str) -> dict:
+        from urllib.parse import urlparse
+        name = Path(urlparse(url.split("?")[0]).path).name or "download"
+        subdir = _classify_url_for_organize(url, then_fetch_organize_by or "flat")
+        dest_dir = then_fetch_output / subdir if subdir else then_fetch_output
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / name
+        if dest.exists() and dest.stat().st_size > 0:
+            return {"status": "skip", "url": url, "path": str(dest), "size": dest.stat().st_size}
+        try:
+            result = download_binary_stealth(url, dest, cookies=cookies)
+            return {"status": "ok", "url": url, "path": str(result.path), "size": result.size}
+        except Exception as e:
+            return {"status": "error", "url": url, "error": {"code": "FETCH_ERROR", "message": str(e)[:200]}}
+
+    ok_count = 0
+    skip_count = 0
+    fail_count = 0
+    with ThreadPoolExecutor(max_workers=then_fetch_workers) as pool:
+        futures = {pool.submit(_do_one, u): u for u in urls}
+        for fut in as_completed(futures):
+            res = fut.result()
+            # Stream NDJSON output for batch-style consumption
+            if json_output:
+                _output_ndjson(res)
+            else:
+                status = res["status"]
+                url_short = res["url"][:80]
+                if status == "ok":
+                    ok_count += 1
+                    console.print(f"  [green]ok[/green]    {url_short} ({res['size']:,} bytes)")
+                elif status == "skip":
+                    skip_count += 1
+                    console.print(f"  [dim]skip[/dim]  {url_short}")
+                else:
+                    fail_count += 1
+                    msg = res.get("error", {}).get("message", "unknown")
+                    console.print(f"  [red]fail[/red]  {url_short}: {msg}")
+
+    summary = {
+        "total": len(urls),
+        "ok": ok_count if not json_output else None,
+        "skip": skip_count if not json_output else None,
+        "fail": fail_count if not json_output else None,
+        "output_dir": str(then_fetch_output),
+        "cookies_used": len(cookies),
+    }
+    if not json_output:
+        console.print(
+            f"[dim]then-fetch done: {ok_count} ok, {skip_count} skipped, "
+            f"{fail_count} failed[/dim]"
+        )
+    return {k: v for k, v in summary.items() if v is not None}
+
+
 def _scrape_single_cdp(
     cdp_client: "CDPClient",
     url: str,
@@ -783,6 +1001,12 @@ def _scrape_single_cdp(
     save_cookies: Path | None = None,
     page: "SyncCDPPage | None" = None,
     skip_navigation: bool = False,
+    capture_patterns: list[str] | None = None,
+    capture_dir: Path | None = None,
+    capture_content_types: list[str] | None = None,
+    auto_data: bool = True,
+    humanize: bool = False,
+    humanize_profile: str = "fast",
 ) -> dict:
     """Scrape a URL using CDP WebSocket connection.
 
@@ -798,8 +1022,28 @@ def _scrape_single_cdp(
         page = cdp_client.new_page()
     try:
         collector = None
-        if har_output:
-            collector = page.enable_network()
+        body_capture = None
+        data_probe = None
+        if capture_patterns and capture_dir:
+            from .cdp import BodyCapture
+            body_capture = BodyCapture(
+                patterns=capture_patterns,
+                output_dir=capture_dir,
+                content_types=capture_content_types,
+            )
+        if auto_data:
+            from .cdp import DataSourceProbe
+            data_probe = DataSourceProbe(page_origin=url)
+        if har_output or body_capture or data_probe:
+            collector = page.enable_network(body_capture=body_capture, data_probe=data_probe)
+
+        # v0.24.0 P2.2a: apply stealth patches before any navigation. Cheap
+        # (one CDP message), idempotent, fails open if asset missing.
+        if not skip_navigation:
+            try:
+                page.apply_stealth()
+            except Exception:
+                pass  # Stealth is best-effort; never fail the scrape over it
 
         if load_cookies:
             cookies = json.loads(load_cookies.read_text(encoding="utf-8"))
@@ -808,6 +1052,16 @@ def _scrape_single_cdp(
         if not skip_navigation:
             wait_until = "networkidle0" if scroll else "load"
             page.navigate(url, wait_until=wait_until, timeout=timeout or 30000)
+
+        # v0.26.0 P1: humanize before any meaningful click/eval to defeat
+        # behavioural-fingerprint engines (Akamai BMP, DataDome, PerimeterX).
+        # Cheap when not needed (~700ms), critical for hard targets.
+        if humanize:
+            try:
+                from .humanize import humanize_page
+                humanize_page(page, profile=humanize_profile)
+            except Exception:
+                pass  # Humanize is best-effort; never fail the scrape
 
         if wait_for_selector:
             page.wait_for_selector(wait_for_selector, timeout=timeout or 30000)
@@ -871,11 +1125,22 @@ def _scrape_single_cdp(
             har_data = collector.to_har()
             har_output.write_text(json.dumps(har_data, indent=2), encoding="utf-8")
 
+        # Resolve any pending response bodies for capture (P2.1)
+        captured_meta: list[dict] = []
+        if body_capture is not None:
+            page.fetch_captured_bodies(body_capture)
+            captured_meta = body_capture.captured
+
         metadata: dict[str, Any] = {"source": "cdp"}
         if isinstance(content, str):
             metadata["contentLength"] = len(content)
             metadata["wordCount"] = len(content.split())
         metadata["sourceURL"] = url
+        if captured_meta:
+            metadata["captured"] = captured_meta
+        # v0.25.0 P3.3: surface auto-discovered structured data sources
+        if data_probe is not None and data_probe.detected:
+            metadata["data_sources"] = data_probe.detected
         elapsed = _time.time() - start
 
         return {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
@@ -1411,7 +1676,7 @@ def scrape(
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     wait_for_selector: Annotated[str | None, typer.Option("--wait-for-selector", help="Wait for CSS selector")] = None,
     selector: Annotated[str | None, typer.Option("--selector", help="Extract content from CSS selector")] = None,
-    js_expression: Annotated[str | None, typer.Option("--js-eval", help="Run JS expression, return result")] = None,
+    js_expression: Annotated[str | None, typer.Option("--js-eval", help="Run JS expression, return result (implies --cdp for typed return values)")] = None,
     stdin_mode: Annotated[bool, typer.Option("--stdin", help="Read HTML from stdin (no API call)")] = False,
     har_output: Annotated[Path | None, typer.Option("--har", help="Save request metadata to HAR file")] = None,
     backup_dir: Annotated[Path | None, typer.Option("--backup-dir", help="Save raw HTML to this directory")] = None,
@@ -1439,6 +1704,20 @@ def scrape(
     load_cookies_file: Annotated[Path | None, typer.Option("--load-cookies", help="Load cookies from file before navigation (implies --cdp)")] = None,
     tabs: Annotated[int, typer.Option("--tabs", help="Reuse one CDP session across N URLs (reduces cost, implies --cdp)")] = 1,
     browser_cookies: Annotated[str | None, typer.Option("--browser-cookies", help="Grab cookies from local browser (chrome|firefox)")] = None,
+    capture_pattern: Annotated[str | None, typer.Option("--capture-pattern", help="Comma-separated glob patterns to capture response bodies for (e.g. '*.csv,*.json'). Implies --cdp.")] = None,
+    capture_dir: Annotated[Path | None, typer.Option("--capture-dir", help="Directory to save captured response bodies. Required with --capture-pattern.")] = None,
+    capture_content_type: Annotated[str | None, typer.Option("--capture-content-type", help="Optional MIME type filter for captures (comma-separated, e.g. 'text/csv,application/json')")] = None,
+    browser: Annotated[str, typer.Option("--browser", help="Browser backend: 'cf' (Cloudflare-hosted, default) or 'local' (Playwright Chromium). Local bypasses CF bot detection on hard targets.")] = "cf",
+    headed: Annotated[bool, typer.Option("--headed", help="Run local browser visibly (debugging). Implies --browser local.")] = False,
+    then_fetch: Annotated[str | None, typer.Option("--then-fetch", help="Comma-separated URLs to download after scraping (uses captured cookies + stealth TLS).")] = None,
+    then_fetch_from: Annotated[Path | None, typer.Option("--then-fetch-from", help="File listing URLs (one per line) or CSV. With CSV, also pass --then-fetch-column.")] = None,
+    then_fetch_column: Annotated[str | None, typer.Option("--then-fetch-column", help="CSV column to extract URLs from (e.g. 'PDF | Image Link').")] = None,
+    then_fetch_output: Annotated[Path | None, typer.Option("--then-fetch-output", help="Output directory for --then-fetch downloads.")] = None,
+    then_fetch_workers: Annotated[int, typer.Option("--then-fetch-workers", help="Parallel workers for --then-fetch.")] = 4,
+    then_fetch_organize_by: Annotated[str | None, typer.Option("--then-fetch-organize-by", help="Subdirectory layout for downloads: 'flat' (default), 'extension' (group .pdf/.jpg/.mp4 by file extension), 'content-type' (group by major MIME type), or 'thumbnail' (special-case the war.gov '/thumbnail/' path).")] = None,
+    auto_data: Annotated[bool, typer.Option("--auto-data/--no-auto-data", help="When CDP is in use, surface structured-data URLs (CSV/JSON/XLSX) the page fetched on init in meta.data_sources.")] = True,
+    humanize: Annotated[bool | None, typer.Option("--humanize/--no-humanize", help="Synthesise mouse moves + scrolls + idle gaps before scraping. Defaults to ON for headless --browser local. Pass --no-humanize to disable. ~700ms cost.")] = None,
+    humanize_profile: Annotated[str, typer.Option("--humanize-profile", help="Humanize intensity: 'fast' (~700ms), 'natural' (~1500ms), 'thorough' (~3000ms).")] = "fast",
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1459,6 +1738,85 @@ def scrape(
     # Flags that require CDP
     if any([keep_alive, record, live_view, interactive, save_cookies_file, load_cookies_file, tabs > 1]):
         cdp = True
+
+    # --js-eval auto-promotes: REST scrape silently drops the return value,
+    # CDP returns the typed result via Runtime.evaluate. Match behaviour of
+    # other auto-promoting flags (--interactive, --live-view, etc.).
+    if js_expression and not cdp:
+        cdp = True
+        if not json_output:
+            console.print(
+                "[dim]auto-promoting to --cdp for --js-eval (returns typed result)[/dim]"
+            )
+
+    # --browser local / --headed auto-promote to CDP (local Chromium is
+    # always driven via CDP) and signals the local-browser context manager.
+    use_local_browser = browser == "local" or headed
+    if browser not in ("cf", "local"):
+        _error(
+            f"--browser must be 'cf' or 'local', got '{browser}'",
+            "VALIDATION_ERROR", EXIT_VALIDATION,
+            as_json=json_output,
+        )
+    if use_local_browser and not cdp:
+        cdp = True
+        if not json_output:
+            console.print("[dim]auto-promoting to --cdp for --browser local[/dim]")
+
+    # v0.26.0 P1: auto-humanize on headless local browser (the case where
+    # behavioural fingerprinting hits hardest). User can override with
+    # --no-humanize. Headed mode doesn't need it (real cursor history
+    # comes from the OS).
+    # `humanize is None` means user didn't pass either flag — apply default.
+    # `humanize is False` means user explicitly said --no-humanize; respect.
+    # `humanize is True` means user said --humanize; respect.
+    if humanize is None:
+        humanize = bool(use_local_browser and not headed)
+    # After this point humanize is a concrete bool. (Pyright still sees
+    # the Optional in the function signature; cast at call sites if needed.)
+
+    # Validate --then-fetch-organize-by before any work begins
+    if then_fetch_organize_by is not None and then_fetch_organize_by not in (
+        "flat", "extension", "content-type", "thumbnail",
+    ):
+        _error(
+            f"--then-fetch-organize-by must be one of "
+            f"flat | extension | content-type | thumbnail, got '{then_fetch_organize_by}'",
+            "VALIDATION_ERROR", EXIT_VALIDATION,
+            as_json=json_output,
+        )
+
+    # Validate --humanize-profile
+    if humanize_profile not in ("fast", "natural", "thorough"):
+        _error(
+            f"--humanize-profile must be one of fast | natural | thorough, "
+            f"got '{humanize_profile}'",
+            "VALIDATION_ERROR", EXIT_VALIDATION,
+            as_json=json_output,
+        )
+
+    # --capture-pattern needs CDP for Network.getResponseBody (REST has no
+    # body-fetch hook). Auto-promote and validate args.
+    capture_patterns: list[str] | None = None
+    capture_content_types: list[str] | None = None
+    if capture_pattern:
+        if not capture_dir:
+            _error(
+                "--capture-pattern requires --capture-dir",
+                "VALIDATION_ERROR", EXIT_VALIDATION,
+                as_json=json_output,
+            )
+        capture_patterns = [p.strip() for p in capture_pattern.split(",") if p.strip()]
+        if capture_content_type:
+            capture_content_types = [
+                ct.strip() for ct in capture_content_type.split(",") if ct.strip()
+            ]
+        if not cdp:
+            cdp = True
+            if not json_output:
+                console.print(
+                    "[dim]auto-promoting to --cdp for --capture-pattern (body interception)[/dim]"
+                )
 
     # Grab cookies from local browser
     if browser_cookies:
@@ -1674,6 +2032,17 @@ def scrape(
         if interactive and not keep_alive:
             keep_alive = 300  # 5 minutes
 
+        # v0.24.0 P2.2b: --browser local launches a Playwright Chromium and
+        # exposes its CDP URL via FLARECRAWL_CDP_ENDPOINT, which the existing
+        # CDPClient picks up. Lifetime is the scrape command itself.
+        _local_browser_ctx = None
+        if use_local_browser:
+            from .local_browser import LocalBrowser, LocalBrowserError
+            try:
+                _local_browser_ctx = LocalBrowser(headless=not headed).__enter__()
+            except LocalBrowserError as exc:
+                _error(str(exc), "MISSING_DEPENDENCY", EXIT_ERROR, as_json=json_output)
+
         cdp_client = _get_cdp_client(
             as_json=json_output,
             keep_alive=keep_alive,
@@ -1739,6 +2108,12 @@ def scrape(
                     save_cookies=save_cookies_file,
                     page=page,
                     skip_navigation=True,
+                    capture_patterns=capture_patterns,
+                    capture_dir=capture_dir,
+                    capture_content_types=capture_content_types,
+                    auto_data=auto_data,
+                    humanize=humanize,
+                    humanize_profile=humanize_profile,
                 )
                 if timing:
                     console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
@@ -1760,6 +2135,12 @@ def scrape(
                         timeout=timeout,
                         har_output=har_output,
                         save_cookies=save_cookies_file,
+                        capture_patterns=capture_patterns,
+                        capture_dir=capture_dir,
+                        capture_content_types=capture_content_types,
+                    auto_data=auto_data,
+                    humanize=humanize,
+                    humanize_profile=humanize_profile,
                     )
                     if timing:
                         console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
@@ -1780,10 +2161,33 @@ def scrape(
                         har_output=har_output,
                         load_cookies=load_cookies_file,
                         save_cookies=save_cookies_file,
+                        capture_patterns=capture_patterns,
+                        capture_dir=capture_dir,
+                        capture_content_types=capture_content_types,
+                    auto_data=auto_data,
+                    humanize=humanize,
+                    humanize_profile=humanize_profile,
                     )
                     if timing:
                         console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
                     results.append(result)
+
+            # v0.24.0 P2.3: --then-fetch — mass-download URLs reusing the
+            # browser's session (cookies + stealth TLS via curl_cffi).
+            if (then_fetch or then_fetch_from) and then_fetch_output:
+                _then_fetch_results = _run_then_fetch(
+                    cdp_client=cdp_client,
+                    then_fetch=then_fetch,
+                    then_fetch_from=then_fetch_from,
+                    then_fetch_column=then_fetch_column,
+                    then_fetch_output=then_fetch_output,
+                    then_fetch_workers=then_fetch_workers,
+                    json_output=json_output,
+                    then_fetch_organize_by=then_fetch_organize_by,
+                )
+                # Surface the result counts in the scrape result meta
+                if results and isinstance(results[-1], dict):
+                    results[-1].setdefault("metadata", {})["then_fetch"] = _then_fetch_results
 
             # --record: save recording data
             if record:
@@ -1830,6 +2234,8 @@ def scrape(
             _handle_api_error(_enrich_cdp_error(e), json_output)
         finally:
             cdp_client.close()
+            if _local_browser_ctx is not None:
+                _local_browser_ctx.__exit__(None, None, None)
         return
 
     # ------------------------------------------------------------------
@@ -2132,7 +2538,9 @@ def fetch(
     auth: Annotated[str | None, typer.Option("--auth", help="HTTP Basic Auth (user:password)")] = None,
     headers: Annotated[list[str] | None, typer.Option("--headers", help="Custom HTTP headers (Key: Value)")] = None,
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Output file path")] = None,
-    stealth: Annotated[bool, typer.Option("--stealth", help="Use browser TLS fingerprint (requires curl_cffi)")] = False,
+    stealth: Annotated[bool, typer.Option("--stealth", help="Use browser TLS fingerprint (requires curl_cffi). Bypasses JA3/JA4 fingerprinting.")] = False,
+    paywall: Annotated[bool, typer.Option("--paywall", help="Apply paywall cascade (stealth fetch, archive fallbacks). Implies --stealth for binaries.")] = False,
+    impersonate: Annotated[str, typer.Option("--impersonate", help="curl_cffi browser profile (chrome131, chrome120, safari17, etc.)")] = "chrome131",
     proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL (http/https/socks5)")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite existing files")] = False,
@@ -2150,9 +2558,12 @@ def fetch(
         flarecrawl fetch https://example.com --session @mysession
         flarecrawl fetch https://api.example.com/data.json --json
     """
-    from .fetch import ContentInfo, build_session, detect_content_type, download_binary
+    from .fetch import ContentInfo, build_session, detect_content_type, download_binary, download_binary_stealth
 
     _validate_url(url, json_output)
+    # --paywall implies --stealth for binary downloads (the paywall cascade
+    # is HTML-oriented; for binaries, the stealth tier is the relevant fix).
+    use_stealth = stealth or paywall
 
     # Resolve session cookies
     _cookies = None
@@ -2192,8 +2603,11 @@ def fetch(
 
     try:
         # Detect content type
-        console.print(f"[dim]Probing {url}...[/dim]")
-        info = detect_content_type(url, session=http_session, headers=custom_headers)
+        console.print(f"[dim]Probing {url}{'  [stealth]' if use_stealth else ''}...[/dim]")
+        info = detect_content_type(
+            url, session=http_session, headers=custom_headers,
+            stealth=use_stealth, impersonate=impersonate,
+        )
 
         if info.is_binary:
             # Binary download
@@ -2203,19 +2617,31 @@ def fetch(
                        as_json=json_output)
 
             console.print(f"[dim]Downloading {info.content_type}"
-                          f"{f' ({info.size / 1024 / 1024:.1f} MB)' if info.size and info.size > 1024 * 1024 else ''}[/dim]")
+                          f"{f' ({info.size / 1024 / 1024:.1f} MB)' if info.size and info.size > 1024 * 1024 else ''}"
+                          f"{' [stealth]' if use_stealth else ''}[/dim]")
+
+            def _do_download(progress_cb=None):
+                if use_stealth:
+                    return download_binary_stealth(
+                        url, out_path,
+                        cookies=_cookies,
+                        headers=custom_headers,
+                        proxy=effective_proxy,
+                        impersonate=impersonate,
+                        progress_callback=progress_cb,
+                    )
+                return download_binary(url, http_session, out_path, progress_callback=progress_cb)
 
             # Progress bar for large files
             if info.size and info.size > 1024 * 1024:
                 from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
                 with Progress(BarColumn(), DownloadColumn(), TransferSpeedColumn(), console=console) as progress:
                     task = progress.add_task("Downloading", total=info.size)
-                    result = download_binary(
-                        url, http_session, out_path,
-                        progress_callback=lambda n: progress.update(task, completed=n),
+                    result = _do_download(
+                        progress_cb=lambda n: progress.update(task, completed=n),
                     )
             else:
-                result = download_binary(url, http_session, out_path)
+                result = _do_download()
 
             if json_output:
                 _output_json({"data": {
@@ -2278,8 +2704,15 @@ def fetch(
             else:
                 _output_text(content)
 
-    except httpx.HTTPError as e:
-        _error(f"HTTP error: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
+    except Exception as e:
+        # Catch httpx.HTTPError, RuntimeError from stealth path, and any
+        # other transport errors. (httpx is imported lazily inside fetch.py;
+        # importing at module top would break test isolation.)
+        import httpx as _httpx
+        if isinstance(e, _httpx.HTTPError) or isinstance(e, RuntimeError):
+            _error(f"HTTP error: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
+        else:
+            raise
     finally:
         http_session.close()
 
@@ -3210,6 +3643,78 @@ def favicon(
         else:
             best = favicons[0]
             _output_text(best["url"])
+
+
+# ------------------------------------------------------------------
+# recipe — declarative multi-step browser flows (v0.25.0 P3.1)
+# ------------------------------------------------------------------
+
+
+@app.command("recipe")
+def recipe_command(
+    path: Annotated[Path, typer.Argument(help="Recipe YAML file")],
+    resume: Annotated[bool, typer.Option("--resume", help="Skip steps already completed in journal")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate + print plan without running")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output result as JSON")] = False,
+):
+    """Run a multi-step browser flow from a YAML recipe.
+
+    Recipe format (v1):
+
+        version: 1
+        goto: https://example.com
+        browser: local
+        headed: true
+        steps:
+          - wait_for: ".loaded"
+          - capture:
+              pattern: "*.csv,*.json"
+              to: ./out/
+          - click: "[data-action]"
+          - wait: 500ms
+
+    Resume support: each completed step is journaled to
+    .recipe-state-<hash>.ndjson next to the recipe. Pass --resume to
+    skip up to the last successful step.
+
+    Step kinds: click, fill, press, wait, wait_for, eval, capture,
+    screenshot, get_content.
+
+    Example:
+        flarecrawl recipe scrape-uap.yml
+        flarecrawl recipe scrape-uap.yml --dry-run
+        flarecrawl recipe scrape-uap.yml --resume
+    """
+    from .recipe import RecipeError, run as run_recipe
+
+    try:
+        summary = run_recipe(path, resume=resume, dry_run=dry_run)
+    except RecipeError as e:
+        _error(str(e), "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+        return
+
+    if dry_run:
+        if json_output:
+            _output_json({"data": summary, "meta": {"dry_run": True}})
+        else:
+            console.print(f"[bold]Recipe plan:[/bold] {path}")
+            for line in summary.get("plan", []):
+                console.print(f"  {line}")
+        return
+
+    status = summary.get("status", "unknown")
+    if json_output:
+        _output_json({"data": summary, "meta": {"status": status}})
+    else:
+        if status == "ok":
+            console.print(
+                f"[green]Recipe done.[/green] "
+                f"{len(summary.get('steps', []))} steps, "
+                f"{summary.get('captured_count', 0)} captured."
+            )
+        else:
+            console.print(f"[red]Recipe failed:[/red] {summary}")
+            raise typer.Exit(EXIT_ERROR)
 
 
 # ------------------------------------------------------------------
@@ -4747,6 +5252,7 @@ def videos(
     download: Annotated[bool, typer.Option("--download", help="Download videos via yt-dlp at highest resolution")] = False,
     download_dir: Annotated[Path | None, typer.Option("--download-dir", help="Directory for downloaded videos")] = None,
     browser_cookies: Annotated[str | None, typer.Option("--browser-cookies", help="Grab cookies from local browser (chrome|firefox)")] = None,
+    yt_dlp: Annotated[bool, typer.Option("--yt-dlp", help="Run discovered URLs through yt-dlp's extractor registry to resolve provider-specific embeds (DVIDS, Vimeo with auth, etc.). Optional dep: pip install flarecrawl[videos].")] = False,
 ):
     """Discover video URLs on a web page.
 
@@ -4820,7 +5326,7 @@ def videos(
                 page.navigate(url, wait_until=wait_until, timeout=30000)
 
             html = page.get_content()
-            all_videos.extend(extract_videos(html, url))
+            all_videos.extend(extract_videos(html, url, use_yt_dlp=yt_dlp))
 
             # Depth > 1: follow links on the page
             if depth > 1:
@@ -4845,7 +5351,7 @@ def videos(
                     try:
                         page.navigate(link_url, wait_until="load", timeout=30000)
                         sub_html = page.get_content()
-                        all_videos.extend(extract_videos(sub_html, link_url))
+                        all_videos.extend(extract_videos(sub_html, link_url, use_yt_dlp=yt_dlp))
                     except Exception:
                         continue
 
@@ -4887,7 +5393,7 @@ def videos(
             _handle_api_error(e, json_output)
             return
 
-        all_videos.extend(extract_videos(html, url))
+        all_videos.extend(extract_videos(html, url, use_yt_dlp=yt_dlp))
 
         # Depth > 1: follow links
         if depth > 1:
@@ -4911,7 +5417,7 @@ def videos(
                 seen_urls.add(link_url)
                 try:
                     sub_html = client.get_content(link_url, **kwargs)
-                    all_videos.extend(extract_videos(sub_html, link_url))
+                    all_videos.extend(extract_videos(sub_html, link_url, use_yt_dlp=yt_dlp))
                 except FlareCrawlError:
                     continue
 

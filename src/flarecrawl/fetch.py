@@ -86,8 +86,53 @@ def _filename_from_url(url: str) -> str:
 
 
 def detect_content_type(url: str, session: httpx.Client | None = None,
-                        headers: dict | None = None) -> ContentInfo:
-    """HEAD request to detect content type, size, and filename."""
+                        headers: dict | None = None,
+                        stealth: bool = False,
+                        impersonate: str = "chrome131") -> ContentInfo:
+    """HEAD request to detect content type, size, and filename.
+
+    If ``stealth=True``, uses curl_cffi with browser TLS impersonation —
+    needed for sites that fingerprint TLS handshakes (war.gov-class).
+    """
+    if stealth:
+        try:
+            from curl_cffi import requests as cffi_requests
+        except ImportError:
+            stealth = False  # fall through to httpx
+
+    if stealth:
+        # curl_cffi HEAD probe
+        try:
+            with cffi_requests.Session(impersonate=impersonate, timeout=15) as s:  # noqa
+                if headers:
+                    s.headers.update(headers)
+                resp = s.head(url, allow_redirects=True)
+                ct = resp.headers.get("content-type", "application/octet-stream")
+                ct_clean = ct.split(";")[0].strip()
+                size_str = resp.headers.get("content-length")
+                size = int(size_str) if size_str and str(size_str).isdigit() else None
+                filename = _parse_content_disposition(resp.headers.get("content-disposition"))
+                if not filename:
+                    filename = _filename_from_url(url)
+                return ContentInfo(
+                    content_type=ct_clean,
+                    size=size,
+                    filename=filename,
+                    is_binary=_is_binary_content_type(ct_clean) or _filename_looks_binary(filename),
+                    is_json="json" in ct_clean.lower(),
+                )
+        except Exception:
+            # If HEAD fails even with stealth, infer from URL extension.
+            filename = _filename_from_url(url)
+            looks_binary = _filename_looks_binary(filename)
+            return ContentInfo(
+                content_type="application/octet-stream" if looks_binary else "text/html",
+                size=None,
+                filename=filename,
+                is_binary=looks_binary,
+                is_json=filename.lower().endswith(".json"),
+            )
+
     client = session or httpx.Client(timeout=15, follow_redirects=True)
     close = session is None
     try:
@@ -103,12 +148,20 @@ def detect_content_type(url: str, session: httpx.Client | None = None,
             content_type=ct_clean,
             size=size,
             filename=filename,
-            is_binary=_is_binary_content_type(ct_clean),
+            is_binary=_is_binary_content_type(ct_clean) or _filename_looks_binary(filename),
             is_json="json" in ct_clean.lower(),
         )
     finally:
         if close:
             client.close()
+
+
+def _filename_looks_binary(filename: str | None) -> bool:
+    """Heuristic: does the filename look like a binary file based on extension?"""
+    if not filename:
+        return False
+    name = filename.lower()
+    return any(name.endswith(ext) for ext in _BINARY_EXTENSIONS)
 
 
 def download_binary(url: str, session: httpx.Client, output_path: Path,
@@ -129,6 +182,102 @@ def download_binary(url: str, session: httpx.Client, output_path: Path,
                 total += len(chunk)
                 if progress_callback:
                     progress_callback(total)
+    elapsed = time.time() - start
+    return DownloadResult(
+        path=output_path,
+        content_type=ct,
+        size=total,
+        elapsed=round(elapsed, 2),
+        filename=filename,
+    )
+
+
+def download_binary_stealth(
+    url: str,
+    output_path: Path,
+    *,
+    cookies: list[dict] | None = None,
+    headers: dict | None = None,
+    proxy: str | None = None,
+    impersonate: str = "chrome131",
+    progress_callback: Callable[[int], None] | None = None,
+) -> DownloadResult:
+    """Binary download via curl_cffi with browser TLS impersonation.
+
+    Use this when the target server fingerprints TLS handshakes (JA3/JA4) and
+    rejects stock httpx requests. curl_cffi mimics a real Chrome/Safari
+    handshake, bypassing those checks. Requires the optional ``curl_cffi``
+    dependency.
+
+    Args:
+        url: URL to download.
+        output_path: Where to save the file.
+        cookies: Optional cookie list (Playwright-shape dicts).
+        headers: Extra request headers.
+        proxy: Proxy URL.
+        impersonate: curl_cffi browser profile (chrome131, chrome120, safari17, etc.).
+        progress_callback: Per-chunk progress hook (called with cumulative bytes).
+
+    Raises:
+        ImportError: If curl_cffi isn't installed.
+        RuntimeError: On non-2xx responses.
+    """
+    try:
+        from curl_cffi import requests as cffi_requests
+    except ImportError as exc:
+        raise ImportError(
+            "Stealth download requires curl_cffi. Install with: uv pip install curl_cffi"
+        ) from exc
+
+    start = time.time()
+    proxies = None
+    if proxy:
+        proxies = {"http": proxy, "https": proxy}
+
+    session = cffi_requests.Session(
+        impersonate=impersonate,
+        timeout=120,
+        proxies=proxies,
+    )
+    if headers:
+        session.headers.update(headers)
+    if cookies:
+        from .cookies import cookies_to_httpx
+        # curl_cffi accepts a dict of name->value; flatten the cookie list.
+        cookie_jar = cookies_to_httpx(cookies)
+        session.cookies = {c.name: c.value for c in cookie_jar.jar}
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    total = 0
+    try:
+        resp = session.get(url, stream=True, allow_redirects=True)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
+        ct = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
+        filename = _parse_content_disposition(resp.headers.get("content-disposition"))
+        if not filename:
+            filename = _filename_from_url(url)
+        with open(output_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=65536):
+                if not chunk:
+                    continue
+                f.write(chunk)
+                total += len(chunk)
+                if progress_callback:
+                    progress_callback(total)
+        # Defensive: don't leave a zero-byte file masquerading as a successful
+        # download. A 200-with-empty-body usually means the server is lying or
+        # the upstream returned nothing — surface as an error so callers can
+        # retry / report rather than silently shipping garbage.
+        if total == 0:
+            try:
+                output_path.unlink()
+            except OSError:
+                pass
+            raise RuntimeError(f"empty body for {url} (HTTP {resp.status_code})")
+    finally:
+        session.close()
+
     elapsed = time.time() - start
     return DownloadResult(
         path=output_path,
