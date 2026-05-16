@@ -42,15 +42,30 @@ class TestCloudflare1020Terminal:
 
 
 class TestCloudflareChallenge:
-    def test_just_a_moment(self):
-        info = detect_block(503, {}, "<title>Just a moment...</title>")
+    def test_just_a_moment_with_cosignal(self):
+        # Real CF challenge page: title + a /cdn-cgi/ asset reference.
+        body = ('<title>Just a moment...</title>'
+                '<script src="/cdn-cgi/challenge-platform/h/b/orchestrate"></script>')
+        info = detect_block(503, {}, body)
         assert info.blocked is True
         assert info.vendor == "cloudflare"
         assert info.kind == "js_challenge"
         assert info.terminal is False
 
+    def test_just_a_moment_alone_is_not_blocked(self):
+        # A legit page that merely says "Just a moment..." must NOT trip.
+        body = "<html><body><h1>Just a moment...</h1><p>Loading your dashboard.</p></body></html>"
+        info = detect_block(200, {}, body)
+        assert info.blocked is False
+
     def test_cf_mitigated_header(self):
         info = detect_block(403, {"cf-mitigated": "challenge"}, "<html></html>")
+        assert info.vendor == "cloudflare"
+        assert info.kind == "js_challenge"
+
+    def test_cf_ray_header_is_cosignal(self):
+        info = detect_block(503, {"cf-ray": "8a1b2c3d"},
+                            "<title>Just a moment...</title>")
         assert info.vendor == "cloudflare"
         assert info.kind == "js_challenge"
 

@@ -201,9 +201,11 @@ flarecrawl scrape https://example.com --json | jq '.data.content'
 | `flarecrawl pdf URL -o page.pdf` | Render page as PDF |
 | `flarecrawl map URL` | List all links on a page |
 | `flarecrawl discover URL` | Discover URLs via sitemaps, feeds, and links |
-| `flarecrawl search QUERY` | Web search via Jina API |
+| `flarecrawl search QUERY` | Web search via Jina API (requires `JINA_API_KEY`) |
 | `flarecrawl schema URL` | Extract LD+JSON, OpenGraph, Twitter Cards |
 | `flarecrawl favicon URL` | Extract favicon/icon URLs |
+| `flarecrawl p6 MINT_URL --jar jar.json --target URL` | Mint→replay anti-bot primitive (Akamai/Cloudflare/Imperva) |
+| `flarecrawl session inspect @name` | Offline cookie-jar freshness verdict (exit ≠0 unless fresh) |
 | `flarecrawl session list` | Manage saved cookie sessions |
 
 ## Install
@@ -497,6 +499,43 @@ Requires: `pip install curl_cffi`
 Without `--stealth`, requests use Python's default TLS stack (httpx/OpenSSL)
 which is identifiable by bot detection systems. With `--stealth`, the TLS
 Client Hello is indistinguishable from a real Safari browser.
+
+### P6 — mint → replay anti-bot primitive
+
+For hard targets (Akamai / Cloudflare / Imperva / CloudFront) where one
+stealth fetch isn't enough: a local Chromium navigates a mint URL so the
+wall deposits its cookie shells, then `curl_cffi` replays the real targets
+carrying that jar plus a genuine Chrome TLS handshake.
+
+```bash
+flarecrawl p6 https://site.com/ --jar ./jar.json \
+  --target https://site.com/api/data --output-dir ./out
+
+flarecrawl p6 https://site.com/ --jar ./jar.json \
+  --targets-from urls.txt --json
+```
+
+Built-in: proactive re-mint when the jar goes stale, **cumulative**
+exponential cool-down keyed on total re-mints (the Akamai egress-escalation
+trap — a tight per-target re-mint loop keeps the whole egress IP flagged),
+terminal fast-fail on Cloudflare 1020 (keyed on the egress, not the session
+— minting can't help), and a resume journal next to the jar.
+
+Check jar freshness offline anytime (no network, no burned request):
+
+```bash
+flarecrawl session inspect @site            # or a path: ./jar.json
+flarecrawl session inspect ./jar.json --json
+```
+
+Verdict is `fresh` | `stale` | `expired` | `empty`; exit code is non-zero
+unless `fresh`, so a connector can re-mint proactively instead of after a
+block. Every `scrape` / `fetch --json` / `recipe` result also carries a
+machine-readable `meta.blocked` `{blocked, vendor, kind, terminal, signal}`
+so connectors stop string-matching their own bot-wall heuristics.
+
+See [docs/HARD-TARGETS.md](docs/HARD-TARGETS.md) for the full escalation
+ladder.
 
 ### Content cleanup
 

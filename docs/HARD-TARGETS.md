@@ -47,6 +47,81 @@ the initial scrape (anti-bot challenge solved once, reused N times) and
 TLS-impersonate Chrome 131 (defeats JA3/JA4 fingerprinting on the
 download path).
 
+## When the four-step formula isn't enough: P6 (mint → replay)
+
+The formula above works when one headed navigation clears the wall and
+the data is reachable from that same browser session. It breaks down on
+targets where:
+
+- the shells expire mid-harvest (you need to **re-mint** partway through)
+- the real data is a non-WAF'd API you want to hit directly with the
+  minted jar (not re-drive a browser per request)
+- sustained replay pressure escalates the **whole egress IP** (Akamai),
+  so a tight re-mint-on-every-block loop just keeps you flagged
+- the wall is a terminal Cloudflare 1020 (keyed on the egress, not the
+  session — minting can never help; you must fail fast)
+
+`flarecrawl p6` is the primitive for this. It mints cookie shells with a
+local Chromium, then replays targets with `curl_cffi --impersonate`
+carrying the jar plus a real Chrome JA3/JA4 handshake:
+
+```bash
+flarecrawl p6 https://site.com/ --jar ./jar.json \
+  --target https://site.com/api/stations \
+  --target https://site.com/api/prices \
+  --output-dir ./out
+# or feed a list:
+flarecrawl p6 https://site.com/ --jar ./jar.json \
+  --targets-from urls.txt --json
+```
+
+What it does that a shell loop won't:
+
+| Behaviour | Why it matters |
+|-----------|----------------|
+| Proactive re-mint when `jarhealth` says the jar is stale | Re-mint *before* a block, not after burning a request |
+| **Cumulative** exponential cool-down (keyed on *total* re-mints, not per-target) | A per-target re-mint loop keeps the Akamai egress escalated; global backoff is the documented escape |
+| Terminal fast-fail on Cloudflare 1020 | `blockdetect` marks it `terminal` — abort instead of wasting the re-mint budget |
+| Resume journal next to the jar | `--resume` skips targets already completed |
+
+Minting does **not** require solving the JS sensor — depositing the
+`bm_*`/`_abck`/`__cf_bm` shells plus a real-Chrome TLS fingerprint is
+enough to clear the edge for non-locale paths.
+
+### Inspecting jar freshness offline
+
+Before a replay batch, check whether the jar still has live shells —
+no network call, no burned request:
+
+```bash
+flarecrawl session inspect @ampol          # or a path: ./jar.json
+flarecrawl session inspect ./jar.json --json
+```
+
+Verdict is `fresh` | `stale` | `expired` | `empty`; exit code is
+non-zero unless `fresh`, so a connector can branch on it and re-mint
+proactively. This is the same oracle `p6` uses internally between
+targets.
+
+### Machine-readable block detection
+
+Every `scrape` (CDP), `fetch --json`, and `recipe` result carries a
+`meta.blocked` object so connectors stop string-matching their own
+heuristics:
+
+```json
+{ "blocked": true, "vendor": "akamai", "kind": "interstitial",
+  "terminal": false, "signal": "akamai interstitial" }
+```
+
+`vendor` ∈ akamai / cloudflare / imperva / cloudfront / datadome /
+perimeterx. `kind` ∈ interstitial / edge_deny / js_challenge / captcha /
+cf_1020_hard / rate_limited. `terminal: true` (Cloudflare 1020) means
+non-bypassable — do not waste a mint. Note: HTTP status lies (the Akamai
+interstitial is a 200), which is exactly why this exists. SPA-404 is
+deliberately *not* detected — a generic detector would false-positive on
+every single-page app, so assert your own content presence for that.
+
 ## When you don't need the full stack
 
 | Target shape | Minimum flags |
@@ -58,6 +133,8 @@ download path).
 | Hard target with CF Chromium fingerprint blocked | `--js --browser local --headed` |
 | Data lives in an XHR you want to keep | add `--capture-pattern --capture-dir` |
 | You need to mass-download from a captured manifest | add `--then-fetch-from --then-fetch-column --then-fetch-output` |
+| Shells expire mid-harvest / API replay / egress escalation | `flarecrawl p6 MINT_URL --jar jar.json --target ...` |
+| Need to know if a minted jar is still good | `flarecrawl session inspect @name` (exit ≠0 unless fresh) |
 
 ## Headless vs headed local browser
 

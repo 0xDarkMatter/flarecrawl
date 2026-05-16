@@ -191,3 +191,64 @@ class TestSerialization:
         res = run_p6(cfg, mint_fn=lambda *a: _fresh_cookies(),
                      replay_fn=lambda *a: CLEAN, sleep_fn=lambda s: None)
         json.dumps(res.as_dict())  # must not raise
+
+
+class TestEdgeCases:
+    def test_same_basename_targets_no_clobber(self, tmp_path):
+        # site/api/data and site/v2/api/data both basename "data".
+        out = tmp_path / "out"
+        cfg = _cfg(tmp_path, ["https://x.com/api/data",
+                              "https://x.com/v2/api/data"], output_dir=out)
+        bodies = iter([b"FIRST", b"SECOND"])
+        res = run_p6(
+            cfg,
+            mint_fn=lambda *a: _fresh_cookies(),
+            replay_fn=lambda *a: (200, {}, next(bodies)),
+            sleep_fn=lambda s: None,
+        )
+        assert res.targets_ok == 2
+        written = sorted(p.read_bytes() for p in out.iterdir())
+        assert written == [b"FIRST", b"SECOND"]  # both survived, no clobber
+
+    def test_chrome_devtools_jar_shape_on_disk(self, tmp_path):
+        # Pre-existing jar in {"cookies":[...]} shape must not crash load.
+        jar = tmp_path / "jar.json"
+        jar.write_text(json.dumps({"cookies": _fresh_cookies()}),
+                       encoding="utf-8")
+        cfg = _cfg(tmp_path, ["https://x.com/a"])
+        res = run_p6(
+            cfg,
+            mint_fn=lambda *a: pytest.fail("jar is fresh — must not mint"),
+            replay_fn=lambda *a: CLEAN,
+            sleep_fn=lambda s: None,
+        )
+        assert res.minted == 0
+        assert res.targets_ok == 1
+
+    def test_empty_mint_emits_event_and_is_bounded(self, tmp_path):
+        events: list[str] = []
+        cfg = _cfg(tmp_path, ["https://x.com/a"], max_remints=2)
+        res = run_p6(
+            cfg,
+            mint_fn=lambda *a: [],            # mint always fails
+            replay_fn=lambda *a: AKAMAI,      # blocked → triggers re-mint
+            sleep_fn=lambda s: None,
+            on_event=lambda e, p: events.append(e),
+        )
+        assert "mint_empty" in events
+        # Bounded: initial mint + max_remints, then cumulative resume.
+        assert res.minted <= 1 + cfg.max_remints
+        assert res.targets_blocked == 1
+
+    def test_corrupt_jar_falls_back_to_mint(self, tmp_path):
+        jar = tmp_path / "jar.json"
+        jar.write_text("{not valid json", encoding="utf-8")
+        cfg = _cfg(tmp_path, ["https://x.com/a"])
+        res = run_p6(
+            cfg,
+            mint_fn=lambda *a: _fresh_cookies(),
+            replay_fn=lambda *a: CLEAN,
+            sleep_fn=lambda s: None,
+        )
+        assert res.minted == 1  # corrupt jar → treated as empty → mint
+        assert res.targets_ok == 1

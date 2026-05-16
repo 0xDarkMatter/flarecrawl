@@ -1776,6 +1776,12 @@ def scrape(
     with NDJSON output and configurable workers. Responses are cached
     for 1 hour by default (use --no-cache to bypass).
 
+    --output + --json writes the JSON envelope to the file (the two are
+    no longer mutually exclusive). On the CDP path, meta.blocked carries a
+    machine-readable bot-wall verdict {blocked, vendor, kind, terminal}.
+    HAR (--har) and captured bodies (--capture-dir) are flushed even when
+    --wait-for-selector times out (a partial HAR is most useful then).
+
     Example:
         flarecrawl scrape https://example.com
         flarecrawl scrape https://example.com --format html --json
@@ -1783,7 +1789,7 @@ def scrape(
         flarecrawl scrape --batch urls.txt --workers 5
         flarecrawl scrape --only-main-content --json
         flarecrawl scrape --exclude-tags "nav,footer" --json
-        flarecrawl scrape --format images --json
+        flarecrawl scrape https://example.com --json -o result.json
         flarecrawl scrape --format schema --json
     """
     # Flags that require CDP
@@ -2615,16 +2621,27 @@ def fetch(
 ):
     """Fetch a URL with content-type awareness.
 
-    HTML pages are converted to markdown. Binary files (PDF, ZIP, etc.)
-    are downloaded directly. JSON responses are pretty-printed.
+    Auto-routes by content type: binary files (PDF, ZIP, ...) download to
+    disk; JSON is pretty-printed; raw text (XML/CSV/RSS/KML/YAML/...) is
+    returned verbatim; HTML is converted to markdown via CF Browser Rendering.
 
-    Use --session to load cookies from a file or @name for saved sessions.
+    Backend / output flags are orthogonal:
+      - --session (file or @name) implies the curl_cffi TLS path (a session
+        jar is for anti-bot replay — it carries a real Chrome JA3/JA4
+        fingerprint). --stealth/--impersonate force it explicitly.
+      - --json is output-format only. It never downgrades the backend, and
+        it JSON-sniffs the body even when the server mislabels it
+        application/octet-stream (no more files named "download").
+      - With --json, meta.blocked carries a machine-readable bot-wall
+        verdict {blocked, vendor, kind, terminal, signal} for the text and
+        HTML branches.
 
     Example:
         flarecrawl fetch https://example.com/file.pdf -o file.pdf
         flarecrawl fetch https://example.com --session cookies.json
         flarecrawl fetch https://example.com --session @mysession
         flarecrawl fetch https://api.example.com/data.json --json
+        flarecrawl fetch https://api.example.com/data --session @site --json
     """
     from .fetch import ContentInfo, build_session, detect_content_type, download_binary, download_binary_stealth
 
@@ -2709,21 +2726,28 @@ def fetch(
             # falling through to a file download.
             from .fetch import _filename_looks_binary
             if json_output and not _filename_looks_binary(info.filename):
+                # Only the fetch+parse is guarded — a parse/transport failure
+                # falls through to the normal binary download. Output writes
+                # happen *after* so a disk error isn't silently swallowed.
+                _parsed = None
                 try:
-                    _body = _stealth_get_bytes(url) if use_stealth else (
-                        lambda: (r := http_session.get(url), r.raise_for_status(), r.content)[2]
-                    )()
+                    if use_stealth:
+                        _body = _stealth_get_bytes(url)
+                    else:
+                        _r = http_session.get(url)
+                        _r.raise_for_status()
+                        _body = _r.content
                     _parsed = json.loads(_body)
+                except Exception:
+                    _parsed = None  # not JSON — fall through to binary download
+                if _parsed is not None:
                     if output:
                         output.write_text(json.dumps(_parsed, indent=2), encoding="utf-8")
                         console.print(f"[green]Saved:[/green] {output}")
                     else:
                         _output_json({"data": _parsed, "meta": {"url": url, "content_type": info.content_type}})
-                    # Bail out — treated as JSON, no file download needed
                     http_session.close()
                     return
-                except (ValueError, Exception):
-                    pass  # not valid JSON — fall through to binary download
 
             # Binary download
             out_path = output or Path(info.filename or "download")
@@ -3843,7 +3867,17 @@ def recipe_command(
     skip up to the last successful step.
 
     Step kinds: click, fill, press, wait, wait_for, eval, capture,
-    screenshot, get_content.
+    screenshot, get_content, for_each, capture_download.
+
+    Behaviour notes:
+      - capture/capture_download steps are armed BEFORE navigation so the
+        goto waterfall is intercepted regardless of step order (they show
+        status "pre-armed" in the summary). They require browser: local —
+        browser: cf fails fast (CF-hosted Chromium can't intercept bodies).
+      - eval and get_content return values surface in steps[].result.
+      - --json emits a frozen contract (schema_version: 1): canonical key
+        "captured" (not "captures"), plus a "blocked" bot-wall verdict for
+        the landing page.
 
     Example:
         flarecrawl recipe scrape-uap.yml
@@ -3963,6 +3997,9 @@ def p6_command(
             return
         if event == "mint":
             console.print(f"[dim]mint #{payload.get('n')} — {payload.get('reason')}[/dim]")
+        elif event == "mint_empty":
+            console.print(f"[yellow]mint #{payload.get('n')} produced 0 cookies — "
+                          f"check mint URL / network (wall deposited no shells)[/yellow]")
         elif event == "cooldown":
             console.print(f"[yellow]cool-down {payload.get('seconds')}s — {payload.get('reason')}[/yellow]")
         elif event == "terminal":

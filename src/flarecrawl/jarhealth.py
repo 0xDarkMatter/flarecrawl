@@ -139,6 +139,16 @@ def inspect_jar(
     """
     ts = time.time() if now is None else now
 
+    # Be liberal in what we accept: a raw json.loads of a jar file may be a
+    # Chrome DevTools export ({"cookies": [...]}) rather than a bare list.
+    if isinstance(cookies, dict):
+        inner = cookies.get("cookies")
+        cookies = inner if isinstance(inner, list) else []
+    if not isinstance(cookies, list):
+        cookies = []
+    # Drop any non-dict entries defensively (hand-edited / malformed jars).
+    cookies = [c for c in cookies if isinstance(c, dict)]
+
     if not cookies:
         return JarHealth("empty", 0, 0, [], [], [], [], ts)
 

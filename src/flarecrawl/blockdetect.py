@@ -53,7 +53,9 @@ def _text(body: str | bytes | None) -> str:
     if body is None:
         return ""
     if isinstance(body, bytes):
-        body = body[:_MAX_SCAN].decode("utf-8", errors="replace")
+        return body[:_MAX_SCAN].decode("utf-8", errors="replace")
+    if not isinstance(body, str):
+        body = str(body)
     return body[:_MAX_SCAN]
 
 
@@ -95,12 +97,20 @@ def detect_block(
                           signal="cf error code 1020")
 
     # ── Cloudflare managed/JS challenge (solvable) ───────────────────────
-    cf_challenge_markers = (
-        "just a moment", "cf-browser-verification", "challenge-platform",
-        "cf_chl_opt", "_cf_chl", "/cdn-cgi/challenge-platform",
+    # These markers are specific enough to stand alone.
+    cf_specific = (
+        "cf-browser-verification", "challenge-platform", "cf_chl_opt",
+        "_cf_chl", "/cdn-cgi/challenge-platform",
     )
-    if h.get("cf-mitigated", "").lower() == "challenge" or any(
-        m in low for m in cf_challenge_markers
+    # "just a moment" is the challenge <title> but is also a common English
+    # phrase — only trust it alongside a Cloudflare co-signal, otherwise a
+    # legit page titled "Just a moment..." would false-positive.
+    cf_cosignal = ("cloudflare" in low or "cdn-cgi" in low
+                   or "cf-ray" in h or "/cdn-cgi/" in low)
+    if (
+        h.get("cf-mitigated", "").lower() == "challenge"
+        or any(m in low for m in cf_specific)
+        or ("just a moment" in low and cf_cosignal)
     ):
         return BlockInfo(True, "cloudflare", "js_challenge",
                          signal="cloudflare challenge page")

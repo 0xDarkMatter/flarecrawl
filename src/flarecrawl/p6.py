@@ -193,10 +193,19 @@ def _cooldown(remints: int, base: float, cap: float) -> float:
 
 
 def _write_body(output_dir: Path, url: str, body: bytes) -> tuple[str, int]:
+    import hashlib
     from urllib.parse import urlparse
     output_dir.mkdir(parents=True, exist_ok=True)
     name = Path(urlparse(url.split("?")[0]).path).name or "index"
     dest = output_dir / name
+    # Two targets with the same basename (site/api/data and site/v2/api/data,
+    # or differing query strings) must not clobber each other.  On collision,
+    # suffix with a short stable hash of the full URL.
+    if dest.exists():
+        h = hashlib.sha256(url.encode()).hexdigest()[:8]
+        stem, dot, ext = name.partition(".")
+        name = f"{stem}.{h}{dot}{ext}" if dot else f"{name}.{h}"
+        dest = output_dir / name
     dest.write_bytes(body)
     return str(dest), len(body)
 
@@ -233,13 +242,17 @@ def run_p6(
 
     done = _load_journal(cfg.jar_path) if cfg.resume else set()
 
-    # Load any existing jar; mint if missing/expired/stale.
+    # Load any existing jar; mint if missing/expired/stale.  Accept both a
+    # bare list and a Chrome DevTools export ({"cookies": [...]}).
     cookies: list[dict] = []
     if cfg.jar_path.exists():
         try:
-            cookies = json.loads(cfg.jar_path.read_text(encoding="utf-8"))
+            raw = json.loads(cfg.jar_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            cookies = []
+            raw = []
+        if isinstance(raw, dict):
+            raw = raw.get("cookies", [])
+        cookies = [c for c in raw if isinstance(c, dict)] if isinstance(raw, list) else []
 
     minted = 0
     remints = 0
@@ -249,8 +262,13 @@ def run_p6(
         if minted > 0:
             remints += 1
         emit("mint", reason=reason, n=minted + 1)
-        cookies = mint_fn(cfg.mint_url, cfg.headed, cfg.proxy)
+        cookies = mint_fn(cfg.mint_url, cfg.headed, cfg.proxy) or []
         minted += 1
+        if not cookies:
+            # Mint produced nothing — the wall didn't deposit shells (network
+            # failure, wrong mint_url, or the page never settled).  Surface
+            # it; the max_remints cap still bounds the wasted retries.
+            emit("mint_empty", reason=reason, n=minted)
         try:
             cfg.jar_path.parent.mkdir(parents=True, exist_ok=True)
             cfg.jar_path.write_text(json.dumps(cookies, indent=2),

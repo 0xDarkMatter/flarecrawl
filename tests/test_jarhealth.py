@@ -115,3 +115,41 @@ class TestCookieHealthDetail:
         import json
         h = inspect_jar([_cookie("_abck", expires=NOW + 100)], now=NOW)
         json.dumps(h.as_dict())  # must not raise
+
+
+class TestMalformedInput:
+    def test_chrome_devtools_dict_shape(self):
+        # {"cookies": [...]} export must be accepted, not break.
+        jar = {"cookies": [_cookie("_abck", expires=NOW + 3600)]}
+        h = inspect_jar(jar, now=NOW)  # type: ignore[arg-type]
+        assert h.verdict == "fresh"
+        assert h.shell_count == 1
+
+    def test_non_list_non_dict_is_empty(self):
+        h = inspect_jar("garbage", now=NOW)  # type: ignore[arg-type]
+        assert h.verdict == "empty"
+
+    def test_non_dict_entries_dropped(self):
+        cookies = ["not-a-cookie", _cookie("_abck", expires=NOW + 3600), 42]
+        h = inspect_jar(cookies, now=NOW)  # type: ignore[arg-type]
+        assert h.cookie_count == 1
+        assert h.verdict == "fresh"
+
+    def test_string_epoch_expiry_parsed(self):
+        h = inspect_jar([_cookie("_abck", expires="1000900")], now=NOW)
+        # 1000900 > NOW(1000000) by 900s → fresh
+        assert h.cookies[0].ttl_seconds == 900
+
+    def test_iso_string_expiry_degrades_to_session(self):
+        # Unparseable expiry → treated as session (can't trust) → stale.
+        h = inspect_jar([_cookie("__cf_bm", expires="2026-01-01T00:00:00Z")],
+                        now=NOW)
+        assert h.cookies[0].state == "session"
+        assert h.verdict == "stale"
+
+    def test_expirationDate_key_accepted(self):
+        # EditThisCookie / extension export uses expirationDate.
+        c = {"name": "_abck", "value": "v", "domain": ".x.com",
+             "expirationDate": NOW + 3600}
+        h = inspect_jar([c], now=NOW)
+        assert h.cookies[0].ttl_seconds == 3600
