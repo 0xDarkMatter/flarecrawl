@@ -5,28 +5,47 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-05-17
+
+Agent-discoverability layer. v0.28.0 landed a large feature surface; this
+makes it findable on first contact — `--help` is per-command reference and
+never tells an agent *which* command to reach for or how they compose.
+
+### Added
+
+- **`flarecrawl guide [topic]`.** Emits the packaged AGENTS.md (hatch
+  `force-include`, so it works after a bare `pip install` with no repo on
+  disk; loader falls back to repo root for editable installs). `guide` =
+  preamble + Quick Reference + topic index; `guide <topic>` = one section
+  via exact→prefix→substring + alias resolution (`hard-targets`, `json`,
+  `errors`, `rules`, `auth`, …); `guide --list` = every section. Single
+  source of truth — the same AGENTS.md repo readers see. New pure/testable
+  `guide.py` (parser/slug/alias resolver).
+
+- **Root `--help` mental-model epilog.** Bare `flarecrawl` and `--help`
+  now carry a 3-line orientation: the routing escalation ladder
+  (fetch→scrape→stealth→local→recipe→p6) + `meta.blocked` note + a pointer
+  to `flarecrawl guide`. The pointer is a command, not "read AGENTS.md",
+  so it works in any install layout.
+
+### Changed
+
+- **Teaching-error → guide pointers.** The highest-confusion failures
+  (auth-required, recipe error, p6 failure) now route a stuck agent to
+  the relevant `flarecrawl guide <topic>`. Targeted, not blanket.
+
+- `test_guide.py` (20 tests, incl. real-AGENTS.md packaging assertions).
+  Wheel build verified to contain `flarecrawl/AGENTS.md`. Full non-live
+  suite green (821 tests).
+
 ## [0.28.0] - 2026-05-16
 
 Closes the OTDB hard-target field-report backlog (a 9-connector AU
 EV-charging harvest against Akamai / Cloudflare / Imperva / CloudFront).
 Nine bug/DX fixes plus five features, including the P6 mint→replay
-primitive that carried the entire workstream — plus an agent-discoverability
-layer so a first-touch agent can actually find all of it.
+primitive that carried the entire workstream.
 
 ### Added
-
-- **Agent discoverability (`flarecrawl guide`).** `--help` is per-command
-  reference; it never tells an agent *which* command to reach for or how
-  they compose. New `guide` command emits the packaged AGENTS.md
-  (force-included in the wheel, so it works after a bare `pip install`
-  with no repo on disk): `guide` = overview + Quick Reference + topic
-  index; `guide <topic>` = one section with fuzzy + alias resolution
-  (`hard-targets`, `json`, `errors`, `rules`, `auth`, …); `guide --list`
-  = every section. The root `--help` epilog now carries a 3-line mental
-  model (the routing escalation ladder) and points at `guide`. The
-  highest-confusion errors (auth, recipe, p6) point at the relevant
-  `guide <topic>`. Single source of truth — same AGENTS.md repo readers
-  see. New `guide.py` module (parser/loader/resolver) + 20 tests.
 
 - **`flarecrawl p6` — mint→replay anti-bot primitive.** New `p6.py`
   orchestrator: a local Chromium navigates a mint URL so the bot wall
@@ -101,8 +120,8 @@ layer so a first-touch agent can actually find all of it.
   with an actionable hint, instead of a generic failure.
 
 - New unit suites: `test_blockdetect.py`, `test_jarhealth.py`,
-  `test_p6.py`, `test_guide.py` (80 tests across the four). Full non-live
-  suite green (821 tests).
+  `test_p6.py` (60 tests across the three). Full non-live suite green
+  (801 tests).
 
 ## [0.27.0] - 2026-05-16
 

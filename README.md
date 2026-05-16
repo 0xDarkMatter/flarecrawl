@@ -14,13 +14,13 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v0.28.0** | 2026-05-16 | **Hard-target field-report closure.** New `flarecrawl p6` mint→replay primitive (local-Chromium cookie-shell mint → curl_cffi TLS replay, proactive re-mint, cumulative egress cool-down, terminal CF-1020 fast-fail). Machine-readable `meta.blocked` (Akamai/Cloudflare/Imperva/DataDome/PerimeterX/CloudFront). `flarecrawl session inspect` offline jar freshness. Windows cp1252 output crash fixed. `--json` no longer overrides `--output`/backend. HAR flushed on selector timeout. Recipe capture pre-armed before nav; `schema_version: 1`. New `flarecrawl guide [topic]` agent-orientation surface (packaged AGENTS.md, fuzzy+alias topics) + `--help` mental-model epilog. 821 tests |
+| **v0.29.0** | 2026-05-17 | **Agent discoverability.** New `flarecrawl guide [topic]` — emits the packaged AGENTS.md (force-included in the wheel, works after a bare install with no repo) as on-tool orientation: `guide` overview + Quick Reference + topic index, `guide <topic>` one section with fuzzy + alias resolution (`hard-targets`, `json`, `errors`, `rules`, `auth`), `guide --list`. |
+| **v0.28.0** | 2026-05-16 | **Hard-target field-report closure.** New `flarecrawl p6` mint→replay primitive (local-Chromium cookie-shell mint → curl_cffi TLS replay, proactive re-mint, cumulative egress cool-down, terminal CF-1020 fast-fail). Machine-readable `meta.blocked` (Akamai/Cloudflare/Imperva/DataDome/PerimeterX/CloudFront). `flarecrawl session inspect` offline jar freshness. Windows cp1252 output crash fixed. `--json` no longer overrides `--output`/backend. HAR flushed on selector timeout. Recipe capture pre-armed before nav; `schema_version: 1`. 801 tests |
 | **v0.27.0** | 2026-05-16 | **Fetch routing + content-type coverage.** `fetch` no longer tracebacks on non-HTML types — new raw-text branch returns body verbatim without CF auth (fixes Google Maps KML, `text/xml`, `text/csv`, etc.). `--only-main-content` link-density gate (≥60%) prevents nav-soup from leaking into output. RFC 6839 `+json`/`+xml` suffix types (RSS, Atom, JSON-LD, GeoJSON, KML/vnd, SOAP) now route to text/JSON branch instead of binary download. E2E test corpus with local HTTP server. 1404 tests |
 | **v0.26.0** | 2026-05-09 | **Headless evasion.** `humanize` module — synthesised mouse moves + scrolls + idle gaps, auto-on for headless `--browser local`. 8 additional `stealth_init.js` evasions (chrome.runtime.id, AudioContext noise, voices, Battery, WebGL2, MediaDevices, outerW/H). `SyncCDPPage.send()` for raw CDP from sync code. Idempotent CDP close. 730 tests |
 | **v0.25.1** | 2026-05-09 | **Recipe + organize-by polish.** `for_each` and `capture_download` recipe steps. `--then-fetch-organize-by extension/content-type/thumbnail` for sub-categorised downloads. Windows cp1252 console fallback in `_output_text` |
 | **v0.25.0** | 2026-05-09 | **Productivity.** YAML interaction recipes (`flarecrawl recipe ...`) with resume support. `--yt-dlp` passthrough on `videos` command resolves provider-specific embeds (DVIDS, Vimeo with auth, Twitch, etc.). `--auto-data` surfaces structured-data XHRs (CSV/JSON/XLSX) in `meta.data_sources` |
 | **v0.24.0** | 2026-05-09 | **Capabilities for hard targets.** `--capture-pattern`/`--capture-dir` save XHR response bodies via `Network.getResponseBody`. Vendored `stealth_init.js` auto-applied before navigation. `--browser local --headed` Playwright Chromium backend bypasses CF stub. `--then-fetch-from`/`--then-fetch-column` for cookie-handed-off mass downloads via curl_cffi |
-| **v0.23.0** | 2026-05-09 | **Foundation fixes.** CDP `keep_alive` HTTP 400 fixed (CF changed seconds→ms). `--js-eval` auto-promotes to `--cdp` for typed return values. `cacheable_response()` skips empty/non-200/stub responses. `flarecrawl fetch --stealth` now actually works for binary downloads via curl_cffi (was declared but ignored). `CDPAuthError` + `CDPTierError` for clean 401/403/404 surfacing |
 
 For older releases, see [CHANGELOG.md](CHANGELOG.md).
 
@@ -191,6 +191,7 @@ flarecrawl scrape https://example.com --json | jq '.data.content'
 
 | Command | Description |
 |---------|-------------|
+| `flarecrawl guide [topic]` | Agent orientation — when/why each command, JSON shapes, exit codes, footguns (start here) |
 | `flarecrawl scrape URL` | Scrape page to markdown (or html/links/images/summary) |
 | `flarecrawl crawl URL --wait --limit N` | Crawl site with async job system |
 | `flarecrawl download URL --limit N` | Save site pages to disk as markdown/html |
