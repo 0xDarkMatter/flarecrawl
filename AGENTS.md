@@ -4,10 +4,16 @@
 > Renders JavaScript, extracts content, takes screenshots, generates PDFs, crawls entire sites.
 > Now with CDP WebSocket access for persistent browser sessions, real-time debugging, and authenticated scraping.
 
+**New here? Run `flarecrawl guide` for orientation, or `flarecrawl guide <topic>`**
+(aliases: `hard-targets`, `json`, `errors`, `rules`, `auth`). `--help` is
+per-command flag reference; this doc — served by `guide` — is the mental
+model: when/why each command, JSON shapes, exit codes, footgun rules.
+
 ## Quick Reference
 
 | Task | Command |
 |------|---------|
+| Orientation guide (this doc) | `flarecrawl guide [topic]` / `flarecrawl guide --list` |
 | Scrape page to markdown | `flarecrawl scrape URL` |
 | Scrape page to HTML | `flarecrawl scrape URL --format html` |
 | Scrape multiple URLs | `flarecrawl scrape URL1 URL2 URL3 --json` |

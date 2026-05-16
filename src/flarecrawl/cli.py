@@ -48,10 +48,29 @@ from .config import (
     save_credentials,
 )
 
+# Shown at the bottom of `flarecrawl --help` and bare `flarecrawl`
+# (no_args_is_help). This is the first-touch orientation surface: a mental
+# model + a single robust pointer to the full agent guide. The pointer is a
+# command (`flarecrawl guide`), not "read AGENTS.md", so it works after a
+# bare pip install with no repo on disk.
+_APP_EPILOG = (
+    "Mental model: routing escalates by difficulty. "
+    "fetch (content-type aware) / scrape (browser render) for normal sites "
+    "→ add --stealth (curl_cffi TLS) when TLS-fingerprinted "
+    "→ --browser local --headed for CF-stub / headless detection "
+    "→ recipe for repeatable multi-step flows "
+    "→ p6 (mint→replay) for Akamai/Cloudflare/Imperva hard targets. "
+    "Every --json result carries meta.blocked {vendor,kind,terminal}. "
+    "\n\nAgents: run `flarecrawl guide` for the full orientation doc "
+    "(when/why each command, JSON shapes, exit codes, footgun rules), "
+    "or `flarecrawl guide <topic>` (e.g. hard-targets, json, errors, rules)."
+)
+
 app = typer.Typer(
     name="flarecrawl",
     help="Cloudflare Browser Run CLI — drop-in firecrawl replacement, much cheaper.",
     no_args_is_help=True,
+    epilog=_APP_EPILOG,
 )
 
 # stderr for human output (stdout is sacred)
@@ -153,7 +172,8 @@ def _require_auth(as_json: bool = False) -> None:
     """Check authentication, exit if not authenticated."""
     if not get_account_id() or not get_api_token():
         _error(
-            "Not authenticated. Run: flarecrawl auth login",
+            "Not authenticated. Run: flarecrawl auth login  "
+            "(setup walkthrough: flarecrawl guide auth)",
             "AUTH_REQUIRED",
             EXIT_AUTH_REQUIRED,
             as_json=as_json,
@@ -473,6 +493,62 @@ def main(
     ] = None,
 ):
     """Cloudflare Browser Run CLI — drop-in firecrawl replacement."""
+
+
+@app.command("guide")
+def guide_command(
+    topic: Annotated[str | None, typer.Argument(help="Section to show (fuzzy; aliases: hard-targets, json, errors, rules, auth, ...)")] = None,
+    list_topics_flag: Annotated[bool, typer.Option("--list", help="List every available topic and exit")] = False,
+):
+    """Print the agent orientation guide (when/why each command, JSON
+    shapes, exit codes, footgun rules).
+
+    `--help` is per-command reference; this is the cross-cutting mental
+    model an agent needs on first contact. Backed by the packaged
+    AGENTS.md, so it works after a bare install with no repo on disk.
+
+    Example:
+        flarecrawl guide                 # overview + Quick Reference + topics
+        flarecrawl guide --list          # every section
+        flarecrawl guide hard-targets    # the P6 / anti-bot escalation
+        flarecrawl guide json            # JSON output shapes
+        flarecrawl guide errors          # exit codes
+    """
+    from .guide import (
+        GuideError,
+        list_topics,
+        load_guide,
+        overview,
+        parse_sections,
+        resolve_topic,
+    )
+
+    try:
+        if list_topics_flag:
+            rows = list_topics()
+            for slug, title in rows:
+                indent = "" if title == title.lstrip() else "  "
+                _output_text(f"{indent}{slug:42s} {title}")
+            return
+
+        if not topic:
+            _output_text(overview())
+            return
+
+        section = resolve_topic(topic)
+        if section is None:
+            slugs = ", ".join(
+                s.slug for s in parse_sections(load_guide()) if s.level == 2
+            )
+            _error(
+                f"No guide topic matches '{topic}'. Top-level topics: {slugs}. "
+                f"Try `flarecrawl guide --list` for all sections.",
+                "NOT_FOUND", EXIT_NOT_FOUND,
+            )
+            return
+        _output_text(section.body)
+    except GuideError as e:
+        _error(str(e), "ERROR", EXIT_ERROR)
 
 
 # ------------------------------------------------------------------
@@ -3889,7 +3965,8 @@ def recipe_command(
     try:
         summary = run_recipe(path, resume=resume, dry_run=dry_run)
     except RecipeError as e:
-        _error(str(e), "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+        _error(f"{e}  (recipe format + step kinds: flarecrawl guide recipe)",
+               "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
         return
 
     if dry_run:
@@ -4012,7 +4089,9 @@ def p6_command(
     try:
         result = run_p6(cfg, on_event=_on_event)
     except Exception as e:
-        _error(f"P6 run failed: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
+        _error(f"P6 run failed: {e}  (mint→replay walkthrough: "
+               f"flarecrawl guide hard-targets)",
+               "ERROR", EXIT_ERROR, as_json=json_output)
         return
 
     if json_output:

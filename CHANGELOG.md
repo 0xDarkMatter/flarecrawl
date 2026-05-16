@@ -10,9 +10,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Closes the OTDB hard-target field-report backlog (a 9-connector AU
 EV-charging harvest against Akamai / Cloudflare / Imperva / CloudFront).
 Nine bug/DX fixes plus five features, including the P6 mint→replay
-primitive that carried the entire workstream.
+primitive that carried the entire workstream — plus an agent-discoverability
+layer so a first-touch agent can actually find all of it.
 
 ### Added
+
+- **Agent discoverability (`flarecrawl guide`).** `--help` is per-command
+  reference; it never tells an agent *which* command to reach for or how
+  they compose. New `guide` command emits the packaged AGENTS.md
+  (force-included in the wheel, so it works after a bare `pip install`
+  with no repo on disk): `guide` = overview + Quick Reference + topic
+  index; `guide <topic>` = one section with fuzzy + alias resolution
+  (`hard-targets`, `json`, `errors`, `rules`, `auth`, …); `guide --list`
+  = every section. The root `--help` epilog now carries a 3-line mental
+  model (the routing escalation ladder) and points at `guide`. The
+  highest-confusion errors (auth, recipe, p6) point at the relevant
+  `guide <topic>`. Single source of truth — same AGENTS.md repo readers
+  see. New `guide.py` module (parser/loader/resolver) + 20 tests.
 
 - **`flarecrawl p6` — mint→replay anti-bot primitive.** New `p6.py`
   orchestrator: a local Chromium navigates a mint URL so the bot wall
@@ -87,7 +101,8 @@ primitive that carried the entire workstream.
   with an actionable hint, instead of a generic failure.
 
 - New unit suites: `test_blockdetect.py`, `test_jarhealth.py`,
-  `test_p6.py` (48 tests). Full non-live suite green (820 tests).
+  `test_p6.py`, `test_guide.py` (80 tests across the four). Full non-live
+  suite green (821 tests).
 
 ## [0.27.0] - 2026-05-16
 

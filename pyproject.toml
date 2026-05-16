@@ -53,6 +53,10 @@ packages = ["src/flarecrawl"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/flarecrawl/py.typed" = "flarecrawl/py.typed"
+# Ship the agent guide inside the wheel so `flarecrawl guide` works after a
+# bare `pip install` (no repo on disk). Single source of truth — same file
+# repo readers see.
+"AGENTS.md" = "flarecrawl/AGENTS.md"
 
 # ============================================================
 # CODE QUALITY
