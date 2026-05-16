@@ -12,6 +12,11 @@ venv/
 
 # Flarecrawl output
 .flarecrawl/
+out/
+out_*/
+
+# Forma protocol working files
+.forma/
 
 # IDE
 .vscode/

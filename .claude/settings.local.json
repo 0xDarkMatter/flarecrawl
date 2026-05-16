@@ -14,7 +14,10 @@
       "Skill(forma-verifier)",
       "Skill(forma-verifier:*)",
       "Skill(forma-inspector)",
-      "Skill(forma-inspector:*)"
+      "Skill(forma-inspector:*)",
+      "PowerShell(Get-ChildItem -Path \"X:\\\\Forma\\\\forma\\\\flarecrawl\" -Directory -Force | Select-Object Name | ForEach-Object { $_.Name })",
+      "Skill(github-ops)",
+      "Skill(github-ops:*)"
     ]
   }
 }
