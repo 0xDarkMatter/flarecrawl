@@ -73,8 +73,21 @@ EXIT_RATE_LIMITED = 7
 
 
 def _output_json(data) -> None:
-    """Output JSON to stdout."""
-    print(json.dumps(data, indent=2, default=str))
+    """Output JSON to stdout — Windows-safe.
+
+    json.dumps can produce any Unicode; protect against cp1252 consoles the
+    same way _output_text does.
+    """
+    text = json.dumps(data, indent=2, default=str)
+    enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        sys.stdout.write(text)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write(text.encode(enc, errors="replace"))
+        sys.stdout.buffer.write(b"\n")
+        sys.stdout.buffer.flush()
 
 
 def _output_ndjson(record: dict) -> None:
@@ -227,8 +240,11 @@ def _validate_url(url: str, as_json: bool = False) -> None:
     """Validate URL format."""
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
+        hint = ""
+        if not parsed.scheme and "/" not in url and "." not in url:
+            hint = f" — '{url}' has no scheme; did a shell glob or path expand into the URL position?"
         _error(
-            f"Invalid URL: {url} (must include scheme, e.g. https://)",
+            f"Invalid URL: {url} (must include scheme, e.g. https://){hint}",
             "VALIDATION_ERROR",
             EXIT_VALIDATION,
             {"url": url},
@@ -1024,6 +1040,8 @@ def _scrape_single_cdp(
         collector = None
         body_capture = None
         data_probe = None
+        _har_written = False
+        _bodies_fetched = False
         if capture_patterns and capture_dir:
             from .cdp import BodyCapture
             body_capture = BodyCapture(
@@ -1064,7 +1082,17 @@ def _scrape_single_cdp(
                 pass  # Humanize is best-effort; never fail the scrape
 
         if wait_for_selector:
-            page.wait_for_selector(wait_for_selector, timeout=timeout or 30000)
+            _wfs_timeout = timeout or 30000
+            try:
+                page.wait_for_selector(wait_for_selector, timeout=_wfs_timeout)
+            except Exception as _wfs_exc:
+                # Clean, actionable message instead of a raw CDP traceback.
+                # HAR / captured bodies still flush via the finally block.
+                raise FlareCrawlError(
+                    f"selector '{wait_for_selector}' not found after "
+                    f"{_wfs_timeout / 1000:.0f}s",
+                    code="TIMEOUT",
+                ) from _wfs_exc
 
         if scroll:
             page.scroll()
@@ -1121,21 +1149,30 @@ def _scrape_single_cdp(
             cookies = page.get_cookies()
             save_cookies.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
 
+        # Success path: write HAR and fetch captured bodies, then build metadata.
+        _har_written = False
         if collector and har_output:
             har_data = collector.to_har()
             har_output.write_text(json.dumps(har_data, indent=2), encoding="utf-8")
+            _har_written = True
 
         # Resolve any pending response bodies for capture (P2.1)
         captured_meta: list[dict] = []
+        _bodies_fetched = False
         if body_capture is not None:
             page.fetch_captured_bodies(body_capture)
             captured_meta = body_capture.captured
+            _bodies_fetched = True
 
         metadata: dict[str, Any] = {"source": "cdp"}
         if isinstance(content, str):
             metadata["contentLength"] = len(content)
             metadata["wordCount"] = len(content.split())
         metadata["sourceURL"] = url
+        # T4: machine-readable bot-wall verdict so connectors stop
+        # string-matching their own heuristics.
+        from .blockdetect import detect_block
+        metadata["blocked"] = detect_block(200, {}, html).as_dict()
         if captured_meta:
             metadata["captured"] = captured_meta
         # v0.25.0 P3.3: surface auto-discovered structured data sources
@@ -1145,6 +1182,20 @@ def _scrape_single_cdp(
 
         return {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
     finally:
+        # Safety flush: write HAR and captured bodies even when an exception
+        # (e.g. wait_for_selector timeout) short-circuits the success path.
+        # A partial HAR is most valuable precisely when a selector never appears.
+        if not _har_written and collector and har_output:
+            try:
+                har_data = collector.to_har()
+                har_output.write_text(json.dumps(har_data, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+        if not _bodies_fetched and body_capture is not None:
+            try:
+                page.fetch_captured_bodies(body_capture)
+            except Exception:
+                pass
         if own_page:
             page.close()
 
@@ -2215,7 +2266,12 @@ def scrape(
                     meta["count"] = len(results)
                 elif "metadata" in results[0]:
                     meta.update(results[0]["metadata"])
-                _output_json({"data": data, "meta": meta})
+                payload = {"data": data, "meta": meta}
+                if output:
+                    output.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+                    console.print(f"Saved to {output}")
+                else:
+                    _output_json(payload)
             elif output:
                 out_content = "\n\n".join(
                     r.get("content", "") if isinstance(r.get("content"), str) else json.dumps(r.get("content", ""), indent=2)
@@ -2430,7 +2486,12 @@ def scrape(
         # Surface metadata from scrape results
         if len(results) == 1 and "metadata" in results[0]:
             meta.update(results[0]["metadata"])
-        _output_json({"data": data, "meta": meta})
+        payload = {"data": data, "meta": meta}
+        if output:
+            output.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+            console.print(f"Saved to {output}")
+        else:
+            _output_json(payload)
     elif output:
         out_content = "\n\n".join(
             r.get("content", "") if isinstance(r.get("content"), str) else json.dumps(r.get("content", ""), indent=2)
@@ -2467,7 +2528,9 @@ def search(
 ):
     """Search the web and optionally scrape results.
 
-    Uses Jina Search API (free, no auth required).
+    Backed by Jina's Search API. Jina requires its own free API key
+    (this is a Jina dependency, not a Flarecrawl quota): get one at
+    https://jina.ai/api-key and export JINA_API_KEY=<key>.
 
     Example:
         flarecrawl search "python web scraping" --json
@@ -2481,6 +2544,11 @@ def search(
 
     try:
         results = jina_search(query, limit=limit, proxy=effective_proxy)
+    except RuntimeError as e:
+        # jina_search raises RuntimeError specifically for the missing/invalid
+        # API-key case — surface it as an auth error with the actionable hint.
+        _error(str(e), "AUTH_REQUIRED", EXIT_AUTH_REQUIRED, as_json=json_output)
+        return
     except Exception as e:
         _error(f"Search failed: {e}", "SEARCH_ERROR", EXIT_ERROR, as_json=json_output)
         return
@@ -2561,9 +2629,14 @@ def fetch(
     from .fetch import ContentInfo, build_session, detect_content_type, download_binary, download_binary_stealth
 
     _validate_url(url, json_output)
-    # --paywall implies --stealth for binary downloads (the paywall cascade
-    # is HTML-oriented; for binaries, the stealth tier is the relevant fix).
-    use_stealth = stealth or paywall
+    # --session implies --stealth: a session jar is specifically for curl_cffi
+    # TLS-replay anti-bot (Akamai P6, Cloudflare, Imperva). There is no point
+    # loading a cookie jar and then making a plain httpx request — the TLS
+    # fingerprint would be rejected before the cookies are even sent.
+    # --paywall also implies stealth for the binary path.
+    use_stealth = stealth or paywall or bool(session)
+    if session and not stealth and not paywall:
+        console.print("[dim]--session detected — implying curl_cffi TLS path (use --stealth to suppress this note)[/dim]")
 
     # Resolve session cookies
     _cookies = None
@@ -2609,7 +2682,49 @@ def fetch(
             stealth=use_stealth, impersonate=impersonate,
         )
 
+        def _stealth_get_bytes(target_url: str) -> bytes:
+            """GET via curl_cffi, returning raw response bytes.
+
+            Used when --stealth / --session is active so the request carries a
+            real-Chrome TLS fingerprint (JA3/JA4) through to the server.  Falls
+            back to raising ImportError when curl_cffi is not installed.
+            """
+            from curl_cffi import requests as cffi_requests  # noqa: PLC0415
+            with cffi_requests.Session(impersonate=impersonate, timeout=60) as cs:
+                if custom_headers:
+                    cs.headers.update(custom_headers)
+                if _cookies:
+                    from .cookies import cookies_to_httpx as _c2h
+                    cs.cookies = {c.name: c.value for c in _c2h(_cookies).jar}
+                if effective_proxy:
+                    cs.proxies = {"http": effective_proxy, "https": effective_proxy}
+                r = cs.get(target_url, allow_redirects=True)
+                r.raise_for_status()
+                return r.content
+
         if info.is_binary:
+            # T2b: When the caller explicitly requests JSON output and the URL
+            # filename doesn't look like a real binary (e.g. application/octet-stream
+            # serving a JSON API response), attempt a JSON-parse fetch before
+            # falling through to a file download.
+            from .fetch import _filename_looks_binary
+            if json_output and not _filename_looks_binary(info.filename):
+                try:
+                    _body = _stealth_get_bytes(url) if use_stealth else (
+                        lambda: (r := http_session.get(url), r.raise_for_status(), r.content)[2]
+                    )()
+                    _parsed = json.loads(_body)
+                    if output:
+                        output.write_text(json.dumps(_parsed, indent=2), encoding="utf-8")
+                        console.print(f"[green]Saved:[/green] {output}")
+                    else:
+                        _output_json({"data": _parsed, "meta": {"url": url, "content_type": info.content_type}})
+                    # Bail out — treated as JSON, no file download needed
+                    http_session.close()
+                    return
+                except (ValueError, Exception):
+                    pass  # not valid JSON — fall through to binary download
+
             # Binary download
             out_path = output or Path(info.filename or "download")
             if out_path.exists() and not overwrite:
@@ -2654,15 +2769,32 @@ def fetch(
                 console.print(f"[green]Saved:[/green] {result.path} ({result.size:,} bytes, {result.elapsed:.1f}s)")
 
         elif info.is_json:
-            # JSON response
-            resp = http_session.get(url)
-            resp.raise_for_status()
+            # JSON response — use curl_cffi when stealth so the TLS fingerprint
+            # matches the probe (avoids being blocked at the GET after passing HEAD).
             try:
-                data = resp.json()
-            except ValueError:
-                data = resp.text
+                if use_stealth:
+                    _body = _stealth_get_bytes(url)
+                    try:
+                        data = json.loads(_body)
+                    except ValueError:
+                        data = _body.decode("utf-8", errors="replace")
+                else:
+                    resp = http_session.get(url)
+                    resp.raise_for_status()
+                    try:
+                        data = resp.json()
+                    except ValueError:
+                        data = resp.text
+            except ImportError:
+                # curl_cffi not installed — fall back to httpx
+                resp = http_session.get(url)
+                resp.raise_for_status()
+                try:
+                    data = resp.json()
+                except ValueError:
+                    data = resp.text
             if output:
-                output.write_text(json.dumps(data, indent=2) if isinstance(data, dict) else str(data))
+                output.write_text(json.dumps(data, indent=2) if isinstance(data, (dict, list)) else str(data), encoding="utf-8")
                 console.print(f"[green]Saved:[/green] {output}")
             elif json_output:
                 _output_json({"data": data, "meta": {"url": url, "content_type": info.content_type}})
@@ -2673,14 +2805,27 @@ def fetch(
             # Non-HTML text (XML, KML, CSV, YAML, plain text, etc.) — return raw body.
             # Do NOT attempt CF Browser Rendering markdown conversion on non-HTML content.
             console.print(f"[dim]Text content ({info.content_type}) — fetching raw...[/dim]")
-            resp = http_session.get(url, headers=custom_headers or {})
-            resp.raise_for_status()
-            body = resp.text
+            try:
+                if use_stealth:
+                    _body = _stealth_get_bytes(url)
+                    body = _body.decode("utf-8", errors="replace")
+                else:
+                    resp = http_session.get(url, headers=custom_headers or {})
+                    resp.raise_for_status()
+                    body = resp.text
+            except ImportError:
+                resp = http_session.get(url, headers=custom_headers or {})
+                resp.raise_for_status()
+                body = resp.text
             if output:
-                output.write_text(body)
+                output.write_text(body, encoding="utf-8")
                 console.print(f"[green]Saved:[/green] {output}")
             elif json_output:
-                _output_json({"data": body, "meta": {"url": url, "content_type": info.content_type}})
+                from .blockdetect import detect_block
+                _blk = detect_block(0, {}, body).as_dict()
+                _output_json({"data": body, "meta": {
+                    "url": url, "content_type": info.content_type,
+                    "blocked": _blk}})
             else:
                 _output_text(body)
 
@@ -2712,10 +2857,13 @@ def fetch(
 
             content = result.get("content", "")
             if output:
-                output.write_text(content)
+                output.write_text(content, encoding="utf-8")
                 console.print(f"[green]Saved:[/green] {output}")
             elif json_output:
-                _output_json({"data": result, "meta": {"url": url, "format": "markdown"}})
+                from .blockdetect import detect_block
+                _blk = detect_block(0, {}, content if isinstance(content, str) else "").as_dict()
+                _output_json({"data": result, "meta": {
+                    "url": url, "format": "markdown", "blocked": _blk}})
             else:
                 _output_text(content)
 
@@ -3735,6 +3883,119 @@ def recipe_command(
 
 
 # ------------------------------------------------------------------
+# p6 — mint -> replay anti-bot primitive (v0.29.0 F1)
+# ------------------------------------------------------------------
+
+
+@app.command("p6")
+def p6_command(
+    mint_url: Annotated[str, typer.Argument(help="URL on the target domain to mint cookie shells from (headed/headless local Chromium)")],
+    jar: Annotated[Path, typer.Option("--jar", help="Cookie jar path (minted shells are written/refreshed here)")],
+    target: Annotated[list[str] | None, typer.Option("--target", help="Target URL to replay via curl_cffi (repeatable)")] = None,
+    targets_from: Annotated[Path | None, typer.Option("--targets-from", help="File of target URLs (one per line)")] = None,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-o", help="Write replay response bodies here")] = None,
+    impersonate: Annotated[str, typer.Option("--impersonate", help="curl_cffi browser profile for replay")] = "chrome131",
+    headed: Annotated[bool, typer.Option("--headed", help="Mint with a visible browser (debugging)")] = False,
+    max_remints: Annotated[int, typer.Option("--max-remints", help="Global re-mint cap before cumulative resume")] = 3,
+    base_cooldown: Annotated[float, typer.Option("--base-cooldown", help="Base seconds for the exponential egress cool-down")] = 5.0,
+    max_cooldown: Annotated[float, typer.Option("--max-cooldown", help="Cool-down ceiling in seconds")] = 300.0,
+    expiring_threshold: Annotated[int, typer.Option("--expiring-threshold", help="Shell seconds-to-expiry that triggers a proactive re-mint")] = 300,
+    proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL for both mint and replay")] = None,
+    resume: Annotated[bool, typer.Option("--resume", help="Skip targets already completed in the jar's journal")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output result as JSON")] = False,
+):
+    """Mint anti-bot cookie shells, then replay targets with Chrome TLS.
+
+    The P6 dance that cracks Akamai / Cloudflare / Imperva / CloudFront:
+    a local Chromium navigates MINT_URL so the wall deposits its cookie
+    shells, then curl_cffi (--impersonate) replays the real targets
+    carrying the jar plus a genuine Chrome JA3/JA4 handshake.
+
+    Built-in: proactive re-mint when the jar goes stale, cumulative
+    exponential cool-down (the Akamai egress-escalation trap), and a
+    fast-fail on terminal Cloudflare 1020 (minting can't help — it's
+    keyed on the egress, not the session).
+
+    Example:
+        flarecrawl p6 https://site.com/ --jar ./jar.json \\
+          --target https://site.com/api/data --output-dir ./out
+        flarecrawl p6 https://site.com/ --jar ./jar.json \\
+          --targets-from urls.txt --json
+    """
+    from .config import get_proxy
+    from .p6 import P6Config, run_p6
+
+    targets: list[str] = list(target or [])
+    if targets_from:
+        if not targets_from.exists():
+            _error(f"--targets-from file not found: {targets_from}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+            return
+        for line in targets_from.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                targets.append(line)
+    if not targets:
+        _error("No targets. Pass --target URL (repeatable) or --targets-from FILE.",
+               "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+        return
+
+    _validate_url(mint_url, json_output)
+    for t in targets:
+        _validate_url(t, json_output)
+
+    cfg = P6Config(
+        mint_url=mint_url,
+        jar_path=jar,
+        targets=targets,
+        impersonate=impersonate,
+        headed=headed,
+        max_remints=max_remints,
+        base_cooldown=base_cooldown,
+        max_cooldown=max_cooldown,
+        output_dir=output_dir,
+        proxy=proxy or get_proxy(),
+        expiring_threshold=float(expiring_threshold),
+        resume=resume,
+    )
+
+    def _on_event(event: str, payload: dict) -> None:
+        if json_output:
+            return
+        if event == "mint":
+            console.print(f"[dim]mint #{payload.get('n')} — {payload.get('reason')}[/dim]")
+        elif event == "cooldown":
+            console.print(f"[yellow]cool-down {payload.get('seconds')}s — {payload.get('reason')}[/yellow]")
+        elif event == "terminal":
+            console.print(f"[red]terminal block on {payload.get('url')} ({payload.get('reason')}) — aborting[/red]")
+        elif event == "target":
+            st = str(payload.get("status", ""))
+            colour = {"ok": "green", "blocked": "red", "error": "red"}.get(st, "white")
+            console.print(f"  [{colour}]{st}[/{colour}] {payload.get('url')}")
+
+    try:
+        result = run_p6(cfg, on_event=_on_event)
+    except Exception as e:
+        _error(f"P6 run failed: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
+        return
+
+    if json_output:
+        _output_json({"data": result.as_dict(), "meta": {"mint_url": mint_url}})
+    else:
+        console.print(
+            f"[bold]P6 done.[/bold] {result.targets_ok} ok, "
+            f"{result.targets_blocked} blocked, {result.targets_failed} failed, "
+            f"{result.targets_skipped} skipped "
+            f"({result.minted} mints, {result.remints} re-mints)"
+        )
+        if result.terminal_abort:
+            console.print(f"[red]Aborted: terminal block ({result.aborted_reason})[/red]")
+
+    # Non-zero exit when nothing succeeded or a terminal wall ended the run.
+    if result.terminal_abort or (result.targets_ok == 0 and result.targets_total > 0):
+        raise typer.Exit(EXIT_ERROR)
+
+
+# ------------------------------------------------------------------
 # batch — YAML config batch operations
 # ------------------------------------------------------------------
 
@@ -4478,6 +4739,83 @@ def session_validate(
         console.print(f"Redirected to: [dim]{result['redirected_to']}[/dim]")
     if result.get("error"):
         console.print(f"Error: [red]{result['error']}[/red]")
+
+
+@session_app.command("inspect")
+def session_inspect(
+    jar: Annotated[str, typer.Argument(help="Session name, @name, or path to a cookie jar file")],
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    expiring_threshold: Annotated[int, typer.Option("--expiring-threshold", help="Seconds-to-expiry below which a shell cookie counts as expiring")] = 300,
+):
+    """Inspect a cookie jar's freshness offline (no network).
+
+    Classifies anti-bot shell cookies (Akamai _abck/bm_*, Cloudflare
+    __cf_bm/cf_clearance, Imperva visid_incap_*, DataDome, PerimeterX),
+    computes TTLs, and returns a verdict: fresh | stale | expired | empty.
+
+    Lets a connector re-mint proactively instead of after a block.
+    Exit code is non-zero unless the verdict is 'fresh' (and 0 for an
+    empty jar with no shells), so scripts can branch on it.
+
+    Example:
+        flarecrawl session inspect @ampol
+        flarecrawl session inspect ./jar.json --json
+    """
+    from .jarhealth import inspect_jar
+
+    # Resolve jar source: @name / bare name → saved session; else file path.
+    cookies: list[dict]
+    if jar.startswith("@"):
+        from .config import load_session as _load_session
+        try:
+            cookies = _load_session(jar[1:])
+        except FileNotFoundError:
+            _error(f"Session not found: {jar[1:]}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+            return
+    else:
+        p = Path(jar)
+        if p.exists():
+            from .cookies import load_cookies
+            try:
+                cookies = load_cookies(p)
+            except (OSError, json.JSONDecodeError, ValueError) as e:
+                _error(f"Cannot read jar: {e}", "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+                return
+        else:
+            from .config import load_session as _load_session
+            try:
+                cookies = _load_session(jar)
+            except FileNotFoundError:
+                _error(f"No jar file or saved session named: {jar}", "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output)
+                return
+
+    health = inspect_jar(cookies, expiring_threshold=float(expiring_threshold))
+
+    if json_output:
+        _output_json({"data": health.as_dict(), "meta": {"jar": jar}})
+    else:
+        colour = {
+            "fresh": "green", "stale": "yellow",
+            "expired": "red", "empty": "dim",
+        }.get(health.verdict, "white")
+        console.print(f"Jar: [bold]{jar}[/bold]")
+        console.print(f"Verdict: [{colour}]{health.verdict}[/{colour}]  "
+                       f"({health.cookie_count} cookies, {health.shell_count} anti-bot shells)")
+        if health.vendors:
+            console.print(f"Vendors: {', '.join(health.vendors)}")
+        if health.expired_shells:
+            console.print(f"Expired shells: [red]{', '.join(health.expired_shells)}[/red]")
+        if health.expiring_shells:
+            console.print(f"Expiring shells: [yellow]{', '.join(health.expiring_shells)}[/yellow]")
+        for c in health.cookies:
+            if c.is_shell:
+                ttl = "session" if c.ttl_seconds is None else f"{c.ttl_seconds / 60:.0f}m"
+                console.print(f"  [cyan]{c.name}[/cyan] ({c.vendor}) {c.state} ttl={ttl}")
+
+    # Exit non-zero unless safe to replay. Empty jar with no shells → still
+    # signal not-fresh so a connector knows to mint.
+    if health.verdict != "fresh":
+        raise typer.Exit(EXIT_ERROR)
 
 
 # ------------------------------------------------------------------

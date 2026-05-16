@@ -54,6 +54,38 @@ class RecipeError(Exception):
     """Raised when a recipe is malformed or a step fails."""
 
 
+# ---------------------------------------------------------------------------
+# Result schema contract (F2) — frozen.  Bump RECIPE_SCHEMA_VERSION on any
+# breaking change to the shapes below; connectors key off schema_version.
+#
+# run() returns a dict with this stable shape:
+#   schema_version : int   — this contract's version (currently 1)
+#   recipe         : str   — recipe file path
+#   goto           : str   — top-level navigation URL
+#   browser        : str   — "cf" | "local"
+#   started_at     : float — epoch seconds
+#   completed_at   : float — epoch seconds (present on non-error completion)
+#   status         : str   — "ok" | "error"
+#   steps          : list  — per-step records, each:
+#       { step:int, kind:str, status:"ok"|"error"|"skipped"|"pre-armed",
+#         elapsed_ms:int,
+#         result?:any   — present for steps that produce output
+#                          (eval return value, get_content text);
+#                          JSON-serialisable or stringified,
+#         error?:str    — present when status == "error",
+#         reason?:str, note?:str }
+#   captured_count : int   — total response bodies captured
+#   captured       : list  — captured body descriptors (canonical key is
+#                            "captured", NOT "captures")
+#   blocked        : dict  — blockdetect verdict for the landing page:
+#                            { blocked:bool, vendor:str, kind:str,
+#                              terminal:bool, signal:str }
+#   plan           : list  — present only for --dry-run
+#   dry_run        : bool  — present only for --dry-run
+# ---------------------------------------------------------------------------
+RECIPE_SCHEMA_VERSION = 1
+
+
 REQUIRED_TOP_LEVEL_KEYS = {"goto"}
 ALLOWED_TOP_LEVEL_KEYS = {
     "version", "goto", "browser", "headed", "steps", "stealth",
@@ -189,6 +221,7 @@ def run(
         clear_journal(recipe_path)
 
     summary: dict = {
+        "schema_version": RECIPE_SCHEMA_VERSION,
         "recipe": str(recipe_path),
         "goto": data["goto"],
         "browser": data.get("browser", "cf"),
@@ -220,6 +253,21 @@ def run(
     viewport = data.get("viewport") or [1440, 900]
     timeout_ms = int(data.get("timeout", 30000))
 
+    # Capture steps rely on CDP Network.getResponseBody, which CF-hosted
+    # browser does not expose.  Fail fast rather than silently capturing 0.
+    if not use_local:
+        has_capture = any(
+            next(iter(step)) in ("capture", "capture_download")
+            for step in (data.get("steps") or [])
+            if isinstance(step, dict)
+        )
+        if has_capture:
+            raise RecipeError(
+                "capture / capture_download steps require browser: local — "
+                "CF-hosted browser does not support CDP response body interception. "
+                "Add 'browser: local' to your recipe."
+            )
+
     local_ctx = None
     if use_local:
         local_ctx = LocalBrowser(
@@ -242,22 +290,52 @@ def run(
         except Exception:
             pass
 
+        # Pre-arm capture steps before navigation so resources loaded during
+        # goto are intercepted.  A `capture` step placed after a wait/wait_for
+        # in the recipe would otherwise miss the initial navigation waterfall.
+        steps = data.get("steps") or []
+        _pre_armed: set[int] = set()
+        for i, step in enumerate(steps):
+            kind, val = next(iter(step.items()))
+            if kind == "capture":
+                _run_step(page, kind, val, body_captures, results, timeout_ms)
+                _pre_armed.add(i)
+                summary["steps"].append({
+                    "step": i, "kind": kind, "status": "pre-armed",
+                    "note": "armed before navigation",
+                })
+
         # Navigation
         page.navigate(data["goto"], timeout=timeout_ms)
 
-        steps = data.get("steps") or []
+        # T4: machine-readable bot-wall verdict for the landing page.
+        try:
+            from .blockdetect import detect_block
+            summary["blocked"] = detect_block(
+                200, {}, page.get_content()).as_dict()
+        except Exception:
+            summary["blocked"] = {"blocked": False}
+
         for i, step in enumerate(steps):
+            if i in _pre_armed:
+                continue  # already armed before navigation; don't re-run
             if i in completed_idx:
                 summary["steps"].append({"step": i, "status": "skipped", "reason": "resume"})
                 continue
             kind, val = next(iter(step.items()))
             t0 = time.time()
             try:
-                _run_step(page, kind, val, body_captures, results, timeout_ms)
+                step_result = _run_step(page, kind, val, body_captures, results, timeout_ms)
                 entry = {
                     "step": i, "kind": kind, "status": "ok",
                     "elapsed_ms": int((time.time() - t0) * 1000),
                 }
+                if step_result is not None:
+                    try:
+                        json.dumps(step_result)  # only include if JSON-serialisable
+                        entry["result"] = step_result
+                    except (TypeError, ValueError):
+                        entry["result"] = str(step_result)
             except Exception as exc:
                 entry = {
                     "step": i, "kind": kind, "status": "error",
@@ -306,8 +384,13 @@ def _run_step(
     body_captures: list,
     results: dict,
     default_timeout_ms: int,
-) -> None:
-    """Dispatch to the right CDP page action for the step kind."""
+) -> Any:
+    """Dispatch to the right CDP page action for the step kind.
+
+    Returns the step's output value when applicable (eval result, screenshot
+    path, etc.) so callers can surface it in the summary JSON.  Returns None
+    for steps that produce no typed output.
+    """
     from .cdp import BodyCapture
 
     if kind == "click":
@@ -341,7 +424,9 @@ def _run_step(
     elif kind == "eval":
         if not isinstance(val, str):
             raise RecipeError("eval expects a JS expression string")
-        results[f"step_eval_{len(results)}"] = page.evaluate(val)
+        eval_result = page.evaluate(val)
+        results[f"step_eval_{len(results)}"] = eval_result
+        return eval_result
 
     elif kind == "capture":
         if not isinstance(val, dict) or "pattern" not in val or "to" not in val:
@@ -371,7 +456,12 @@ def _run_step(
 
     elif kind == "get_content":
         var = val if isinstance(val, str) else (val.get("var") if isinstance(val, dict) else "content")
-        results[var] = page.get_content()
+        _content = page.get_content()
+        results[var] = _content
+        # F2: surface the captured content so it appears in steps[].result
+        # (previously stored only in the internal results dict — callers saw
+        # length 0 where page text was expected).
+        return _content
 
     elif kind == "for_each":
         if not isinstance(val, dict):

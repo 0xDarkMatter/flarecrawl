@@ -5,6 +5,90 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-05-16
+
+Closes the OTDB hard-target field-report backlog (a 9-connector AU
+EV-charging harvest against Akamai / Cloudflare / Imperva / CloudFront).
+Nine bug/DX fixes plus five features, including the P6 mint→replay
+primitive that carried the entire workstream.
+
+### Added
+
+- **`flarecrawl p6` — mint→replay anti-bot primitive.** New `p6.py`
+  orchestrator: a local Chromium navigates a mint URL so the bot wall
+  deposits its cookie shells (`_abck`, `bm_*`, `__cf_bm`, ...), then
+  `curl_cffi --impersonate` replays the real targets carrying the jar
+  plus a genuine Chrome JA3/JA4 handshake. Built-in **proactive re-mint**
+  when the jar goes stale, **cumulative exponential cool-down** (the
+  Akamai egress-escalation trap — backoff is keyed on total re-mints,
+  not per-target, so sustained pressure backs off globally), and
+  **terminal fast-fail** on Cloudflare 1020 (keyed on the egress, not
+  the session — minting can't help). Resume journal. All
+  browser/network is dependency-injected; the control loop is fully
+  unit-tested without a browser or socket.
+
+- **Machine-readable block detection (`meta.blocked`).** New
+  `blockdetect.py`: a pure `detect_block(status, headers, body)`
+  classifier with an ordered signature table — Cloudflare 1020
+  (terminal), CF JS-challenge, Akamai interstitial (HTTP 200!) /
+  edge-deny, Imperva, DataDome, PerimeterX, CloudFront 403, rate-limit.
+  Surfaced as `meta.blocked` in `scrape` (CDP), `fetch` (`--json`), and
+  the `recipe` summary, so connectors stop reinventing fragile
+  per-vendor heuristics. Tesla-style SPA-404 is intentionally excluded
+  (a generic detector would false-positive on every SPA).
+
+- **`flarecrawl session inspect` — offline jar freshness.** New
+  `jarhealth.py`: classifies anti-bot shell cookies, computes TTLs, and
+  returns a verdict (`fresh` | `stale` | `expired` | `empty`) with no
+  network call. Exit code is non-zero unless `fresh`, so connectors can
+  re-mint *proactively* instead of after burning a blocked request. Also
+  the freshness oracle P6 uses between replay batches.
+
+- **`fetch --json` on `application/octet-stream` that is valid JSON.**
+  When the caller explicitly requests JSON and the URL filename doesn't
+  look binary, the body is JSON-sniffed before falling back to a binary
+  download (no more files literally named `download`).
+
+### Fixed
+
+- **Windows cp1252 crash on output (highest recurrence — 2 independent
+  hits).** `_output_json` and all `fetch` file writes now go through the
+  UTF-8 / `errors="replace"` path. Valid content with emoji or
+  box-drawing glyphs no longer hard-crashes or writes a 0-byte file.
+
+- **`--json` no longer overrides backend / output / content-type.**
+  `scrape --output PATH --json` now honours `--output` (was silently
+  discarded). `fetch --session`/`--impersonate` now implies the
+  curl_cffi TLS path and the JSON/raw-text branches use it too — a
+  session jar is no longer defeated by adding `--json`.
+
+- **HAR / capture flushed on failure.** `_scrape_single_cdp` writes the
+  HAR and captured bodies in a `finally` block, so a
+  `--wait-for-selector` timeout no longer discards the expensive
+  bot-wall-clearing navigation. The selector timeout now surfaces a
+  clean `selector 'X' not found after Ns` instead of a raw traceback.
+
+- **`recipe` capture ordering & eval results.** `capture` steps are
+  pre-armed *before* navigation (a `capture` after a `wait` no longer
+  silently captures 0). `eval` and `get_content` step return values are
+  surfaced in `steps[].result`. `browser: cf` + `capture` fails fast
+  with a clear message (CF-hosted browser can't intercept response
+  bodies) instead of silently yielding nothing.
+
+### Changed
+
+- **Recipe result schema frozen (`schema_version: 1`).** The `run()`
+  summary contract is documented and versioned in `recipe.py`; `captured`
+  is the canonical key (not `captures`). Connectors can key off
+  `schema_version`.
+
+- **`search` API-key disclosure.** The Jina-key requirement is stated
+  up front in `--help` and the missing-key case exits as `AUTH_REQUIRED`
+  with an actionable hint, instead of a generic failure.
+
+- New unit suites: `test_blockdetect.py`, `test_jarhealth.py`,
+  `test_p6.py` (48 tests). Full non-live suite green (820 tests).
+
 ## [0.27.0] - 2026-05-16
 
 ### Fixed

@@ -65,10 +65,11 @@ def jina_search(
             f"{_JINA_SEARCH_URL}{query}",
             headers=headers,
         )
-        if resp.status_code == 401:
+        if resp.status_code in (401, 402):
             raise RuntimeError(
-                "Jina Search requires an API key. "
-                "Set JINA_API_KEY env var (free at https://jina.ai/api-key)"
+                "Jina Search requires an API key (this is a Jina dependency, "
+                "not a Flarecrawl quota). Get a free key at "
+                "https://jina.ai/api-key and export JINA_API_KEY=<key>."
             )
         resp.raise_for_status()
         data = resp.json()

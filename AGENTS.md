@@ -64,6 +64,8 @@
 | Show session cookies | `flarecrawl session show mysite` |
 | Delete saved session | `flarecrawl session delete mysite` |
 | Validate session against URL | `flarecrawl session validate mysite https://example.com` |
+| Inspect jar freshness (offline) | `flarecrawl session inspect @mysite` — verdict fresh/stale/expired; exit ≠0 unless fresh |
+| Mint→replay hard target (P6) | `flarecrawl p6 https://site/ --jar jar.json --target https://site/api --output-dir out` |
 | Fetch URL (content-aware) | `flarecrawl fetch URL` — auto-routes: binary download, JSON parse, raw text (XML/CSV/RSS/KML/YAML/…), or HTML via CF |
 | Fetch with session | `flarecrawl fetch URL --session cookies.json` |
 | Fetch with saved session | `flarecrawl fetch URL --session @mysite` |
@@ -418,7 +420,40 @@ Step kinds: `click`, `fill`, `press`, `wait`, `wait_for`, `eval`, `capture`,
 Resume: each completed step is journaled to `.recipe-state-<hash>.ndjson`
 next to the recipe. `--resume` skips up to the last successful step.
 
+`capture` steps are armed *before* navigation (v0.28.0) so the goto
+waterfall is intercepted regardless of step order; they appear in the
+summary with `status: "pre-armed"`. `capture` requires `browser: local`
+(CF-hosted browser can't intercept response bodies — it fails fast with a
+clear message). The `--json` summary is a frozen contract: `schema_version:
+1`, canonical key `captured` (not `captures`), `eval`/`get_content` return
+values surface in `steps[].result`, and `blocked` carries the landing-page
+bot-wall verdict.
+
 Examples in [examples/recipes/](examples/recipes/).
+
+### p6 — mint→replay anti-bot primitive (v0.28.0)
+
+The P6 dance that cracks Akamai / Cloudflare / Imperva / CloudFront: a
+local Chromium navigates a mint URL so the wall deposits its cookie shells
+(`_abck`, `bm_*`, `__cf_bm`, …), then `curl_cffi --impersonate` replays
+the real targets carrying the jar plus a genuine Chrome JA3/JA4 handshake.
+
+```bash
+flarecrawl p6 https://site.com/ --jar ./jar.json \
+  --target https://site.com/api/data --output-dir ./out
+flarecrawl p6 https://site.com/ --jar ./jar.json \
+  --targets-from urls.txt --json
+```
+
+Built-in: proactive re-mint when the jar goes stale (`jarhealth`),
+**cumulative** exponential cool-down keyed on total re-mints (the Akamai
+egress-escalation trap — a tight re-mint loop keeps the whole egress IP
+flagged), terminal fast-fail on Cloudflare 1020 (keyed on the egress, not
+the session — minting can't help), and a resume journal next to the jar.
+Inspect jar freshness offline anytime with `flarecrawl session inspect
+@name` (exit ≠0 unless `fresh`). Every response carries a machine-readable
+`meta.blocked` `{blocked, vendor, kind, terminal, signal}` so connectors
+stop string-matching their own bot-wall heuristics.
 
 ### Optional extras
 
@@ -634,6 +669,9 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 48. **Credential storage** — by default credentials live in OS keyring (`forma-flarecrawl` namespace) when the `keyring` package is installed, falling back to `.env` then legacy `~/.config/flarecrawl/config.json`. Check `flarecrawl auth status --json` to see which source is active via `data.source` (`environment | keyring | dotenv | config-legacy | none`)
 49. **`fetch` routes by content type, not URL** — 4 branches in order: (1) binary (`image/*`, `audio/*`, `video/*`, `application/pdf`, `application/zip`, etc.) → saves to file, requires `-o`; (2) JSON (`application/json`, `application/*+json` incl. JSON-LD, GeoJSON, problem+json) → parses and returns structured data; (3) raw text (anything not binary/JSON/HTML: `text/xml`, `text/csv`, RSS, Atom, KML, YAML, TOML, iCal, vCard, Turtle, Markdown, ndjson, …) → returns body verbatim, **no CF auth needed**; (4) HTML (`text/html`, `application/xhtml+xml`) → CF Browser Rendering → markdown. Use `--json` to see `meta.content_type` and confirm which branch ran
 50. **`--only-main-content` uses link-density gating** — selector candidates (`<main>`, `<article>`, `[role=main]`) with ≥ 60% of their text inside `<a>` tags are rejected as nav-soup and the extractor falls through to the next candidate or body fallback. Common site-nav class/id patterns (`site-header`, `site-nav`, `primary-nav`, `main-nav`, `navbar-*`) are also stripped from the body fallback
+51. **`meta.blocked` is the bot-wall source of truth** — `scrape` (CDP), `fetch --json`, and the `recipe` summary carry `blocked: {blocked, vendor, kind, terminal, signal}`. `vendor` ∈ akamai/cloudflare/imperva/cloudfront/datadome/perimeterx; `kind` ∈ interstitial/edge_deny/js_challenge/captcha/cf_1020_hard/rate_limited. `terminal: true` (Cloudflare 1020) means non-bypassable — do not waste a re-mint. Don't string-match block pages yourself. SPA-404 is intentionally NOT detected (would false-positive on every SPA — assert your own content presence)
+52. **`--session`/`--impersonate` on `fetch` implies the curl_cffi TLS path** — a session jar is for anti-bot TLS replay; adding `--json` no longer downgrades it to plain httpx or CF browser-rendering. Output format is orthogonal to backend. `scrape --output PATH --json` writes the JSON envelope to the file (was silently ignored)
+53. **P6 = `flarecrawl p6`** — mint shells (local Chromium) → replay (curl_cffi `--impersonate`). Cumulative exponential cool-down is keyed on *total* re-mints, not per-target (a tight per-target re-mint loop keeps the whole egress IP escalated on Akamai). Terminal CF-1020 aborts the run instead of burning the budget. `flarecrawl session inspect @name` checks jar freshness offline (exit ≠0 unless `fresh`) so you can re-mint proactively. Resume journal sits next to the jar
 
 ## Pricing Reference
 
