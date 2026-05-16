@@ -2669,8 +2669,23 @@ def fetch(
             else:
                 _output_json(data)
 
+        elif not info.is_html:
+            # Non-HTML text (XML, KML, CSV, YAML, plain text, etc.) — return raw body.
+            # Do NOT attempt CF Browser Rendering markdown conversion on non-HTML content.
+            console.print(f"[dim]Text content ({info.content_type}) — fetching raw...[/dim]")
+            resp = http_session.get(url, headers=custom_headers or {})
+            resp.raise_for_status()
+            body = resp.text
+            if output:
+                output.write_text(body)
+                console.print(f"[green]Saved:[/green] {output}")
+            elif json_output:
+                _output_json({"data": body, "meta": {"url": url, "content_type": info.content_type}})
+            else:
+                _output_text(body)
+
         else:
-            # HTML/text — fall through to scrape for markdown conversion
+            # HTML — convert to markdown via CF Browser Rendering
             console.print("[dim]HTML content — converting to markdown...[/dim]")
             from .config import get_proxy as _gp
             _require_auth(json_output)
@@ -2711,8 +2726,10 @@ def fetch(
         import httpx as _httpx
         if isinstance(e, _httpx.HTTPError) or isinstance(e, RuntimeError):
             _error(f"HTTP error: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
-        else:
+        elif isinstance(e, SystemExit):
             raise
+        else:
+            _error(f"Unexpected error: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
     finally:
         http_session.close()
 

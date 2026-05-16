@@ -1,0 +1,33 @@
+[project]
+name = "flarecrawl"
+version = "0.26.0"
+description = "Cloudflare Browser Rendering CLI with Firecrawl-compatible API"
+
+[scraper]
+timeout = 30
+retries = 3
+concurrency = 5
+user_agent = "Mozilla/5.0 (compatible; flarecrawl/0.26.0)"
+follow_redirects = true
+
+[stealth]
+enabled = true
+tls_fingerprint = "chrome120"
+rotate_ja3 = true
+human_mouse = true
+
+[outputs]
+formats = ["markdown", "json", "html", "screenshot"]
+default = "markdown"
+include_links = true
+include_images = false
+
+[ratelimits]
+requests_per_minute = 60
+burst = 10
+backoff_factor = 2.0
+
+[cache]
+enabled = true
+ttl_seconds = 3600
+max_size_mb = 512

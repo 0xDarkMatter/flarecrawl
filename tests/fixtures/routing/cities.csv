@@ -1,0 +1,9 @@
+id,name,city,country,lat,lon,population
+1,London,London,GB,51.5074,-0.1278,9648110
+2,Tokyo,Tokyo,JP,35.6762,139.6503,37400068
+3,New York,New York,US,40.7128,-74.0060,18819000
+4,Sydney,Sydney,AU,-33.8688,151.2093,5312000
+5,São Paulo,São Paulo,BR,-23.5505,-46.6333,22043028
+6,Mumbai,Mumbai,IN,19.0760,72.8777,20667656
+7,Lagos,Lagos,NG,6.5244,3.3792,14862000
+8,Cairo,Cairo,EG,30.0444,31.2357,21323000

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Flarecrawl Releases</title>
+  <subtitle>Release notes for the Flarecrawl scraping toolkit</subtitle>
+  <link href="https://flarecrawl.dev/releases"/>
+  <link rel="self" type="application/atom+xml" href="https://flarecrawl.dev/releases/feed.atom"/>
+  <id>https://flarecrawl.dev/releases</id>
+  <updated>2025-05-16T10:00:00Z</updated>
+  <rights>MIT License</rights>
+  <author>
+    <name>0xDarkMatter</name>
+    <email>mack@evolution7.com.au</email>
+  </author>
+  <entry>
+    <title>v0.26.0 — Hard-target scraping stack</title>
+    <link href="https://flarecrawl.dev/releases/v0.26.0"/>
+    <id>https://flarecrawl.dev/releases/v0.26.0</id>
+    <updated>2025-05-16T10:00:00Z</updated>
+    <summary>Stealth TLS fingerprinting, JA3/JA4 rotation, human-like interaction via CDP.</summary>
+    <content type="text">Hard-target scraping now supported via curl-impersonate and CDP humanisation.</content>
+  </entry>
+  <entry>
+    <title>v0.22.0 — Secure credential storage</title>
+    <link href="https://flarecrawl.dev/releases/v0.22.0"/>
+    <id>https://flarecrawl.dev/releases/v0.22.0</id>
+    <updated>2025-04-01T08:00:00Z</updated>
+    <summary>OS keychain integration via the keyring library.</summary>
+  </entry>
+</feed>

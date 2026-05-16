@@ -5,6 +5,45 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-05-16
+
+### Fixed
+
+- **`fetch` routing: non-HTML content types no longer traceback.** URLs returning
+  `text/xml`, `application/xml`, `text/csv`, `text/plain`, `application/yaml`, and
+  any other non-HTML type previously fell into the HTML → CF Browser Rendering branch,
+  which called `_scrape_single()` without credentials and raised an unhandled exception.
+  New `_is_html_content_type()` helper gates the CF branch to `text/html` and
+  `application/xhtml+xml` only. A new `elif not info.is_html:` branch fetches the raw
+  body and returns it verbatim — no CF auth required, no browser time consumed.
+  Reproducer: `flarecrawl fetch "https://www.google.com/maps/d/kml?mid=abc&forcekml=1"`.
+
+- **`--only-main-content` nav soup leaking.** When a `<main>` or `<article>` selector
+  matched an element that was itself a nav-heavy container (link-density ≥ 60%), the
+  full navigation was included in the output. `extract_main_content()` now measures link
+  density on each candidate element; high-density hits fall through to the next selector
+  or body fallback. A supplementary `_BODY_STRIP_EXTRA` tuple strips `site-header`,
+  `site-nav`, `primary-nav`, `main-nav`, and `navbar-*` patterns from the body fallback.
+
+### Added
+
+- **RFC 6839 structured syntax suffix routing.** `application/*+json` (JSON-LD,
+  GeoJSON, `problem+json`, `vnd.api+json`) and `application/*+xml` (RSS, Atom,
+  KML/vnd, SOAP) were all classified as binary and sent to binary download. One suffix
+  check (`endswith("+json")` / `endswith("+xml")`) in `_is_binary_content_type()` fixes
+  the entire class — they now route to the JSON parse or raw-text branch as appropriate.
+  Also added `application/x-ndjson`, `application/x-jsonlines`, and
+  `application/jsonlines` to `_TEXT_TYPES`.
+
+- **E2E routing test corpus.** `tests/fixtures/routing/` — 14 realistic fixture files
+  (`.xml`, `.csv`, `.tsv`, `.rss`, `.atom`, `.kml`, `.yaml`, `.toml`, `.ics`, `.vcf`,
+  `.ttl`, `.md`, `.geojson`, `.jsonld`, `.ndjson`). `routing_server` session fixture
+  (stdlib-only `ThreadingHTTPServer` with explicit mimetype overrides for all extensions
+  Python's `mimetypes` doesn't handle) serves them on a random port. 25 e2e tests in
+  `test_fetch_routing_e2e.py` hit a real TCP socket with no monkeypatching; 35
+  parametrised unit tests in `test_fetch_routing.py` cover 18 content types. 1404 tests
+  total.
+
 ## [0.26.0] - 2026-05-09
 
 ### Added — Headless evasion (partial)

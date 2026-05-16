@@ -1,0 +1,7 @@
+{"id": 1, "event": "page_view", "url": "https://example.com/home", "ts": "2025-05-16T10:00:00Z", "duration_ms": 342, "status": 200}
+{"id": 2, "event": "page_view", "url": "https://example.com/about", "ts": "2025-05-16T10:00:15Z", "duration_ms": 198, "status": 200}
+{"id": 3, "event": "form_submit", "url": "https://example.com/contact", "ts": "2025-05-16T10:01:02Z", "duration_ms": 87, "status": 201}
+{"id": 4, "event": "page_view", "url": "https://example.com/pricing", "ts": "2025-05-16T10:01:45Z", "duration_ms": 412, "status": 200}
+{"id": 5, "event": "api_call", "url": "https://api.example.com/v1/status", "ts": "2025-05-16T10:02:00Z", "duration_ms": 23, "status": 200}
+{"id": 6, "event": "page_view", "url": "https://example.com/docs", "ts": "2025-05-16T10:03:11Z", "duration_ms": 289, "status": 200}
+{"id": 7, "event": "download", "url": "https://example.com/assets/report.pdf", "ts": "2025-05-16T10:04:30Z", "duration_ms": 1240, "status": 200}

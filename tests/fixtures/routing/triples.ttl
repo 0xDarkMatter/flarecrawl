@@ -1,0 +1,42 @@
+@prefix ex:     <http://example.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix dc:     <http://purl.org/dc/elements/1.1/> .
+
+ex:flarecrawl
+    a schema:SoftwareApplication ;
+    schema:name "Flarecrawl" ;
+    schema:version "0.26.0" ;
+    schema:description "Cloudflare Browser Rendering CLI with Firecrawl-compatible API" ;
+    schema:applicationCategory "DeveloperApplication" ;
+    schema:operatingSystem "Linux", "macOS", "Windows" ;
+    schema:license <https://opensource.org/licenses/MIT> ;
+    schema:author ex:developer ;
+    schema:dateModified "2025-05-16"^^xsd:date .
+
+ex:developer
+    a foaf:Person ;
+    foaf:name "0xDarkMatter" ;
+    foaf:mbox <mailto:mack@evolution7.com.au> ;
+    foaf:homepage <https://github.com/0xDarkMatter> .
+
+ex:flarecrawl schema:featureList
+    ex:feature_scrape,
+    ex:feature_crawl,
+    ex:feature_stealth .
+
+ex:feature_scrape
+    a schema:PropertyValue ;
+    schema:name "scrape" ;
+    dc:description "Single-URL scraping with CF Browser Rendering" .
+
+ex:feature_crawl
+    a schema:PropertyValue ;
+    schema:name "crawl" ;
+    dc:description "Multi-URL crawling with configurable depth" .
+
+ex:feature_stealth
+    a schema:PropertyValue ;
+    schema:name "stealth" ;
+    dc:description "TLS fingerprinting and JA3/JA4 rotation" .

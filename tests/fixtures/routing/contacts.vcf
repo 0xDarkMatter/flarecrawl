@@ -1,0 +1,29 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Alice Researcher
+N:Researcher;Alice;;;
+EMAIL;TYPE=WORK:alice@example.com
+TEL;TYPE=WORK,VOICE:+1-555-0101
+ORG:Example Research Institute
+TITLE:Senior Data Scientist
+URL:https://example.com/~alice
+NOTE:Lead researcher on web data extraction
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Bob Engineer
+N:Engineer;Bob;;;
+EMAIL;TYPE=WORK:bob@example.com
+TEL;TYPE=WORK,VOICE:+1-555-0102
+ORG:Example Engineering Corp
+TITLE:Principal Engineer
+URL:https://example.com/~bob
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Carol Administrator
+N:Administrator;Carol;;;
+EMAIL;TYPE=WORK:carol@example.com
+ORG:Example Operations Ltd
+TITLE:System Administrator
+END:VCARD

@@ -27,12 +27,32 @@ _STRIP_TAGS = ("nav", "footer", "header", "aside", "script", "style", "noscript"
 # Selectors to try for main content (in priority order)
 _MAIN_SELECTORS = ["main", "article", "[role=main]", "#content", ".content", "#main"]
 
+# Extra CSS selectors stripped from the body fallback to catch non-semantic nav wrappers.
+# Deliberately conservative to avoid false positives on legitimate content.
+_BODY_STRIP_EXTRA = (
+    "[class*='site-header']", "[class*='site-nav']", "[class*='primary-nav']",
+    "[class*='main-nav']", "[id*='site-header']", "[id*='main-nav']",
+    "[class*='navbar-']", "[class*='-navbar']",
+)
+
+# Fraction of text inside <a> tags that signals nav-soup (Praxis audit: 78% avg on affected sites)
+_LINK_DENSITY_THRESHOLD = 0.6
+
 
 def _strip_tags(node: Node, tags: tuple[str, ...] | set[str]) -> None:
     """Remove all descendants of ``node`` whose tag is in ``tags``."""
     selector = ", ".join(tags)
     for el in node.css(selector):
         el.decompose()
+
+
+def _link_density(node: Node) -> float:
+    """Ratio of link-text chars to total text chars. 1.0 = all content is links."""
+    total = len(node.text(strip=True))
+    if not total:
+        return 0.0
+    link_chars = sum(len(a.text(strip=True)) for a in node.css("a"))
+    return link_chars / total
 
 
 def _node_html(node: Node) -> str:
@@ -43,8 +63,10 @@ def _node_html(node: Node) -> str:
 def extract_main_content(html: str) -> str:
     """Extract main content from HTML, stripping nav/footer/sidebar.
 
-    Tries known main-content selectors. Falls back to <body> with
-    nav/footer/header/aside stripped.
+    Tries known main-content selectors in priority order, skipping any
+    candidate whose post-strip link density exceeds the threshold (signals
+    that the selector grabbed a nav wrapper rather than the article body).
+    Falls back to <body> with an expanded strip pass.
 
     Returns cleaned HTML string.
     """
@@ -55,13 +77,16 @@ def extract_main_content(html: str) -> str:
         el = tree.css_first(selector)
         if el and len(el.text(strip=True)) > 50:
             _strip_tags(el, _STRIP_TAGS)
-            return _node_html(el)
+            if _link_density(el) < _LINK_DENSITY_THRESHOLD:
+                return _node_html(el)
+            # Candidate is nav-soup (selector overshoot); try next
 
     # Fallback: use body with unwanted tags stripped
     body = tree.css_first("body")
     if not body:
         return html
     _strip_tags(body, _STRIP_TAGS)
+    _strip_tags(body, _BODY_STRIP_EXTRA)
     return _node_html(body)
 
 

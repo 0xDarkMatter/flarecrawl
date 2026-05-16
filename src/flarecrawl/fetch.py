@@ -24,6 +24,7 @@ class ContentInfo:
     filename: str | None
     is_binary: bool
     is_json: bool
+    is_html: bool
 
 
 @dataclass(slots=True)
@@ -38,7 +39,8 @@ class DownloadResult:
 
 _TEXT_TYPES = {"text/", "application/json", "application/xml", "application/xhtml+xml",
                "application/javascript", "application/ecmascript", "application/x-yaml",
-               "application/yaml", "application/toml"}
+               "application/yaml", "application/toml",
+               "application/x-ndjson", "application/x-jsonlines", "application/jsonlines"}
 
 _BINARY_EXTENSIONS = {
     ".zip", ".gz", ".tar", ".bz2", ".xz", ".7z", ".rar",
@@ -51,12 +53,21 @@ _BINARY_EXTENSIONS = {
 }
 
 
+def _is_html_content_type(ct: str) -> bool:
+    """True only for HTML/XHTML content types."""
+    ct_lower = ct.lower().split(";")[0].strip()
+    return ct_lower in ("text/html", "application/xhtml+xml") or ct_lower.startswith("text/html")
+
+
 def _is_binary_content_type(ct: str) -> bool:
     """Determine if a content-type is binary."""
     ct_lower = ct.lower().split(";")[0].strip()
     for text_prefix in _TEXT_TYPES:
         if ct_lower.startswith(text_prefix):
             return False
+    # RFC 6839: structured syntax suffixes — application/*+json and application/*+xml are text
+    if ct_lower.endswith("+json") or ct_lower.endswith("+xml"):
+        return False
     if ct_lower.startswith("application/") and ct_lower not in _TEXT_TYPES:
         return True
     if ct_lower.startswith(("image/", "audio/", "video/", "font/")):
@@ -120,17 +131,20 @@ def detect_content_type(url: str, session: httpx.Client | None = None,
                     filename=filename,
                     is_binary=_is_binary_content_type(ct_clean) or _filename_looks_binary(filename),
                     is_json="json" in ct_clean.lower(),
+                    is_html=_is_html_content_type(ct_clean),
                 )
         except Exception:
             # If HEAD fails even with stealth, infer from URL extension.
             filename = _filename_from_url(url)
             looks_binary = _filename_looks_binary(filename)
+            fallback_ct = "application/octet-stream" if looks_binary else "text/html"
             return ContentInfo(
-                content_type="application/octet-stream" if looks_binary else "text/html",
+                content_type=fallback_ct,
                 size=None,
                 filename=filename,
                 is_binary=looks_binary,
                 is_json=filename.lower().endswith(".json"),
+                is_html=_is_html_content_type(fallback_ct),
             )
 
     client = session or httpx.Client(timeout=15, follow_redirects=True)
@@ -150,6 +164,7 @@ def detect_content_type(url: str, session: httpx.Client | None = None,
             filename=filename,
             is_binary=_is_binary_content_type(ct_clean) or _filename_looks_binary(filename),
             is_json="json" in ct_clean.lower(),
+            is_html=_is_html_content_type(ct_clean),
         )
     finally:
         if close:

@@ -7,6 +7,7 @@ from flarecrawl.fetch import (
     DownloadResult,
     _filename_from_url,
     _is_binary_content_type,
+    _is_html_content_type,
     _parse_content_disposition,
     build_session,
 )
@@ -51,6 +52,37 @@ class TestIsBinaryContentType:
 
     def test_octet_stream_is_binary(self):
         assert _is_binary_content_type("application/octet-stream")
+
+
+class TestIsHtmlContentType:
+    """Test _is_html_content_type() — used to route XML/KML away from markdown conversion."""
+
+    def test_html_is_html(self):
+        assert _is_html_content_type("text/html")
+
+    def test_xhtml_is_html(self):
+        assert _is_html_content_type("application/xhtml+xml")
+
+    def test_html_with_charset_is_html(self):
+        assert _is_html_content_type("text/html; charset=utf-8")
+
+    def test_xml_is_not_html(self):
+        assert not _is_html_content_type("text/xml")
+
+    def test_application_xml_is_not_html(self):
+        assert not _is_html_content_type("application/xml")
+
+    def test_kml_is_not_html(self):
+        assert not _is_html_content_type("application/vnd.google-earth.kml+xml")
+
+    def test_plain_text_is_not_html(self):
+        assert not _is_html_content_type("text/plain")
+
+    def test_json_is_not_html(self):
+        assert not _is_html_content_type("application/json")
+
+    def test_csv_is_not_html(self):
+        assert not _is_html_content_type("text/csv")
 
 
 class TestParseContentDisposition:
@@ -135,10 +167,23 @@ class TestDataclasses:
             filename="doc.pdf",
             is_binary=True,
             is_json=False,
+            is_html=False,
         )
         assert info.content_type == "application/pdf"
         assert info.is_binary is True
         assert info.is_json is False
+        assert info.is_html is False
+
+    def test_content_info_html_flag(self):
+        info = ContentInfo(
+            content_type="text/html",
+            size=None,
+            filename="index.html",
+            is_binary=False,
+            is_json=False,
+            is_html=True,
+        )
+        assert info.is_html is True
 
     def test_download_result_fields(self):
         from pathlib import Path

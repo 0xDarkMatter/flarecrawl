@@ -64,7 +64,7 @@
 | Show session cookies | `flarecrawl session show mysite` |
 | Delete saved session | `flarecrawl session delete mysite` |
 | Validate session against URL | `flarecrawl session validate mysite https://example.com` |
-| Fetch URL (content-aware) | `flarecrawl fetch URL` |
+| Fetch URL (content-aware) | `flarecrawl fetch URL` — auto-routes: binary download, JSON parse, raw text (XML/CSV/RSS/KML/YAML/…), or HTML via CF |
 | Fetch with session | `flarecrawl fetch URL --session cookies.json` |
 | Fetch with saved session | `flarecrawl fetch URL --session @mysite` |
 | Download binary file | `flarecrawl fetch URL -o file.pdf` |
@@ -632,6 +632,8 @@ This bypasses all flag processing and sends the body directly. Useful for advanc
 46. **`--session` on crawl** — pass cookies to CF `/crawl` for authenticated crawling. Supports file path or `@NAME` for saved sessions
 47. **`FLARECRAWL_CDP_ENDPOINT` env var** — override the CDP WebSocket URL to use any CDP backend (Oxylabs Scraping Browser, Bright Data, local Chrome `ws://localhost:9222`). When set, flarecrawl skips CF auth for the browser connection
 48. **Credential storage** — by default credentials live in OS keyring (`forma-flarecrawl` namespace) when the `keyring` package is installed, falling back to `.env` then legacy `~/.config/flarecrawl/config.json`. Check `flarecrawl auth status --json` to see which source is active via `data.source` (`environment | keyring | dotenv | config-legacy | none`)
+49. **`fetch` routes by content type, not URL** — 4 branches in order: (1) binary (`image/*`, `audio/*`, `video/*`, `application/pdf`, `application/zip`, etc.) → saves to file, requires `-o`; (2) JSON (`application/json`, `application/*+json` incl. JSON-LD, GeoJSON, problem+json) → parses and returns structured data; (3) raw text (anything not binary/JSON/HTML: `text/xml`, `text/csv`, RSS, Atom, KML, YAML, TOML, iCal, vCard, Turtle, Markdown, ndjson, …) → returns body verbatim, **no CF auth needed**; (4) HTML (`text/html`, `application/xhtml+xml`) → CF Browser Rendering → markdown. Use `--json` to see `meta.content_type` and confirm which branch ran
+50. **`--only-main-content` uses link-density gating** — selector candidates (`<main>`, `<article>`, `[role=main]`) with ≥ 60% of their text inside `<a>` tags are rejected as nav-soup and the extractor falls through to the next candidate or body fallback. Common site-nav class/id patterns (`site-header`, `site-nav`, `primary-nav`, `main-nav`, `navbar-*`) are also stripped from the body fallback
 
 ## Pricing Reference
 
@@ -660,7 +662,7 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (1112+ tests, no API calls)
+# Unit tests (1404+ tests, no API calls)
 pytest tests/ -v
 
 # Agent-safety tests only (137 tests including corpus validation)

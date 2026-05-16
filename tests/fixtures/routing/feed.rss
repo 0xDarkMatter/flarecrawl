@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Flarecrawl Development Blog</title>
+    <link>https://flarecrawl.dev/blog</link>
+    <description>News and updates from the Flarecrawl project</description>
+    <language>en-us</language>
+    <lastBuildDate>Fri, 16 May 2025 10:00:00 +0000</lastBuildDate>
+    <managingEditor>dev@flarecrawl.dev</managingEditor>
+    <item>
+      <title>v0.26.0: Hard-target scraping and headless evasion</title>
+      <link>https://flarecrawl.dev/blog/v0.26.0</link>
+      <description>This release adds stealth TLS fingerprinting, JA3/JA4 rotation, and human-like mouse movement via CDP.</description>
+      <pubDate>Fri, 16 May 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="true">https://flarecrawl.dev/blog/v0.26.0</guid>
+      <dc:creator>0xDarkMatter</dc:creator>
+    </item>
+    <item>
+      <title>v0.22.0: Secure credential storage</title>
+      <link>https://flarecrawl.dev/blog/v0.22.0</link>
+      <description>Credentials now stored in the OS keychain using the keyring library. Legacy config migrated automatically on first run.</description>
+      <pubDate>Tue, 01 Apr 2025 08:00:00 +0000</pubDate>
+      <guid isPermaLink="true">https://flarecrawl.dev/blog/v0.22.0</guid>
+      <dc:creator>0xDarkMatter</dc:creator>
+    </item>
+    <item>
+      <title>v0.20.0: Firecrawl-compatible REST API</title>
+      <link>https://flarecrawl.dev/blog/v0.20.0</link>
+      <description>Flarecrawl now exposes a REST API compatible with the Firecrawl client SDK.</description>
+      <pubDate>Mon, 03 Mar 2025 09:00:00 +0000</pubDate>
+      <guid isPermaLink="true">https://flarecrawl.dev/blog/v0.20.0</guid>
+      <dc:creator>0xDarkMatter</dc:creator>
+    </item>
+  </channel>
+</rss>

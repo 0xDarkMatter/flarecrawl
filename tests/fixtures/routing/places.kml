@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>World Landmarks</name>
+    <description>Sample KML fixture for flarecrawl routing tests</description>
+    <Style id="landmark-icon">
+      <IconStyle>
+        <scale>1.2</scale>
+        <Icon><href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href></Icon>
+      </IconStyle>
+    </Style>
+    <Placemark>
+      <name>Eiffel Tower</name>
+      <description>Iconic iron lattice tower on the Champ de Mars, Paris</description>
+      <styleUrl>#landmark-icon</styleUrl>
+      <Point><coordinates>2.2945,48.8584,324</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Sydney Opera House</name>
+      <description>Multi-venue performing arts centre on Bennelong Point, Sydney</description>
+      <styleUrl>#landmark-icon</styleUrl>
+      <Point><coordinates>151.2153,-33.8568,5</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Statue of Liberty</name>
+      <description>Colossal neoclassical sculpture on Liberty Island, New York Harbour</description>
+      <styleUrl>#landmark-icon</styleUrl>
+      <Point><coordinates>-74.0445,40.6892,46</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Machu Picchu</name>
+      <description>15th-century Inca citadel in the Eastern Cordillera of southern Peru</description>
+      <styleUrl>#landmark-icon</styleUrl>
+      <Point><coordinates>-72.5450,-13.1631,2430</coordinates></Point>
+    </Placemark>
+  </Document>
+</kml>

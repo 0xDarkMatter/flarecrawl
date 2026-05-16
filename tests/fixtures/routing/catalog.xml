@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <book id="bk001">
+    <title>Web Scraping with Python</title>
+    <author>Ryan Mitchell</author>
+    <genre>Technology</genre>
+    <price>29.99</price>
+    <publish_date>2018-03-23</publish_date>
+    <description>An in-depth guide to scraping the modern web.</description>
+  </book>
+  <book id="bk002">
+    <title>Clean Code</title>
+    <author>Robert C. Martin</author>
+    <genre>Technology</genre>
+    <price>34.99</price>
+    <publish_date>2008-08-01</publish_date>
+    <description>A handbook of agile software craftsmanship.</description>
+  </book>
+  <book id="bk003">
+    <title>The Pragmatic Programmer</title>
+    <author>David Thomas</author>
+    <genre>Technology</genre>
+    <price>39.99</price>
+    <publish_date>2019-09-13</publish_date>
+    <description>Your journey to mastery, 20th anniversary edition.</description>
+  </book>
+</catalog>

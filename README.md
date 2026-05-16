@@ -14,7 +14,8 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v0.26.0** | 2026-05-09 | **Headless evasion.** `humanize` module — synthesised mouse moves + scrolls + idle gaps, auto-on for headless `--browser local`. 8 additional `stealth_init.js` evasions (chrome.runtime.id, AudioContext noise, voices, Battery, WebGL2, MediaDevices, outerW/H). `SyncCDPPage.send()` for raw CDP from sync code. Idempotent CDP close. 730 tests |
+| **v0.27.0** | 2026-05-16 | **Fetch routing + content-type coverage.** `fetch` no longer tracebacks on non-HTML types — new raw-text branch returns body verbatim without CF auth (fixes Google Maps KML, `text/xml`, `text/csv`, etc.). `--only-main-content` link-density gate (≥60%) prevents nav-soup from leaking into output. RFC 6839 `+json`/`+xml` suffix types (RSS, Atom, JSON-LD, GeoJSON, KML/vnd, SOAP) now route to text/JSON branch instead of binary download. E2E test corpus with local HTTP server. 1404 tests |
+| **v0.26.0** | 2026-05-09 | **Headless evasion.** `humanize` module — synthesised mouse moves + scrolls + idle gaps, auto-on for headless `--browser local`. 8 additional `stealth_init.js` evasions (chrome.runtime.id, AudioContext noise, voices, Battery, WebGL2, MediaDevices, outerW/H). `SyncCDPPage.send()` for raw CDP from sync code. Idempotent CDP close. 1404 tests |
 | **v0.25.1** | 2026-05-09 | **Recipe + organize-by polish.** `for_each` and `capture_download` recipe steps. `--then-fetch-organize-by extension/content-type/thumbnail` for sub-categorised downloads. Windows cp1252 console fallback in `_output_text` |
 | **v0.25.0** | 2026-05-09 | **Productivity.** YAML interaction recipes (`flarecrawl recipe ...`) with resume support. `--yt-dlp` passthrough on `videos` command resolves provider-specific embeds (DVIDS, Vimeo with auth, Twitch, etc.). `--auto-data` surfaces structured-data XHRs (CSV/JSON/XLSX) in `meta.data_sources` |
 | **v0.24.0** | 2026-05-09 | **Capabilities for hard targets.** `--capture-pattern`/`--capture-dir` save XHR response bodies via `Network.getResponseBody`. Vendored `stealth_init.js` auto-applied before navigation. `--browser local --headed` Playwright Chromium backend bypasses CF stub. `--then-fetch-from`/`--then-fetch-column` for cookie-handed-off mass downloads via curl_cffi |
@@ -195,7 +196,7 @@ flarecrawl scrape https://example.com --json | jq '.data.content'
 | `flarecrawl crawl URL --wait --limit N` | Crawl site with async job system |
 | `flarecrawl download URL --limit N` | Save site pages to disk as markdown/html |
 | `flarecrawl extract PROMPT --urls URL` | AI-powered structured data extraction |
-| `flarecrawl fetch URL -o file` | Content-type aware download (binary, JSON, HTML) |
+| `flarecrawl fetch URL -o file` | Content-type aware download — 4-branch routing: binary, JSON, raw text (XML/CSV/RSS/KML/YAML/…), HTML via CF |
 | `flarecrawl openapi URL --probe` | Discover OpenAPI/Swagger specs on a site |
 | `flarecrawl screenshot URL -o page.png` | Capture full or partial page screenshots |
 | `flarecrawl pdf URL -o page.pdf` | Render page as PDF |
@@ -864,7 +865,7 @@ Flarecrawl follows the same command structure as the `firecrawl` CLI:
 - **`schema` command** — bonus: extract LD+JSON, OpenGraph, Twitter Cards
 - **PDF command** — bonus: Cloudflare supports PDF rendering, Firecrawl doesn't
 - **Output directory** — `.flarecrawl/` instead of `.firecrawl/`
-- **`--only-main-content`** — client-side via BeautifulSoup (Firecrawl uses server-side extraction)
+- **`--only-main-content`** — client-side via selectolax with link-density gating (Firecrawl uses server-side extraction). Link-density ≥ 60% on a `<main>`/`<article>` candidate causes fallthrough to the next selector, preventing nav-soup from leaking into output.
 
 ## Output Format
 
@@ -1166,7 +1167,7 @@ flarecrawl/
 │   ├── cookies.py              # Cookie loading (Puppeteer/Netscape/Chrome), conversion, validation
 │   ├── design.py               # Design system extraction (tokens, coherence scoring, formatting)
 │   ├── extract.py              # HTML extraction (main content, images, schema, tags)
-│   ├── fetch.py                # Content-type aware download (binary, JSON, HTML)
+│   ├── fetch.py                # Content-type aware download — 4-branch routing: binary / JSON / raw text / HTML→CF
 │   ├── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
 │   ├── openapi.py              # OpenAPI/Swagger spec discovery and validation
 │   ├── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)

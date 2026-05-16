@@ -1,0 +1,30 @@
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flarecrawl",
+  "version": "0.26.0",
+  "description": "Cloudflare Browser Rendering CLI with Firecrawl-compatible API",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": ["Linux", "macOS", "Windows"],
+  "softwareVersion": "0.26.0",
+  "datePublished": "2025-05-16",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "0xDarkMatter",
+    "email": "mack@evolution7.com.au",
+    "url": "https://github.com/0xDarkMatter"
+  },
+  "featureList": [
+    "Single-URL scraping via Cloudflare Browser Rendering",
+    "Multi-URL crawling with configurable depth",
+    "Stealth TLS fingerprinting and JA3/JA4 rotation",
+    "Human-like mouse movement via CDP",
+    "Firecrawl-compatible REST API"
+  ]
+}

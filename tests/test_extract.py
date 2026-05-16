@@ -4,6 +4,7 @@ import pytest
 pytest.importorskip("selectolax", reason="optional dep")
 pytest.importorskip("aiosqlite", reason="optional dep")
 from flarecrawl.extract import (
+    _link_density,
     clean_content,
     clean_html,
     extract_images,
@@ -56,6 +57,63 @@ class TestExtractMainContent:
         assert "Content" in result
         assert "alert" not in result
         assert ".x{}" not in result
+
+    def test_nav_heavy_main_falls_through_to_body(self):
+        # Repro for Praxis bug: <main> wraps whole page (Next.js / React pattern),
+        # so its content is >60% links. Gate should skip it and fall to body.
+        many_links = "".join(
+            f'<a href="/page{i}">Nav item {i} text</a>' for i in range(30)
+        )
+        article = "<p>This is the real article body with enough prose to be identified as content.</p>"
+        html = (
+            f"<html><body>"
+            f"<main>{many_links}{article}</main>"
+            f"<article>{article}</article>"
+            f"</body></html>"
+        )
+        result = extract_main_content(html)
+        # article selector (lower density) should win over link-heavy main
+        assert "real article body" in result
+
+    def test_low_density_main_is_accepted(self):
+        # When <main> has low link density, it should still be returned normally.
+        html = (
+            "<html><body>"
+            "<nav><a href='/a'>A</a><a href='/b'>B</a></nav>"
+            "<main>"
+            "<h1>Article Title</h1>"
+            "<p>First paragraph with substantial prose content that is not a link.</p>"
+            "<p>Second paragraph continuing the article body text.</p>"
+            "<a href='/related'>Related article</a>"
+            "</main>"
+            "</body></html>"
+        )
+        result = extract_main_content(html)
+        assert "Article Title" in result
+        assert "substantial prose" in result
+
+    def test_link_density_helper_empty_node(self):
+        from selectolax.parser import HTMLParser
+        tree = HTMLParser("<div></div>")
+        node = tree.css_first("div")
+        assert node is not None
+        assert _link_density(node) == 0.0
+
+    def test_link_density_helper_all_links(self):
+        from selectolax.parser import HTMLParser
+        tree = HTMLParser("<div><a href='/'>link text here</a></div>")
+        node = tree.css_first("div")
+        assert node is not None
+        assert _link_density(node) == 1.0
+
+    def test_link_density_helper_mixed(self):
+        from selectolax.parser import HTMLParser
+        # 4 chars of link text ("link"), 8 chars total ("textlink") → 0.5
+        tree = HTMLParser("<div>text<a href='/'>link</a></div>")
+        node = tree.css_first("div")
+        assert node is not None
+        density = _link_density(node)
+        assert 0.4 < density < 0.6
 
 
 # ------------------------------------------------------------------

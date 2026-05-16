@@ -1,0 +1,39 @@
+{
+  "api": "flarecrawl",
+  "version": "0.26.0",
+  "base_url": "http://localhost:3002",
+  "endpoints": [
+    {
+      "path": "/v1/scrape",
+      "method": "POST",
+      "description": "Scrape a single URL and return markdown, HTML, or structured data",
+      "auth": "bearer"
+    },
+    {
+      "path": "/v1/crawl",
+      "method": "POST",
+      "description": "Crawl a website up to a specified depth",
+      "auth": "bearer"
+    },
+    {
+      "path": "/v1/crawl/{job_id}",
+      "method": "GET",
+      "description": "Poll crawl job status",
+      "auth": "bearer"
+    },
+    {
+      "path": "/v1/search",
+      "method": "POST",
+      "description": "Search and scrape results",
+      "auth": "bearer"
+    }
+  ],
+  "ratelimits": {
+    "requests_per_minute": 60,
+    "burst": 10,
+    "headers": {
+      "remaining": "X-RateLimit-Remaining",
+      "reset": "X-RateLimit-Reset"
+    }
+  }
+}
