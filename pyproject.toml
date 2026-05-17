@@ -4,8 +4,33 @@ version = "0.29.0"
 description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "0xDarkMatter" }
+]
+keywords = [
+    "web-scraping", "crawler", "cloudflare", "browser-rendering",
+    "firecrawl", "cdp", "anti-bot", "markdown", "screenshot",
+    "headless-browser", "playwright", "curl-cffi", "data-extraction",
+]
+# Per PEP 639 the SPDX `license` expression replaces the deprecated
+# `License ::` classifier — do not add one back (twine/hatchling reject
+# specifying both).
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Typing :: Typed",
 ]
 dependencies = [
     "typer>=0.9.0",
@@ -43,6 +68,12 @@ perf = [
 
 [project.scripts]
 flarecrawl = "flarecrawl.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/0xDarkMatter/flarecrawl"
+Repository = "https://github.com/0xDarkMatter/flarecrawl"
+Changelog = "https://github.com/0xDarkMatter/flarecrawl/blob/main/CHANGELOG.md"
+Issues = "https://github.com/0xDarkMatter/flarecrawl/issues"
 
 [build-system]
 requires = ["hatchling"]
