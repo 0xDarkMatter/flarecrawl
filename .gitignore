@@ -32,6 +32,7 @@ Thumbs.db
 htmlcov/
 
 # Locks
-uv.lock
+# uv.lock is intentionally committed — reproducible, hash-verified builds
+# are a supply-chain control for the PyPI publish pipeline.
 .env
 tests/bench-results*.json
