@@ -12,12 +12,37 @@ misses.
 
 **Run yourself:** `uv run python tests/compare_w3techs.py`
 
+## How to read the gaps
+
+w3techs-only entries fall into five buckets — only one is a
+real flarecrawl miss:
+
+1. **w3techs is stale or wrong about this URL.** Verified empirically
+   on ghost.org: w3techs reports Apache + Cloudflare + Nginx + Ruby +
+   Vercel, but the live `Server:` header is literally `Netlify` with
+   no other infrastructure signals present. w3techs caches snapshots
+   and aggregates across subdomains.
+2. **w3techs aggregates across subdomains.** Discourse + Mintlify on
+   ghost.org are on `community.ghost.org` / `docs.ghost.org`. We
+   scrape only the URL we're given.
+3. **We filter by design.** Google Ads/Analytics/Tag Manager,
+   Twitter/X, language detection, and OS probes (Ubuntu, Linux) are
+   dropped by the documented `--exclude-categories` cleaning recipe.
+   Drop those flags to surface them.
+4. **Naming differences.** `CDNJS` vs `cdnjs`, `Apache` vs
+   `Apache HTTP Server`. The script normalises the obvious ones.
+5. **Real upstream fingerprint gaps.** We've patched the worst:
+   GSAP (upstream only matched the dead `TweenMax.min.js` 2.x file)
+   and Amazon CloudFront (upstream entry had zero detection
+   patterns — w3techs detects it via DNS CNAME which we can't see
+   from HTTP). See `wappalyzer_data/custom_fingerprints.json`.
+
 ## Headline numbers
 
 - Sites compared: **24** / 25
-- Mean overlap (both agree): **1.5** techs/site
-- Mean flarecrawl-only: 3.8 techs/site
-- Mean w3techs-only:    7.0 techs/site
+- Mean overlap (both agree): **1.6** techs/site
+- Mean flarecrawl-only: 3.7 techs/site
+- Mean w3techs-only:    6.9 techs/site
 
 ## Summary table
 
@@ -37,11 +62,11 @@ misses.
 | basecamp.com | 1 | 1 | 1 |
 | laravel.com | 1 | 8 | 11 |
 | www.djangoproject.com | 0 | 3 | 0 |
-| ghost.org | 2 | 4 | 24 |
+| ghost.org | 2 | 4 | 23 |
 | astro.build | 2 | 3 | 3 |
-| webflow.com | 5 | 7 | 20 |
-| discord.com | 3 | 3 | 17 |
-| slack.com | 2 | 3 | 6 |
+| webflow.com | 8 | 6 | 17 |
+| discord.com | 3 | 5 | 16 |
+| slack.com | 1 | 0 | 7 |
 | www.opentable.com | 0 | 3 | 0 |
 | sevenrooms.com | 3 | 3 | 16 |
 | www.squarespace.com | 0 | 3 | 0 |
@@ -105,7 +130,7 @@ misses.
 
 **flarecrawl only** (4): Cxense, Piano, Varnish, dc.js
 
-**w3techs only** (21): Ahrefs Web Analytics, Broadcom, CDNJS, Chartbeat, Cloudflare, CrazyEgg, Envoy, Fastly, Full Circle Studies, Google Ads, Google Hosted Libraries, Next.js, Nielsen, Node.js, Open Graph, Ruby, Salesforce, Shopify, Zendesk, jQuery, jQuery CDN
+**w3techs only** (21): Ahrefs Web Analytics, Broadcom, Chartbeat, Cloudflare, CrazyEgg, Envoy, Fastly, Full Circle Studies, Google Ads, Google Hosted Libraries, Next.js, Nielsen, Node.js, Open Graph, Ruby, Salesforce, Shopify, Zendesk, cdnjs, jQuery, jsDelivr
 
 ### nytimes.com
   (error: subprocess-timeout)
@@ -161,7 +186,7 @@ misses.
 
 **flarecrawl only** (4): Algolia, Alpine.js, FirstPromoter, Tailwind CSS
 
-**w3techs only** (24): Ahrefs Web Analytics, Apache HTTP Server, Bengali, CDNJS, Cloudflare, Discourse, Ghost, Google Ads, Google Analytics, Google Tag Manager, Mintlify, Next.js, Nginx, Node.js, Open Graph, Persian, Ruby, Twitter/X, Ubuntu, Vercel, jQuery, jQuery CDN, jsDelivr, static files
+**w3techs only** (23): Ahrefs Web Analytics, Apache HTTP Server, Bengali, Cloudflare, Discourse, Ghost, Google Ads, Google Analytics, Google Tag Manager, Mintlify, Next.js, Nginx, Node.js, Open Graph, Persian, Ruby, Twitter/X, Ubuntu, Vercel, cdnjs, jQuery, jsDelivr, static files
 
 ### astro.build
 
@@ -173,27 +198,26 @@ misses.
 
 ### webflow.com
 
-**Both agree** (5): Cloudflare, Google Hosted Libraries, Webflow, jQuery, jsDelivr
+**Both agree** (8): Amazon CloudFront, Cloudflare, GSAP, Google Hosted Libraries, Webflow, cdnjs, jQuery, jsDelivr
 
-**flarecrawl only** (7): Amazon S3, Amazon Web Services, Embedly, Google Font API, Swiper, Three.js, cdnjs
+**flarecrawl only** (6): Amazon S3, Amazon Web Services, Embedly, Google Font API, Swiper, Three.js
 
-**w3techs only** (20): AVIF, Amazon CloudFront, Atlassian, Atlassian Statuspage, CDNJS, Dreamdata, Envoy, GSAP, Google Ads, Google Analytics, Google Tag Manager, Microsoft UET, Next.js, Nginx, Node.js, Open Graph, Ruby, Starfield, Twitter/X, Zendesk
+**w3techs only** (17): AVIF, Atlassian, Atlassian Statuspage, Dreamdata, Envoy, Google Ads, Google Analytics, Google Tag Manager, Microsoft UET, Next.js, Nginx, Node.js, Open Graph, Ruby, Starfield, Twitter/X, Zendesk
 
 ### discord.com
 
 **Both agree** (3): Cloudflare, Google Hosted Libraries, jQuery
 
-**flarecrawl only** (3): Embedly, Google Font API, OneTrust
+**flarecrawl only** (5): Amazon CloudFront, Amazon Web Services, Embedly, Google Font API, OneTrust
 
-**w3techs only** (17): CDNJS, Cloudflare Web Analytics, Envoy, Google Ads, Google Analytics, Google Tag Manager, Handlebars, Mintlify, Next.js, Node.js, Open Graph, Ruby, Vercel, Webflow, Zendesk, jQuery CDN, jsDelivr
+**w3techs only** (16): Cloudflare Web Analytics, Envoy, Google Ads, Google Analytics, Google Tag Manager, Handlebars, Mintlify, Next.js, Node.js, Open Graph, Ruby, Vercel, Webflow, Zendesk, cdnjs, jsDelivr
 
 ### slack.com
 
-**Both agree** (2): Apache HTTP Server, Envoy
+**Both agree** (1): Envoy
 
-**flarecrawl only** (3): Clearbit Reveal, OneTrust, Swiper
 
-**w3techs only** (6): Bootstrap, Google Analytics, Google Tag Manager, Open Graph, QUIC, Twitter/X
+**w3techs only** (7): Apache HTTP Server, Bootstrap, Google Analytics, Google Tag Manager, Open Graph, QUIC, Twitter/X
 
 ### www.opentable.com
 

@@ -20,6 +20,11 @@
     "Contentful": "Overbroad - fires on sites referencing the word 'contentful' or shipping similar SDK-style class names.",
     "ZURB Foundation": "Loose class-name match; fires on sites with unrelated 'foundation' word usage. Real Foundation usage has dropped sharply post-2020."
   },
+  "_added_meta": {
+    "description": "Overlay patches for upstream fingerprints that are outdated or missing. Each entry below extends or replaces a flawed upstream pattern.",
+    "GSAP": "Upstream pattern only matches 'TweenMax.min.js' (GSAP 2.x). Modern GSAP 3.x ships as 'gsap.min.js' + plugin files (ScrollTrigger, SplitText, ...). The added patterns catch the 3.x shape.",
+    "Amazon CloudFront": "Upstream entry exists but has zero detection patterns (scriptSrc=None, script=None, url=None). CloudFront is normally inferred from DNS CNAMEs which we can't see. Add a scriptSrc match on '*.cloudfront.net' which catches sites loading assets through CloudFront."
+  },
   "Tailwind CSS": {
     "_overlay": true,
     "html": [
@@ -27,6 +32,26 @@
       "class=\"[^\"]*\\b(?:text-(?:sm|xs|lg|xl|2xl|3xl)|font-(?:bold|semibold|medium))\\b[^\"]*\\b(?:text-(?:gray|slate|zinc|neutral)-\\d{2,3}|bg-(?:white|black|gray|slate)-?\\d*)\\b",
       "class=\"[^\"]*\\bmax-w-(?:sm|md|lg|xl|2xl|7xl|screen-xl)\\b",
       "class=\"[^\"]*\\b(?:sm:|md:|lg:|xl:|2xl:)(?:flex|grid|hidden|block)\\b"
+    ]
+  },
+  "GSAP": {
+    "_overlay": true,
+    "scriptSrc": [
+      "/gsap[/-](\\d+\\.\\d+(?:\\.\\d+)?)/\\;version:\\1",
+      "/gsap\\.min\\.js",
+      "/gsap\\.js",
+      "/ScrollTrigger\\.min\\.js",
+      "/SplitText\\.min\\.js"
+    ]
+  },
+  "Amazon CloudFront": {
+    "_overlay": true,
+    "scriptSrc": [
+      "\\.cloudfront\\.net/"
+    ],
+    "html": [
+      "<link[^>]+href=[\"'][^\"']*\\.cloudfront\\.net/",
+      "<img[^>]+src=[\"'][^\"']*\\.cloudfront\\.net/"
     ]
   },
   "Craft CMS": {

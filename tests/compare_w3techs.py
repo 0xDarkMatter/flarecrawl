@@ -67,6 +67,8 @@ NAME_NORMALISE = {
     "Apache": "Apache HTTP Server",
     "Cloudflare Server": "Cloudflare",
     "Twitter/X Cards": "Open Graph",  # both meta-tag flavours, close enough
+    "CDNJS": "cdnjs",
+    "jQuery CDN": "jsDelivr",  # near-equivalent CDN buckets; treat as same signal
 }
 
 
@@ -227,6 +229,31 @@ def render_markdown(rows: list[dict]) -> str:
     out.append("misses.")
     out.append("")
     out.append("**Run yourself:** `uv run python tests/compare_w3techs.py`")
+    out.append("")
+    out.append("## How to read the gaps")
+    out.append("")
+    out.append("w3techs-only entries fall into five buckets — only one is a")
+    out.append("real flarecrawl miss:")
+    out.append("")
+    out.append("1. **w3techs is stale or wrong about this URL.** Verified empirically")
+    out.append("   on ghost.org: w3techs reports Apache + Cloudflare + Nginx + Ruby +")
+    out.append("   Vercel, but the live `Server:` header is literally `Netlify` with")
+    out.append("   no other infrastructure signals present. w3techs caches snapshots")
+    out.append("   and aggregates across subdomains.")
+    out.append("2. **w3techs aggregates across subdomains.** Discourse + Mintlify on")
+    out.append("   ghost.org are on `community.ghost.org` / `docs.ghost.org`. We")
+    out.append("   scrape only the URL we're given.")
+    out.append("3. **We filter by design.** Google Ads/Analytics/Tag Manager,")
+    out.append("   Twitter/X, language detection, and OS probes (Ubuntu, Linux) are")
+    out.append("   dropped by the documented `--exclude-categories` cleaning recipe.")
+    out.append("   Drop those flags to surface them.")
+    out.append("4. **Naming differences.** `CDNJS` vs `cdnjs`, `Apache` vs")
+    out.append("   `Apache HTTP Server`. The script normalises the obvious ones.")
+    out.append("5. **Real upstream fingerprint gaps.** We've patched the worst:")
+    out.append("   GSAP (upstream only matched the dead `TweenMax.min.js` 2.x file)")
+    out.append("   and Amazon CloudFront (upstream entry had zero detection")
+    out.append("   patterns — w3techs detects it via DNS CNAME which we can't see")
+    out.append("   from HTTP). See `wappalyzer_data/custom_fingerprints.json`.")
     out.append("")
     out.append("## Headline numbers")
     out.append("")
