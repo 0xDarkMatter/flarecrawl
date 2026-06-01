@@ -33,15 +33,57 @@ class TestHelp:
         assert result.exit_code == 0
         assert f"flarecrawl {__version__}" in result.output
 
-    def test_crawl_has_rate_limit_flag(self):
+    def test_crawl_does_not_advertise_unsupported_flags(self):
+        # CF /crawl rejects per-job user-agent and has no server-side rate
+        # limit; the flags were broken/no-op and were removed.
         result = runner.invoke(app, ["crawl", "--help"])
         assert result.exit_code == 0
-        assert "--rate-limit" in result.output
+        assert "--rate-limit" not in result.output
+        assert "--user-agent" not in result.output
 
-    def test_download_has_rate_limit_flag(self):
+    def test_download_does_not_advertise_unsupported_flags(self):
+        # download wraps crawl_start, which calls CF /crawl. Same constraints
+        # apply: per-job user-agent rejected, no server-side rate limit.
         result = runner.invoke(app, ["download", "--help"])
         assert result.exit_code == 0
-        assert "--rate-limit" in result.output
+        assert "--rate-limit" not in result.output
+        assert "--user-agent" not in result.output
+
+
+class TestCrawlCommandKwargTranslation:
+    """Regression: pmail #203 — CLI must not pass CF-rejected kwargs through."""
+
+    def test_cli_crawl_translates_max_depth_and_format(self, mock_credentials):
+        """`flarecrawl crawl ... --max-depth N --format markdown` must build
+        a body with depth=N and formats=['markdown'], no aliases leaking."""
+        from unittest.mock import patch
+
+        captured = {}
+
+        def fake_crawl_start(self, url, **kwargs):
+            captured["url"] = url
+            captured["kwargs"] = kwargs
+            # Mirror _build_body to confirm shape
+            from flarecrawl.client import Client
+            captured["body"] = Client._build_body(url=url, **kwargs)
+            return "job-fake-123"
+
+        with patch("flarecrawl.client.Client.crawl_start", new=fake_crawl_start):
+            result = runner.invoke(app, [
+                "crawl", "https://example.com",
+                "--max-depth", "4",
+                "--format", "markdown",
+                "--limit", "50",
+            ])
+
+        assert result.exit_code == 0, result.output
+        body = captured["body"]
+        assert body["depth"] == 4
+        assert body["formats"] == ["markdown"]
+        assert body["limit"] == 50
+        # None of the CF-rejected aliases should be in the outgoing body
+        for k in ("max_depth", "format", "userAgent", "user_agent", "rate_limit"):
+            assert k not in body, f"{k} leaked into CLI-built body"
 
     def test_status_flag(self):
         result = runner.invoke(app, ["--status"])
@@ -588,7 +630,9 @@ class TestUserAgent:
         assert "--user-agent" in result.output
 
     def test_user_agent_in_all_commands(self):
-        commands = ["scrape", "crawl", "map", "download", "extract",
+        # 'crawl' and 'download' are excluded: both wrap CF /crawl, which
+        # rejects a per-job userAgent. Flag removed rather than left broken.
+        commands = ["scrape", "map", "extract",
                     "screenshot", "pdf", "favicon", "schema"]
         for cmd in commands:
             result = runner.invoke(app, [cmd, "--help"])

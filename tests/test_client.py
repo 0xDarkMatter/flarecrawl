@@ -1,5 +1,8 @@
 """Client tests for Flarecrawl."""
 
+import warnings
+from unittest.mock import patch
+
 from flarecrawl.client import Client
 
 
@@ -108,6 +111,142 @@ class TestBodyBuilder:
         body = Client._build_body(html="<h1>Hello</h1>")
         assert body == {"html": "<h1>Hello</h1>"}
         assert "url" not in body
+
+    def test_max_depth_alias(self):
+        """Python-API callers can pass max_depth; CF expects 'depth'."""
+        body = Client._build_body(url="https://example.com", max_depth=4)
+        assert body["depth"] == 4
+        assert "max_depth" not in body
+
+    def test_format_singular_coerces_to_formats_list(self):
+        """Python-API callers can pass format='markdown'; CF expects formats=['markdown']."""
+        body = Client._build_body(url="https://example.com", format="markdown")
+        assert body["formats"] == ["markdown"]
+        assert "format" not in body
+
+    def test_depth_takes_precedence_over_max_depth(self):
+        body = Client._build_body(url="https://example.com", depth=2, max_depth=9)
+        assert body["depth"] == 2
+        assert "max_depth" not in body
+
+
+class TestCrawlStartUnsupportedKwargs:
+    """CF /crawl rejects user_agent / rate_limit; crawl_start must strip them."""
+
+    def _client(self):
+        return Client(account_id="test-id", api_token="test-token", cache_ttl=0)
+
+    def test_crawl_start_strips_user_agent_and_rate_limit(self):
+        client = self._client()
+        captured = {}
+
+        def fake_post_json(endpoint, body):
+            captured["endpoint"] = endpoint
+            captured["body"] = body
+            return {"result": "job-123"}
+
+        with patch.object(client, "_post_json", side_effect=fake_post_json):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                job_id = client.crawl_start(
+                    "https://example.com",
+                    limit=50,
+                    max_depth=4,
+                    format="markdown",
+                    user_agent="Foo/1.0",
+                    rate_limit=1.0,
+                )
+
+        assert job_id == "job-123"
+        body = captured["body"]
+        # Rejected keys must not appear in the outgoing body
+        assert "userAgent" not in body
+        assert "user_agent" not in body
+        assert "rate_limit" not in body
+        assert "rateLimit" not in body
+        # Aliases must be translated
+        assert body["depth"] == 4
+        assert body["formats"] == ["markdown"]
+        assert body["limit"] == 50
+        # And a warning was raised for each stripped key
+        messages = [str(w.message) for w in caught]
+        assert any("user_agent" in m for m in messages)
+        assert any("rate_limit" in m for m in messages)
+
+    def test_crawl_start_clean_kwargs_emits_no_warnings(self):
+        """A well-formed call must not produce spurious warnings."""
+        client = self._client()
+        with patch.object(client, "_post_json", return_value={"result": "j1"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                client.crawl_start("https://example.com", limit=10, depth=2, formats=["markdown"])
+        # Filter to UserWarning-ish only — pytest/httpx may emit unrelated
+        relevant = [w for w in caught if "user_agent" in str(w.message) or "rate_limit" in str(w.message)]
+        assert relevant == []
+
+    def test_crawl_start_explicit_none_does_not_warn(self):
+        """Passing user_agent=None / rate_limit=None should be a silent no-op."""
+        client = self._client()
+        with patch.object(client, "_post_json", return_value={"result": "j1"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                client.crawl_start("https://example.com", user_agent=None, rate_limit=None)
+        relevant = [w for w in caught if "user_agent" in str(w.message) or "rate_limit" in str(w.message)]
+        assert relevant == []
+
+    def test_crawl_start_with_kwargs_matching_roamcrawler_repro(self):
+        """The exact reproducer from pmail #203 must not produce CF-rejected keys."""
+        client = self._client()
+        captured = {}
+
+        def fake_post_json(endpoint, body):
+            captured["body"] = body
+            return {"result": "job-abc"}
+
+        with patch.object(client, "_post_json", side_effect=fake_post_json):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                client.crawl_start(
+                    "https://example.com",
+                    limit=50,
+                    max_depth=4,
+                    format="markdown",
+                    user_agent="Foo/1.0",
+                    rate_limit=1.0,
+                )
+
+        body = captured["body"]
+        # The keys CF rejected in the original 400 must all be absent
+        for rejected in ("userAgent", "user_agent", "rate_limit", "rateLimit", "max_depth", "format"):
+            assert rejected not in body, f"{rejected} leaked into body"
+        # And the body must contain only CF-recognised keys
+        allowed = {"url", "limit", "depth", "formats", "options", "source", "render",
+                   "maxAge", "modifiedSince"}
+        leaked = set(body.keys()) - allowed
+        assert leaked == set(), f"unexpected keys in body: {leaked}"
+
+
+class TestBuildBodyFormatAliasEdgeCases:
+    """Edge cases around format/formats kwarg coercion."""
+
+    def test_format_as_list_passes_through(self):
+        body = Client._build_body(url="https://example.com", format=["markdown", "html"])
+        assert body["formats"] == ["markdown", "html"]
+
+    def test_formats_takes_precedence_over_format(self):
+        body = Client._build_body(
+            url="https://example.com",
+            formats=["markdown"],
+            format="html",
+        )
+        assert body["formats"] == ["markdown"]
+        assert "format" not in body
+
+    def test_format_alone_does_not_leak_to_passthrough(self):
+        """The pass-through loop must not see the alias key."""
+        body = Client._build_body(url="https://example.com", format="html")
+        assert "format" not in body
+        assert body["formats"] == ["html"]
 
 
 class TestRejectResourcesDefaults:

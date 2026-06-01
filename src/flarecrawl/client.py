@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import warnings
 from collections.abc import Iterator
 
 import httpx
@@ -350,10 +351,20 @@ class Client:
         # Crawl-specific options
         if "limit" in kwargs:
             body["limit"] = kwargs.pop("limit")
+        # 'depth' wins; 'max_depth' is the CLI-shaped alias. Always pop both
+        # so the alias doesn't leak through the pass-through loop and trigger
+        # a CF 400.
+        max_depth_alias = kwargs.pop("max_depth", None)
         if "depth" in kwargs:
             body["depth"] = kwargs.pop("depth")
+        elif max_depth_alias is not None:
+            body["depth"] = max_depth_alias
+        # Same pattern for formats[] vs format (singular).
+        format_alias = kwargs.pop("format", None)
         if "formats" in kwargs:
             body["formats"] = kwargs.pop("formats")
+        elif format_alias is not None:
+            body["formats"] = [format_alias] if isinstance(format_alias, str) else list(format_alias)
         if "render" in kwargs:
             body["render"] = kwargs.pop("render")
         if "source" in kwargs:
@@ -513,8 +524,19 @@ class Client:
     # Crawl lifecycle
     # ------------------------------------------------------------------
 
+    # CF /crawl rejects these keys — they're valid on scrape/spider but
+    # not on the crawl endpoint. Strip with a warning so kwargs that
+    # work elsewhere don't surprise callers with a 400.
+    _CRAWL_UNSUPPORTED = ("user_agent", "rate_limit")
+
     def crawl_start(self, url: str, **kwargs) -> str:
         """Start a crawl job. Returns job ID."""
+        for key in self._CRAWL_UNSUPPORTED:
+            if kwargs.pop(key, None) is not None:
+                warnings.warn(
+                    f"crawl_start: {key!r} is not supported by Cloudflare /crawl; ignored",
+                    stacklevel=2,
+                )
         body = self._build_body(url=url, **kwargs)
         result = self._post_json("crawl", body)
         # CF returns {"success": true, "result": "job-id-string"}

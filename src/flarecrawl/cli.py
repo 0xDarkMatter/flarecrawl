@@ -3799,11 +3799,9 @@ def crawl(
     include_tags: Annotated[str | None, typer.Option("--include-tags", help="CSS selectors to keep")] = None,
     webhook: Annotated[str | None, typer.Option("--webhook", help="POST results to this URL on completion")] = None,
     webhook_headers: Annotated[list[str] | None, typer.Option("--webhook-headers", help="Headers for webhook")] = None,
-    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     deduplicate: Annotated[bool, typer.Option("--deduplicate", help="Skip duplicate content")] = False,
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
     ignore_robots: Annotated[bool, typer.Option("--ignore-robots", help="Ignore robots.txt and AI Crawl Control directives")] = False,
-    rate_limit: Annotated[float, typer.Option("--rate-limit", help="Max requests/sec per hostname (0 disables)")] = 2.0,
     session: Annotated[str | None, typer.Option("--session", help="Cookie file or @NAME for saved session")] = None,
     tech_detect: Annotated[bool, typer.Option("--tech-detect", help="Wappalyzer tech detection on each crawled record's HTML. Header- and cookie-only fingerprints don't fire here (CF crawl doesn't surface upstream response headers per record).")] = False,
 ):
@@ -3896,8 +3894,6 @@ def crawl(
             kwargs["exclude_patterns"] = [p.strip() for p in exclude_paths.split(",")]
         if auth_dict:
             kwargs.update(auth_dict)
-        if user_agent:
-            kwargs["user_agent"] = user_agent
         if _session_cookies:
             kwargs["cookies"] = _session_cookies
         if ignore_robots:
@@ -4118,10 +4114,8 @@ def download(
     only_main_content: Annotated[bool, typer.Option("--only-main-content", help="Keep main content only")] = False,
     exclude_tags: Annotated[str | None, typer.Option("--exclude-tags", help="CSS selectors to remove")] = None,
     include_tags: Annotated[str | None, typer.Option("--include-tags", help="CSS selectors to keep")] = None,
-    user_agent: Annotated[str | None, typer.Option("--user-agent", help="Custom User-Agent string")] = None,
     backup_dir: Annotated[Path | None, typer.Option("--backup-dir", help="Save raw HTML to this directory")] = None,
     agent_safe: Annotated[bool, typer.Option("--agent-safe", help="Sanitise against AI agent traps")] = False,
-    rate_limit: Annotated[float, typer.Option("--rate-limit", help="Max requests/sec per hostname (0 disables)")] = 2.0,
 ):
     """Download a site into .flarecrawl/ as files.
 
@@ -4167,8 +4161,6 @@ def download(
         kwargs["exclude_patterns"] = [p.strip() for p in exclude_paths.split(",")]
     if auth_dict:
         kwargs.update(auth_dict)
-    if user_agent:
-        kwargs["user_agent"] = user_agent
 
     try:
         job_id = client.crawl_start(url, **kwargs)
