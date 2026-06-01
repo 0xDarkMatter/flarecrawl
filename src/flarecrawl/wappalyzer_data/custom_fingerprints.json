@@ -27,7 +27,13 @@
     "Node.js": "Upstream entry has zero detection patterns AND no upstream tech implies it. Result: Node.js never fires, even when a Node-only framework (Next.js, Nuxt.js, Astro, Express) is detected. Add direct header patterns + extend Next.js / Nuxt.js / Vercel implies chains so any of those infer Node.js automatically.",
     "Next.js implies Node.js": "Upstream implies = [React, Webpack]. Next.js is a Node.js framework by definition - add Node.js to the implies list.",
     "Nuxt.js implies Node.js": "Same shape as Next.js for Vue. Already implies Vue.js upstream; add Node.js too.",
-    "Vercel implies Node.js": "Vercel's serverless runtime is Node.js. Detecting Vercel reliably implies Node.js at build/runtime."
+    "Vercel implies Node.js": "Vercel's serverless runtime is Node.js. Detecting Vercel reliably implies Node.js at build/runtime.",
+    "Loom": "Upstream entry has zero patterns. Common embed surface for marketing/sales pages. Match script src + iframe to loom.com/(share|embed)/.",
+    "DocuSign": "Upstream entry has zero patterns. Match script src on js.docusign.com / *.docusign.net plus iframe embeds.",
+    "Dropbox": "Upstream entry has zero patterns. Match scriptSrc to www.dropbox.com/static/api or *.dropboxstatic.com, and Saver/Chooser button classes.",
+    "Index Exchange": "Upstream entry has zero patterns. Match scriptSrc to indexww.com (their bid CDN).",
+    "Sitecore Experience Platform": "Upstream entry has zero patterns. Match the canonical SC_ANALYTICS_GLOBAL_COOKIE plus X-Powered-By header plus <meta generator='Sitecore'> when present.",
+    "Triple Whale": "Upstream entry has zero patterns. Match scriptSrc to triplewhale.com / triplewhale-pixel.com."
   },
   "Tailwind CSS": {
     "_overlay": true,
@@ -81,6 +87,61 @@
     "headers": {
       "X-Powered-By": "(?:^|, *)Express(?:$|,)"
     }
+  },
+  "Loom": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:cdn\\.)?loom\\.com/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*loom\\.com/(?:share|embed)/"
+    ]
+  },
+  "DocuSign": {
+    "_overlay": true,
+    "scriptSrc": [
+      "js\\.docusign\\.com/",
+      "(?:[a-z0-9-]+\\.)?docusign\\.net/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*docusign\\.(?:com|net)/"
+    ]
+  },
+  "Dropbox": {
+    "_overlay": true,
+    "scriptSrc": [
+      "www\\.dropbox\\.com/static/api/",
+      "(?:cfl\\.)?dropboxstatic\\.com/"
+    ],
+    "html": [
+      "<a[^>]+class=[\"'][^\"']*dropbox-(?:saver|chooser)",
+      "<iframe[^>]+src=[\"'][^\"']*dropbox\\.com/embed/"
+    ]
+  },
+  "Index Exchange": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:[a-z0-9-]+\\.)?indexww\\.com/"
+    ]
+  },
+  "Sitecore Experience Platform": {
+    "_overlay": true,
+    "meta": {
+      "generator": "Sitecore"
+    },
+    "headers": {
+      "X-Powered-By": "Sitecore"
+    },
+    "cookies": {
+      "SC_ANALYTICS_GLOBAL_COOKIE": ""
+    }
+  },
+  "Triple Whale": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:cdn\\.)?triplewhale\\.com/",
+      "config\\.triplewhale-pixel\\.com/"
+    ]
   },
   "Craft CMS": {
     "_overlay": true,

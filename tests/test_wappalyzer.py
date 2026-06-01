@@ -891,6 +891,38 @@ def test_custom_overlay_disabled_strips_implies(tmp_path):
     assert any("Gamma" in entry for entry in acme_implies)
 
 
+def test_patched_empty_upstream_fingerprints_fire():
+    """Six upstream Wappalyzer entries (Loom, DocuSign, Dropbox, Index
+    Exchange, Sitecore Experience Platform, Triple Whale) ship with
+    zero detection patterns. The overlay patches them with HTTP-visible
+    patterns; this test guards against regressions in those patches.
+
+    Synthetic HTML built to match each tech's overlay pattern verbatim
+    - if any of these stops firing, the upstream entry has either been
+    fixed (good - remove the overlay) or our pattern has regressed
+    (fix it). Either way, the maintainer is told.
+    """
+    cases: list[tuple[str, str]] = [
+        ("Loom",
+         '<iframe src="https://www.loom.com/embed/abc123def"></iframe>'),
+        ("DocuSign",
+         '<script src="https://js.docusign.com/api/foo.js"></script>'),
+        ("Dropbox",
+         '<a class="dropbox-chooser" href="#">share</a>'),
+        ("Index Exchange",
+         '<script src="https://js-sec.indexww.com/ht/p/foo.js"></script>'),
+        ("Sitecore Experience Platform",
+         '<meta name="generator" content="Sitecore">'),
+        ("Triple Whale",
+         '<script src="https://config.triplewhale-pixel.com/cs.js"></script>'),
+    ]
+    w = WappalyzerClient()
+    for tech_name, html in cases:
+        detections = w.analyze(html=f"<html><body>{html}</body></html>")
+        names = [d.name for d in detections]
+        assert tech_name in names, f"Patched fingerprint for {tech_name!r} did not fire"
+
+
 def test_well_known_false_positives_are_disabled():
     """The shipped overlay disables Element UI / Google Sites / etc.
     These have chronic upstream FP issues - if they sneak back in,
