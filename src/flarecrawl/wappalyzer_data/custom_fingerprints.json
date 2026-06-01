@@ -23,7 +23,11 @@
   "_added_meta": {
     "description": "Overlay patches for upstream fingerprints that are outdated or missing. Each entry below extends or replaces a flawed upstream pattern.",
     "GSAP": "Upstream pattern only matches 'TweenMax.min.js' (GSAP 2.x). Modern GSAP 3.x ships as 'gsap.min.js' + plugin files (ScrollTrigger, SplitText, ...). The added patterns catch the 3.x shape.",
-    "Amazon CloudFront": "Upstream entry exists but has zero detection patterns (scriptSrc=None, script=None, url=None). CloudFront is normally inferred from DNS CNAMEs which we can't see. Add a scriptSrc match on '*.cloudfront.net' which catches sites loading assets through CloudFront."
+    "Amazon CloudFront": "Upstream entry exists but has zero detection patterns (scriptSrc=None, script=None, url=None). CloudFront is normally inferred from DNS CNAMEs which we can't see. Add a scriptSrc match on '*.cloudfront.net' which catches sites loading assets through CloudFront.",
+    "Node.js": "Upstream entry has zero detection patterns AND no upstream tech implies it. Result: Node.js never fires, even when a Node-only framework (Next.js, Nuxt.js, Astro, Express) is detected. Add direct header patterns + extend Next.js / Nuxt.js / Vercel implies chains so any of those infer Node.js automatically.",
+    "Next.js implies Node.js": "Upstream implies = [React, Webpack]. Next.js is a Node.js framework by definition - add Node.js to the implies list.",
+    "Nuxt.js implies Node.js": "Same shape as Next.js for Vue. Already implies Vue.js upstream; add Node.js too.",
+    "Vercel implies Node.js": "Vercel's serverless runtime is Node.js. Detecting Vercel reliably implies Node.js at build/runtime."
   },
   "Tailwind CSS": {
     "_overlay": true,
@@ -53,6 +57,30 @@
       "<link[^>]+href=[\"'][^\"']*\\.cloudfront\\.net/",
       "<img[^>]+src=[\"'][^\"']*\\.cloudfront\\.net/"
     ]
+  },
+  "Node.js": {
+    "_overlay": true,
+    "headers": {
+      "X-Powered-By": "(?:^|, *)(?:Next\\.js|Nuxt|Express|Koa|Hapi|Fastify)(?:$|,)"
+    }
+  },
+  "Next.js": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Nuxt.js": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Vercel": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Express": {
+    "_overlay": true,
+    "headers": {
+      "X-Powered-By": "(?:^|, *)Express(?:$|,)"
+    }
   },
   "Craft CMS": {
     "_overlay": true,

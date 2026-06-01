@@ -40,9 +40,9 @@ real flarecrawl miss:
 ## Headline numbers
 
 - Sites compared: **24** / 25
-- Mean overlap (both agree): **1.6** techs/site
-- Mean flarecrawl-only: 3.7 techs/site
-- Mean w3techs-only:    6.9 techs/site
+- Mean overlap (both agree): **1.7** techs/site
+- Mean flarecrawl-only: 3.9 techs/site
+- Mean w3techs-only:    6.8 techs/site
 
 ## Summary table
 
@@ -50,7 +50,7 @@ real flarecrawl miss:
 |---|---:|---:|---:|
 | drupal.org | 3 | 1 | 6 |
 | wordpress.org | 3 | 5 | 15 |
-| vercel.com | 2 | 5 | 7 |
+| vercel.com | 3 | 5 | 6 |
 | github.com | 1 | 4 | 6 |
 | shopify.com | 2 | 1 | 4 |
 | stripe.com | 1 | 2 | 5 |
@@ -58,7 +58,7 @@ real flarecrawl miss:
 | nytimes.com | (error: subprocess-timeout) | | |
 | reddit.com | 0 | 3 | 5 |
 | news.ycombinator.com | 0 | 1 | 0 |
-| about.gitlab.com | 0 | 8 | 0 |
+| about.gitlab.com | 0 | 9 | 0 |
 | basecamp.com | 1 | 1 | 1 |
 | laravel.com | 1 | 8 | 11 |
 | www.djangoproject.com | 0 | 3 | 0 |
@@ -66,9 +66,9 @@ real flarecrawl miss:
 | astro.build | 2 | 3 | 3 |
 | webflow.com | 8 | 6 | 17 |
 | discord.com | 3 | 5 | 16 |
-| slack.com | 1 | 0 | 7 |
+| slack.com | 2 | 5 | 6 |
 | www.opentable.com | 0 | 3 | 0 |
-| sevenrooms.com | 3 | 3 | 16 |
+| sevenrooms.com | 4 | 3 | 15 |
 | www.squarespace.com | 0 | 3 | 0 |
 | airbnb.com | 2 | 4 | 2 |
 | www.cloudflare.com | 0 | 7 | 0 |
@@ -94,11 +94,11 @@ real flarecrawl miss:
 
 ### vercel.com
 
-**Both agree** (2): Next.js, Vercel
+**Both agree** (3): Next.js, Node.js, Vercel
 
 **flarecrawl only** (5): Amazon S3, Amazon Web Services, Linkedin Insight Tag, React, Tailwind CSS
 
-**w3techs only** (7): Discourse, Mintlify, Node.js, Open Graph, Payload, Ruby, Vue.js
+**w3techs only** (6): Discourse, Mintlify, Open Graph, Payload, Ruby, Vue.js
 
 ### github.com
 
@@ -154,7 +154,7 @@ real flarecrawl miss:
 
 **Both agree:** *(no overlap)*
 
-**flarecrawl only** (8): Cloudflare, GitLab, Google Cloud, Nuxt.js, OneTrust, Ruby, Ruby on Rails, Vue.js
+**flarecrawl only** (9): Cloudflare, GitLab, Google Cloud, Node.js, Nuxt.js, OneTrust, Ruby, Ruby on Rails, Vue.js
 
 
 ### basecamp.com
@@ -214,10 +214,11 @@ real flarecrawl miss:
 
 ### slack.com
 
-**Both agree** (1): Envoy
+**Both agree** (2): Apache HTTP Server, Envoy
 
+**flarecrawl only** (5): Amazon CloudFront, Amazon Web Services, Clearbit Reveal, OneTrust, Swiper
 
-**w3techs only** (7): Apache HTTP Server, Bootstrap, Google Analytics, Google Tag Manager, Open Graph, QUIC, Twitter/X
+**w3techs only** (6): Bootstrap, Google Analytics, Google Tag Manager, Open Graph, QUIC, Twitter/X
 
 ### www.opentable.com
 
@@ -228,11 +229,11 @@ real flarecrawl miss:
 
 ### sevenrooms.com
 
-**Both agree** (3): Next.js, React, Vercel
+**Both agree** (4): Next.js, Node.js, React, Vercel
 
 **flarecrawl only** (3): Builder.io, PHP, Swiper
 
-**w3techs only** (16): Cloudflare, Google, Google Ads, Google Analytics, Google Servers, Google Tag Manager, HubSpot, Index Exchange, LinkedIn Insight Tag, Node.js, Open Graph, Pendo, Visual Website Optimizer, XHTML Strict, jQuery, jsDelivr
+**w3techs only** (15): Cloudflare, Google, Google Ads, Google Analytics, Google Servers, Google Tag Manager, HubSpot, Index Exchange, LinkedIn Insight Tag, Open Graph, Pendo, Visual Website Optimizer, XHTML Strict, jQuery, jsDelivr
 
 ### www.squarespace.com
 
