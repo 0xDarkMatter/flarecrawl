@@ -502,6 +502,209 @@ CORPUS: list[dict] = [
             "Element UI", "Google Sites", "Cart Functionality",
         ],
     },
+    # -----------------------------------------------------------------
+    # Tour operators - AU/global trip-package brands
+    # -----------------------------------------------------------------
+    {
+        # Intrepid Travel (Australia-founded, global small-group tours)
+        "url": "https://www.intrepidtravel.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Cloudflare", "Akamai", "Amazon Web Services", "React",
+            "Next.js", "Node.js", "WordPress", "PHP", "MySQL",
+            "Sitecore Experience Platform", "Drupal",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # G Adventures (Canadian-founded global small-group tours)
+        "url": "https://www.gadventures.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Cloudflare", "Akamai", "Fastly", "Amazon Web Services",
+            "React", "WordPress", "PHP", "MySQL",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Contiki (TTC group, AU/NZ-founded youth travel)
+        "url": "https://www.contiki.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Cloudflare", "Amazon Web Services", "WordPress", "PHP",
+            "MySQL", "Sitecore Experience Platform", "React",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Trafalgar (also TTC group, broader demographic tours)
+        "url": "https://www.trafalgar.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Cloudflare", "Akamai", "Amazon Web Services",
+            "WordPress", "Sitecore Experience Platform",
+            "React", "PHP", "MySQL",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    # -----------------------------------------------------------------
+    # Airlines - international + AU
+    # -----------------------------------------------------------------
+    {
+        "url": "https://www.qantas.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Adobe Experience Manager", "AEM", "AWS",
+            "Amazon Web Services", "jQuery", "Bootstrap",
+            "Qantas", "React",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.virginaustralia.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Adobe Experience Manager", "AEM",
+            "Amazon Web Services", "React", "Cloudflare",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.singaporeair.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Adobe Experience Manager", "AEM", "Cloudflare",
+            "React", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    # -----------------------------------------------------------------
+    # Cruise lines - major operators
+    # -----------------------------------------------------------------
+    {
+        "url": "https://www.royalcaribbean.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Adobe Experience Manager", "AEM",
+            "Amazon Web Services", "React", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.carnival.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Adobe Experience Manager", "AEM",
+            "Amazon Web Services", "React", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.princess.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Adobe Experience Manager", "AEM",
+            "Amazon Web Services", "React",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    # -----------------------------------------------------------------
+    # Vacation rentals / meta-search / accommodation aggregators
+    # -----------------------------------------------------------------
+    {
+        "url": "https://www.vrbo.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Amazon Web Services", "React",
+            "Expedia", "Vrbo", "Cloudflare",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.kayak.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Amazon Web Services", "React", "Next.js",
+            "Node.js", "Cloudflare",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.trivago.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Akamai", "Amazon Web Services", "React",
+            "Cloudflare", "Vue.js", "Next.js", "Node.js",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    # -----------------------------------------------------------------
+    # More AU tourism / state destination marketing boards
+    # -----------------------------------------------------------------
+    {
+        "url": "https://www.visitnsw.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Drupal", "PHP", "MySQL", "Akamai", "Cloudflare",
+            "Nginx", "WordPress", "Apache HTTP Server",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Tourism & Events Queensland - destination marketing
+        "url": "https://www.queensland.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Drupal", "WordPress", "PHP", "MySQL", "Cloudflare",
+            "Nginx", "Apache HTTP Server",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
 ]
 
 
