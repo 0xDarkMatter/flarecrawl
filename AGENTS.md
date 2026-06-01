@@ -497,6 +497,26 @@ flarecrawl tech-detect -i urls.txt --workers 10 --json
 flarecrawl tech-detect URL --only-categories CMS,Frameworks --min-confidence 50
 cat page.html | flarecrawl tech-detect --stdin --json
 flarecrawl tech-detect URL --stealth --proxy http://localhost:8080
+
+# --render: Playwright + JS-globals probe (slower, ~3-5s/URL, but unlocks
+# ~880 fingerprints that only fire via window.X globals - jQuery version,
+# Next.js buildId, React internals, Sentry, FingerprintJS, Marketo,
+# Pusher, ...). Requires: uv pip install playwright && playwright install chromium
+flarecrawl tech-detect URL --render --json
+```
+
+Live example - the difference `--render` makes on a JS-heavy SPA:
+
+```
+flarecrawl tech-detect https://sevenrooms.com --json
+  -> 10 detections: Builder.io, Next.js, Node.js, PHP, React, Swiper,
+     Vercel, Webpack, ...
+
+flarecrawl tech-detect https://sevenrooms.com --render --json
+  -> 39 detections: same as above PLUS Cloudflare, Cloudflare Bot
+     Management, GSAP, Linkedin Insight Tag, Marketo, Sentry, Pusher,
+     VWO, Cookiebot, FingerprintJS, Google Analytics, Google Cloud CDN,
+     SevenRooms (its own fingerprint), ...
 ```
 
 **Cleaning the output.** Raw detection surfaces protocol/markup features

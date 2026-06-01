@@ -3388,6 +3388,129 @@ def fetch(
 # ------------------------------------------------------------------
 
 
+def _fetch_for_tech_detect_render(
+    url: str,
+    *,
+    cookies_in: list[dict] | None = None,
+    custom_headers: dict[str, str] | None = None,
+    proxy: str | None = None,
+    timeout: float = 60.0,
+) -> tuple[str, dict[str, str], dict[str, str], "dict[str, str | None]"]:
+    """Render a URL via Playwright Chromium and return (html, headers, cookies, js_globals).
+
+    Unlocks the ~880 Wappalyzer fingerprints that only fire via a
+    window-globals probe (jQuery version, Next.js buildId, React
+    internals, framework-detect lib markers, ...). Also captures the
+    main document's response headers via Network.responseReceived,
+    which the static-HTTP path can sometimes get wrong on sites that
+    redirect through edge proxies.
+
+    Returns empty tuples on transport / Playwright error.
+    """
+    from .wappalyzer import get_wappalyzer
+
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: PLC0415
+    except ImportError:
+        raise FlareCrawlError(
+            "--render requires Playwright. Install with:\n"
+            "  uv pip install playwright && playwright install chromium",
+            code="MISSING_DEPENDENCY",
+        ) from None
+
+    html = ""
+    headers: dict[str, str] = {}
+    cookies: dict[str, str] = {}
+    js_globals: dict[str, "str | None"] = {}
+
+    main_doc_headers: dict[str, str] = {}
+
+    def _on_response(response):
+        # Only capture the navigation document, not subresources.
+        if response.request.resource_type != "document":
+            return
+        # Last-wins handles redirect chains - the final 200 overwrites
+        # any 30x interim responses.
+        nonlocal main_doc_headers
+        try:
+            main_doc_headers = {str(k): str(v) for k, v in response.headers.items()}
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        with sync_playwright() as p:
+            launch_args: dict = {"headless": True}
+            if proxy:
+                launch_args["proxy"] = {"server": proxy}
+            browser = p.chromium.launch(**launch_args)
+            try:
+                ctx_args: dict = {}
+                if custom_headers:
+                    ctx_args["extra_http_headers"] = custom_headers
+                context = browser.new_context(**ctx_args)
+                if cookies_in:
+                    pw_cookies = []
+                    for c in cookies_in:
+                        if not isinstance(c, dict) or not c.get("name"):
+                            continue
+                        pw_c: dict = {
+                            "name": c["name"],
+                            "value": c.get("value", ""),
+                        }
+                        if c.get("domain"):
+                            pw_c["domain"] = c["domain"]
+                            pw_c["path"] = c.get("path", "/")
+                        else:
+                            pw_c["url"] = url
+                        pw_cookies.append(pw_c)
+                    if pw_cookies:
+                        context.add_cookies(pw_cookies)
+                page = context.new_page()
+                page.on("response", _on_response)
+                page.goto(url, wait_until="load",
+                          timeout=int(timeout * 1000))
+                # Best-effort settle so SPAs hydrate before the probe runs.
+                try:
+                    page.wait_for_load_state("networkidle",
+                                             timeout=int(timeout * 1000 / 2))
+                except Exception:  # noqa: BLE001
+                    pass
+
+                html = page.content()
+                headers = dict(main_doc_headers)
+                for c in context.cookies():
+                    name = c.get("name")
+                    val = c.get("value")
+                    if isinstance(name, str) and isinstance(val, str):
+                        cookies[name] = val
+
+                # Inject the wappalyzer JS-globals probe.
+                probe = get_wappalyzer().build_js_probe()
+                try:
+                    page.evaluate(probe)
+                    raw = page.evaluate(
+                        "(function(){var e=document.getElementById('wap-probe');"
+                        "return e?e.textContent:'';})()"
+                    )
+                    if isinstance(raw, str) and raw.strip().startswith("{"):
+                        parsed = json.loads(raw)
+                        if isinstance(parsed, dict):
+                            for k, v in parsed.items():
+                                if isinstance(k, str):
+                                    js_globals[k] = (
+                                        v if (v is None or isinstance(v, str))
+                                        else str(v)
+                                    )
+                except Exception:  # noqa: BLE001 - probe is best-effort
+                    pass
+            finally:
+                browser.close()
+    except Exception:  # noqa: BLE001
+        return "", {}, {}, {}
+
+    return html, headers, cookies, js_globals
+
+
 def _fetch_for_tech_detect(
     url: str,
     *,
@@ -3542,6 +3665,17 @@ def tech_detect_command(
         Path | None,
         typer.Option("--output", "-o", help="Output file path"),
     ] = None,
+    render: Annotated[
+        bool,
+        typer.Option(
+            "--render",
+            help=("Render the page via Playwright Chromium and inject the "
+                  "JS-globals probe. Unlocks ~880 Wappalyzer fingerprints "
+                  "that only fire via window globals (jQuery version, "
+                  "Next.js buildId, framework-detect markers, ...). Slower "
+                  "(~3-5s/URL); requires playwright + Chromium installed."),
+        ),
+    ] = False,
 ) -> None:
     """Identify the technologies a page is built on.
 
@@ -3674,17 +3808,28 @@ def tech_detect_command(
 
     # ---- detect per URL ----------------------------------------------
     def _one(target: str) -> dict:
-        html, hdrs, cks = _fetch_for_tech_detect(
-            target,
-            cookies_in=_session_cookies,
-            custom_headers=parsed_headers or None,
-            proxy=effective_proxy,
-            stealth=stealth,
-            impersonate=impersonate,
-            timeout=timeout,
-        )
+        js_globals: "dict[str, str | None] | None" = None
+        if render:
+            html, hdrs, cks, js_globals = _fetch_for_tech_detect_render(
+                target,
+                cookies_in=_session_cookies,
+                custom_headers=parsed_headers or None,
+                proxy=effective_proxy,
+                timeout=max(timeout, 60.0),
+            )
+            js_globals = js_globals or None
+        else:
+            html, hdrs, cks = _fetch_for_tech_detect(
+                target,
+                cookies_in=_session_cookies,
+                custom_headers=parsed_headers or None,
+                proxy=effective_proxy,
+                stealth=stealth,
+                impersonate=impersonate,
+                timeout=timeout,
+            )
         rec: dict = {"url": target}
-        if not (html or hdrs or cks):
+        if not (html or hdrs or cks or js_globals):
             rec["technologies"] = []
             rec["error"] = "fetch failed"
             return rec
@@ -3693,6 +3838,7 @@ def tech_detect_command(
             html=html,
             headers=hdrs or None,
             cookies=cks or None,
+            js_globals=js_globals,
             min_confidence=min_confidence,
             only_categories=only_cats,
             exclude_categories=excl_cats,
