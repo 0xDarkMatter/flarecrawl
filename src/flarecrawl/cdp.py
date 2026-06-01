@@ -148,6 +148,64 @@ class NetworkCollector:
         }
 
 
+class MainDocumentHeaders:
+    """Captures the response headers of the main document for tech detection.
+
+    Wappalyzer needs HTTP response headers to fire header-only fingerprints
+    (Server: cloudflare, X-Powered-By: PHP/8.2, X-Drupal-Cache, ...). The
+    CF Browser Rendering REST endpoints don't surface upstream headers,
+    but CDP does via Network.responseReceived.
+
+    Filters to the first Document response whose URL matches the navigation
+    target. Subresource (script/css/xhr) responses are ignored. Headers
+    arrive case-as-sent; downstream Wappalyzer matching is case-insensitive.
+    """
+
+    def __init__(self, *, expected_url: str | None = None) -> None:
+        self._expected_url = expected_url
+        self.headers: dict[str, str] = {}
+        self.final_url: str = ""
+        self._matched_expected = False  # true once we've seen the canonical URL
+
+    @staticmethod
+    def _normalise(url: str) -> str:
+        return url.split("?")[0].rstrip("/")
+
+    def _on_response_received(self, params: dict) -> None:
+        resp_type = (params.get("type") or "").lower()
+        if resp_type and resp_type != "document":
+            return
+        response = params.get("response", {}) or {}
+        url = response.get("url", "") or ""
+        if not url:
+            return
+        headers = {
+            str(k): str(v) for k, v in (response.get("headers") or {}).items()
+        }
+        if self._expected_url:
+            if self._matched_expected:
+                # Canonical already locked in - ignore later events
+                # (subframes, XHRs, duplicate document responses).
+                return
+            if self._normalise(url) == self._normalise(self._expected_url):
+                # Canonical match - lock in.
+                self.headers = headers
+                self.final_url = url
+                self._matched_expected = True
+                return
+            # Non-matching, still searching: tentatively capture so a
+            # redirect chain leaves the last response visible. The next
+            # event (possibly the canonical match) will overwrite.
+            self.headers = headers
+            self.final_url = url
+            return
+        # No expected URL: lock onto the first Document event.
+        if self.headers:
+            return
+        self.headers = headers
+        self.final_url = url
+
+
 class BodyCapture:
     """Captures response bodies for URLs matching glob patterns.
 

@@ -1,0 +1,16 @@
+The fingerprint JSON files in this directory (excluding this LICENSE file)
+are vendored from enthec/webappanalyzer and are licensed under the
+GNU General Public License v3.0 (GPL-3.0).
+
+Source:  https://github.com/enthec/webappanalyzer
+Licence: https://www.gnu.org/licenses/gpl-3.0.html
+
+These files are technology fingerprints (data, not code). flarecrawl itself
+remains under the MIT licence; the GPL-3.0 obligation applies only to the
+contents of this directory and to any derivative work that incorporates
+these fingerprints.
+
+If you redistribute flarecrawl wheels that bundle this directory, you must
+also comply with GPL-3.0 (offer the GPL notice + corresponding source for
+the fingerprint data). To strip the bundled fingerprints and use a custom
+data dir, pass `data_dir=` to WappalyzerClient and delete this directory.

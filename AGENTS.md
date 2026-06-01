@@ -147,6 +147,17 @@ model: when/why each command, JSON shapes, exit codes, footgun rules.
 | Run YAML recipe | `flarecrawl recipe scrape-flow.yml` |
 | Recipe dry-run | `flarecrawl recipe scrape-flow.yml --dry-run` |
 | Recipe resume after failure | `flarecrawl recipe scrape-flow.yml --resume` |
+| **Tech detection (v0.30.0)** ||
+| Detect technologies on a URL | `flarecrawl tech-detect URL --json` |
+| Batch tech detection | `flarecrawl tech-detect -i urls.txt --workers 10 --json` |
+| Filter to a category | `flarecrawl tech-detect URL --only-categories CMS,Frameworks` |
+| Drop noisy categories | `flarecrawl tech-detect URL --exclude-categories Analytics,Tag\ managers` |
+| Confidence floor | `flarecrawl tech-detect URL --min-confidence 50` |
+| Detect on local HTML | `cat page.html \| flarecrawl tech-detect --stdin --json` |
+| Detect with stealth (TLS-bypass) | `flarecrawl tech-detect URL --stealth --proxy http://...` |
+| Add detection to scrape | `flarecrawl scrape URL --format html --json --tech-detect` |
+| Add detection to crawl | `flarecrawl crawl URL --wait --limit 50 --tech-detect` |
+| Add detection to fetch | `flarecrawl fetch URL --json --tech-detect` |
 
 ## Authentication
 
@@ -470,6 +481,70 @@ pip install flarecrawl[recipes]         # PyYAML for the recipe runner (P3.1)
 pip install flarecrawl[videos]          # yt-dlp for --yt-dlp passthrough (P3.2)
 pip install flarecrawl[secure]          # OS keyring for credential storage
 ```
+
+### tech-detect (v0.30.0)
+
+Identify the technology stack a page is built on. Local Wappalyzer
+fingerprint matching over fetched HTML + HTTP response headers +
+cookies; adds zero CF browser time and zero CF API calls (the fetch
+goes over your own connection, optionally with `--stealth` / `--proxy`
+/ `--session`).
+
+```bash
+flarecrawl tech-detect https://example.com --json
+flarecrawl tech-detect -i urls.txt --workers 10 --json
+flarecrawl tech-detect URL --only-categories CMS,Frameworks --min-confidence 50
+cat page.html | flarecrawl tech-detect --stdin --json
+flarecrawl tech-detect URL --stealth --proxy http://localhost:8080
+```
+
+Output (JSON):
+
+```json
+{
+  "data": [
+    {
+      "url": "https://example.com",
+      "technologies": [
+        {"name": "WordPress", "version": "6.4",
+         "categories": ["CMS"], "groups": ["Content"]},
+        {"name": "Cloudflare", "categories": ["CDN"]},
+        {"name": "PHP", "categories": ["Programming languages"]}
+      ]
+    }
+  ],
+  "meta": {"count": 1}
+}
+```
+
+`--tech-detect` is also available as a flag on `scrape`, `crawl`, and
+`fetch` for in-line detection during those workflows. Signal coverage
+per path:
+
+| Path | HTML | Headers | Cookies | JS globals |
+|---|---|---|---|---|
+| `tech-detect` (dedicated subcommand) | yes | yes | yes | no |
+| `fetch --tech-detect` (HTML branch) | yes | yes | yes | no |
+| `scrape --tech-detect` (CDP path) | yes | yes (`Network.responseReceived`) | yes (`CDP.getCookies`) | yes (Runtime.evaluate probe) |
+| `scrape --tech-detect` (REST path) | yes | yes (cheap side-fetch) | yes (side-fetch) | no |
+| `crawl --tech-detect` | yes per record | no | no | no |
+| `scrape --stdin --tech-detect` | yes | no | no | no |
+
+Header-only fingerprints (`Server: cloudflare`, `X-Powered-By: PHP/8.2`,
+`X-Drupal-Cache`) and cookie-only fingerprints (`PHPSESSID`, `wp_*`,
+`_ga_*`) won't fire from HTML alone — use the dedicated subcommand or
+the CDP-mode scrape path when you need them.
+
+Python API: `Client.detect_tech(html=..., headers=..., cookies=...,
+js_globals=...)` runs the same match with full caller-supplied signals.
+
+Fingerprint database ships in the wheel: ~7,500 upstream technologies
+from `enthec/webappanalyzer` (GPL-3.0 data — see
+`wappalyzer_data/LICENSE.wappalyzer_data`) plus a 60-entry overlay
+covering CMS platforms (Craft CMS), CSS frameworks (Tailwind CSS),
+hospitality/tourism booking engines (SevenRooms, ResDiary, OpenTable,
+Mr Yum, Rezdy, FareHarbor, SiteMinder), accommodation PMS, channel
+managers, and POS systems.
 
 ## JSON Output Shapes
 

@@ -49,6 +49,11 @@ _ALIASES: dict[str, str] = {
     "env": "environment-variables",
     "pricing": "pricing-reference",
     "quickref": "quick-reference",
+    "tech": "tech-detect",
+    "wappalyzer": "tech-detect",
+    "fingerprint": "tech-detect",
+    "stack": "tech-detect",
+    "detect": "tech-detect",
 }
 
 

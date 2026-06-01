@@ -1,6 +1,6 @@
 [project]
 name = "flarecrawl"
-version = "0.29.0"
+version = "0.30.0"
 description = "Cloudflare Browser Run CLI - Firecrawl-compatible, cost-efficient at scale"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -88,6 +88,10 @@ packages = ["src/flarecrawl"]
 # bare `pip install` (no repo on disk). Single source of truth — same file
 # repo readers see.
 "AGENTS.md" = "flarecrawl/AGENTS.md"
+# Vendored Wappalyzer fingerprint database (GPL-3.0 data — see
+# wappalyzer_data/LICENSE.wappalyzer_data). Ships so `--detect-tech` and
+# Client.detect_tech() work after a bare install with no repo on disk.
+"src/flarecrawl/wappalyzer_data" = "flarecrawl/wappalyzer_data"
 
 # ============================================================
 # CODE QUALITY

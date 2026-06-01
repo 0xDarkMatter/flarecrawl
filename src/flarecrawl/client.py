@@ -442,6 +442,52 @@ class Client:
         result = self._post_json("links", body)
         return result.get("result", result)
 
+    def detect_tech(
+        self,
+        html: str = "",
+        headers: dict[str, str] | None = None,
+        url: str = "",
+        cookies: dict[str, str] | None = None,
+        js_globals: dict[str, str | None] | None = None,
+    ) -> list[dict]:
+        """Detect technologies from HTML + headers + cookies + JS globals.
+
+        Local fingerprint matching - no network calls, no API hits, no CF
+        browser time. The caller fetches the HTML and (optionally) supplies
+        the other signal layers; this method only runs the match.
+
+        Returns a confidence-sorted list of detection dicts:
+
+            [{"name": "WordPress", "version": "6.4", "categories": ["CMS"],
+              "groups": ["Content"], ...}, ...]
+
+        Header-only fingerprints (Server: cloudflare, X-Powered-By: PHP,
+        X-Drupal-Cache, ...) and cookie-only fingerprints (PHPSESSID,
+        JSESSIONID, wp_*, _ga_*) won't fire from HTML alone - pass
+        ``headers=`` / ``cookies=`` when you have them.
+
+        The fingerprint database (~7,500 technologies) is vendored from
+        enthec/webappanalyzer and lazy-loaded once per process. Safe to
+        call concurrently from worker threads.
+
+        Args:
+            html: Full HTML source. Most fingerprints need this.
+            headers: HTTP response headers (case-insensitive matching).
+            url: Page URL for URL-pattern matches.
+            cookies: Cookie name -> value mapping.
+            js_globals: JS global probe results - dotted-path keys to
+                serialised values, typically produced by injecting
+                WappalyzerClient.build_js_probe() into the page via CDP
+                Runtime.evaluate.
+        """
+        from .wappalyzer import get_wappalyzer
+        wappa = get_wappalyzer()
+        detections = wappa.analyze(
+            html=html, headers=headers, url=url,
+            cookies=cookies, js_globals=js_globals,
+        )
+        return [d.to_dict() for d in detections]
+
     # ------------------------------------------------------------------
     # Structured extraction
     # ------------------------------------------------------------------

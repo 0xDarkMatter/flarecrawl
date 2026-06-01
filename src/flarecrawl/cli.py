@@ -10,6 +10,17 @@ import re
 import sys
 import time as _time
 
+# Force UTF-8 on Windows stdio. Without this, Rich/Typer crash with
+# UnicodeEncodeError on non-ASCII output (e.g. "→" in help epilogs) because
+# Python defaults stdout encoding to the system codepage (cp1252 on en-US
+# Windows). Must run before any Rich/Typer output is emitted.
+if sys.platform == "win32":
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, OSError):
+            pass  # detached stream or unsupported in this environment
+
 # Optional: install uvloop on non-Windows platforms for 2-4x async speedup.
 # No-op on Windows (uvloop is not supported there) or if uvloop is not installed.
 if sys.platform != "win32":
@@ -107,6 +118,231 @@ def _output_json(data) -> None:
         sys.stdout.buffer.write(text.encode(enc, errors="replace"))
         sys.stdout.buffer.write(b"\n")
         sys.stdout.buffer.flush()
+
+
+def _filter_detections(
+    detections: list,
+    *,
+    min_confidence: int = 0,
+    only_categories: list[str] | None = None,
+    exclude_categories: list[str] | None = None,
+) -> list:
+    """Apply user filters to a list of Detection objects.
+
+    - min_confidence: drop detections below this score (0..100).
+    - only_categories: keep only detections that touch at least one of
+      these category names (case-insensitive). When None or empty, no
+      category restriction.
+    - exclude_categories: drop detections that touch any of these
+      categories (case-insensitive). Applied after only_categories.
+    """
+    if min_confidence > 0:
+        detections = [d for d in detections if d.confidence >= min_confidence]
+    if only_categories:
+        wanted = {c.lower() for c in only_categories}
+        detections = [
+            d for d in detections
+            if any(c.lower() in wanted for c in d.categories)
+        ]
+    if exclude_categories:
+        unwanted = {c.lower() for c in exclude_categories}
+        detections = [
+            d for d in detections
+            if not any(c.lower() in unwanted for c in d.categories)
+        ]
+    return detections
+
+
+def _parse_category_list(raw: str | None) -> list[str] | None:
+    """Parse a comma-separated category list flag into a clean list, or None."""
+    if not raw:
+        return None
+    items = [s.strip() for s in raw.split(",")]
+    items = [s for s in items if s]
+    return items or None
+
+
+def _attach_tech(
+    record: dict,
+    *,
+    html: str | None = None,
+    headers: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
+    js_globals: dict[str, "str | None"] | None = None,
+    emit_summary: bool = False,
+    min_confidence: int = 0,
+    only_categories: list[str] | None = None,
+    exclude_categories: list[str] | None = None,
+) -> None:
+    """Run Wappalyzer detection on a single record (mutates in place).
+
+    Idempotent: if record["technologies"] is already set, this returns
+    without re-running. Callers that want to force re-detection should
+    delete the key first.
+
+    Pulls HTML from explicit ``html=`` kwarg, else from
+    ``record["html"]``, else from ``record["content"]`` when that looks
+    like HTML. The full six-signal Wappalyzer match runs - HTML, headers,
+    cookies, script-src URLs (extracted from HTML), meta tags (extracted
+    from HTML), JS globals (only if the caller injected a CDP probe and
+    passed them), plus URL pattern match on ``record["url"]``.
+
+    Headers, cookies, and js_globals are optional but materially raise
+    coverage: header-only fingerprints (``Server: cloudflare``,
+    ``X-Powered-By: PHP/8.2``, ``X-Drupal-Cache``) and cookie-only
+    fingerprints (``PHPSESSID``, ``wp_*``, ``_ga_*``) won't fire from
+    HTML alone.
+
+    Attaches ``record["technologies"] = list[dict]`` when anything fires
+    (after filtering). No API calls, no CF browser time. Fingerprint
+    dict is process-cached after first call.
+    """
+    from .wappalyzer import get_wappalyzer
+    if not isinstance(record, dict):
+        return
+    if "technologies" in record:
+        return  # idempotent - someone already attached results
+    if html is None:
+        html = record.get("html") or ""
+        if not html:
+            content = record.get("content")
+            if isinstance(content, str) and content.lstrip().startswith("<"):
+                html = content
+    # Skip only if we have literally no signal to work with
+    if not (html or headers or cookies or js_globals):
+        return
+    url = record.get("url", "")
+    wappa = get_wappalyzer()
+    detections = wappa.analyze(
+        html=html or "",
+        headers=headers,
+        cookies=cookies,
+        js_globals=js_globals,
+        url=url,
+    )
+    detections = _filter_detections(
+        detections,
+        min_confidence=min_confidence,
+        only_categories=only_categories,
+        exclude_categories=exclude_categories,
+    )
+    record["technologies"] = [d.to_dict() for d in detections]
+    if emit_summary and detections:
+        summary_parts = []
+        for d in detections[:6]:
+            name = d.name + (f" {d.version}" if d.version else "")
+            cat = d.categories[0] if d.categories else ""
+            summary_parts.append(f"{name} ({cat})" if cat else name)
+        extra = f" +{len(detections) - 6} more" if len(detections) > 6 else ""
+        sys.stderr.write(f"[tech] {' + '.join(summary_parts)}{extra}\n")
+
+
+def _apply_tech_detection(records: list[dict], emit_summary: bool = False) -> None:
+    """Bulk helper - run _attach_tech over each record (HTML-only signals).
+
+    Used by the paths that don't have per-record headers/cookies in
+    scope (REST scrape multi-URL, crawl). For commands that DO have
+    them (fetch, CDP scrape), call _attach_tech directly with the full
+    signal set.
+    """
+    for r in records:
+        _attach_tech(r, emit_summary=emit_summary)
+
+
+def _collect_response_signals(
+    url: str,
+    *,
+    http_session=None,
+    proxy: str | None = None,
+    stealth: bool = False,
+    impersonate: str = "chrome131",
+    timeout: float = 10.0,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Side-fetch response headers + cookies for a URL.
+
+    Used when --tech-detect is set on a command whose primary fetch path
+    doesn't surface upstream response headers (e.g. CF Browser Rendering
+    REST endpoints, which return rendered HTML body wrapped in JSON but
+    drop the page's HTTP response headers). Issues a cheap HEAD; falls
+    back to GET if HEAD is refused. Adds zero CF browser time.
+
+    Returns (headers, cookies). Either may be empty on transport error -
+    tech detection is best-effort and never fails the surrounding call.
+    """
+    import httpx as _httpx  # noqa: PLC0415
+
+    # Many servers respond differently to HEAD vs GET — some omit
+    # Set-Cookie, X-Powered-By, or Server headers on HEAD; some refuse
+    # HEAD outright. Issue a streamed GET and abort the body as soon as
+    # headers + a small sniff window are in hand. Caps download at
+    # ~32 KB which is plenty for header-driven detection and trivially
+    # cheap on the wire.
+    SNIFF_BYTES = 32 * 1024
+    headers: dict[str, str] = {}
+    cookies: dict[str, str] = {}
+
+    NETWORK_ERRORS: tuple[type[BaseException], ...] = (
+        _httpx.HTTPError,
+        ConnectionError,
+        OSError,
+        TimeoutError,
+    )
+    try:
+        if stealth:
+            try:
+                from curl_cffi import requests as _cffi  # noqa: PLC0415
+                from curl_cffi.requests.exceptions import RequestException as _CFFIError  # noqa: PLC0415
+            except ImportError:
+                return headers, cookies
+            try:
+                with _cffi.Session(impersonate=impersonate, timeout=timeout) as cs:  # type: ignore[arg-type]
+                    if proxy:
+                        cs.proxies = {"http": proxy, "https": proxy}
+                    r = cs.get(url, allow_redirects=True, stream=True)
+                    try:
+                        headers = {str(k): str(v) for k, v in r.headers.items()}
+                        cookies = {
+                            c.name: c.value for c in cs.cookies.jar
+                            if c.value is not None
+                        }
+                    finally:
+                        try:
+                            r.close()
+                        except Exception:  # noqa: BLE001 - close is best-effort
+                            pass
+            except (_CFFIError, ConnectionError, OSError, TimeoutError):
+                return headers, cookies
+        else:
+            session = http_session
+            close_after = False
+            if session is None:
+                session = _httpx.Client(
+                    follow_redirects=True,
+                    timeout=timeout,
+                    proxy=proxy,
+                )
+                close_after = True
+            try:
+                with session.stream("GET", url) as r:
+                    headers = {str(k): str(v) for k, v in r.headers.items()}
+                    # Drain a sniff window so cookies arrive but the bulk
+                    # body never leaves the wire.
+                    drained = 0
+                    for chunk in r.iter_raw():
+                        drained += len(chunk)
+                        if drained >= SNIFF_BYTES:
+                            break
+                    cookies = {
+                        c.name: c.value for c in session.cookies.jar
+                        if c.value is not None
+                    }
+            finally:
+                if close_after:
+                    session.close()
+    except NETWORK_ERRORS:
+        # best-effort - tech detection never fails the surrounding call
+        return headers, cookies
+    return headers, cookies
 
 
 def _output_ndjson(record: dict) -> None:
@@ -1099,6 +1335,7 @@ def _scrape_single_cdp(
     auto_data: bool = True,
     humanize: bool = False,
     humanize_profile: str = "fast",
+    tech_detect: bool = False,
 ) -> dict:
     """Scrape a URL using CDP WebSocket connection.
 
@@ -1130,6 +1367,23 @@ def _scrape_single_cdp(
             data_probe = DataSourceProbe(page_origin=url)
         if har_output or body_capture or data_probe:
             collector = page.enable_network(body_capture=body_capture, data_probe=data_probe)
+
+        # --tech-detect: capture the main document's response headers so
+        # Wappalyzer can fire header-only fingerprints (Server: cloudflare,
+        # X-Powered-By, X-Drupal-Cache, ...). Cookies + JS globals come
+        # after page load (below).
+        tech_headers_collector = None
+        if tech_detect:
+            from .cdp import MainDocumentHeaders
+            tech_headers_collector = MainDocumentHeaders(expected_url=url)
+            cdp_client.subscribe(
+                "Network.responseReceived",
+                lambda p: tech_headers_collector._on_response_received(p),
+            )
+            # Network domain must be enabled for responseReceived to fire.
+            # If collector wasn't built above, enable a no-op one here.
+            if collector is None:
+                collector = page.enable_network()
 
         # v0.24.0 P2.2a: apply stealth patches before any navigation. Cheap
         # (one CDP message), idempotent, fails open if asset missing.
@@ -1254,9 +1508,66 @@ def _scrape_single_cdp(
         # v0.25.0 P3.3: surface auto-discovered structured data sources
         if data_probe is not None and data_probe.detected:
             metadata["data_sources"] = data_probe.detected
+
+        # --tech-detect: now that the page is loaded, collect cookies +
+        # JS globals (probe injection) and run Wappalyzer with the full
+        # signal set (HTML + headers + cookies + js_globals + url).
+        if tech_detect:
+            _td_headers = (
+                dict(tech_headers_collector.headers)
+                if tech_headers_collector is not None else None
+            )
+            _td_cookies: dict[str, str] = {}
+            try:
+                jar = page.get_cookies(urls=[url])
+                for c in jar or []:
+                    name = c.get("name")
+                    val = c.get("value")
+                    if isinstance(name, str) and isinstance(val, str):
+                        _td_cookies[name] = val
+            except Exception:
+                pass
+            _td_js_globals: dict[str, "str | None"] = {}
+            try:
+                from .wappalyzer import get_wappalyzer
+                probe_js = get_wappalyzer().build_js_probe()
+                page.evaluate(probe_js, await_promise=False)
+                raw = page.evaluate(
+                    "(function(){var e=document.getElementById('wap-probe');"
+                    "return e?e.textContent:'';})()",
+                    await_promise=False,
+                )
+                if isinstance(raw, str) and raw.strip().startswith("{"):
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        for k, v in parsed.items():
+                            if isinstance(k, str):
+                                _td_js_globals[k] = (
+                                    v if (v is None or isinstance(v, str)) else str(v)
+                                )
+            except Exception:
+                pass  # JS probe is best-effort - never fail the scrape
+
+            _rec: dict = {"url": url}
+            _attach_tech(
+                _rec,
+                html=html,
+                headers=_td_headers,
+                cookies=_td_cookies or None,
+                js_globals=_td_js_globals or None,
+            )
+            _cdp_technologies = _rec.get("technologies")
+        else:
+            _cdp_technologies = None
+
         elapsed = _time.time() - start
 
-        return {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
+        out = {"url": url, "content": content, "elapsed": round(elapsed, 2), "metadata": metadata}
+        # Attach technologies at the top level (consistent with non-CDP path)
+        # so the JSON output shape is the same regardless of backend.
+        if _cdp_technologies:
+            out["technologies"] = _cdp_technologies
+        return out
     finally:
         # Safety flush: write HAR and captured bodies even when an exception
         # (e.g. wait_for_selector timeout) short-circuits the success path.
@@ -1845,6 +2156,7 @@ def scrape(
     auto_data: Annotated[bool, typer.Option("--auto-data/--no-auto-data", help="When CDP is in use, surface structured-data URLs (CSV/JSON/XLSX) the page fetched on init in meta.data_sources.")] = True,
     humanize: Annotated[bool | None, typer.Option("--humanize/--no-humanize", help="Synthesise mouse moves + scrolls + idle gaps before scraping. Defaults to ON for headless --browser local. Pass --no-humanize to disable. ~700ms cost.")] = None,
     humanize_profile: Annotated[str, typer.Option("--humanize-profile", help="Humanize intensity: 'fast' (~700ms), 'natural' (~1500ms), 'thorough' (~3000ms).")] = "fast",
+    tech_detect: Annotated[bool, typer.Option("--tech-detect", help="Wappalyzer tech detection. CDP path: full signals (HTML + response headers + cookies + injected JS-globals probe). REST path: HTML + side-fetched headers/cookies. Stdin: HTML only.")] = False,
 ):
     """Scrape one or more URLs. Default output is markdown.
 
@@ -1995,6 +2307,13 @@ def scrape(
             _all_findings = _stdin_findings + _text_san.findings
             _combined = SanitiseResult(content=content, findings=_all_findings)
         result = {"url": "(stdin)", "content": content}
+        if tech_detect:
+            # Stdin holds raw HTML by definition (the user piped it in);
+            # use it directly regardless of the requested output format.
+            _tmp = {"url": "(stdin)", "html": html}
+            _apply_tech_detection([_tmp], emit_summary=not json_output)
+            if _tmp.get("technologies"):
+                result["technologies"] = _tmp["technologies"]
         if json_output:
             meta = {"format": format, "source": "stdin"}
             if agent_safe and isinstance(content, str):
@@ -2247,6 +2566,7 @@ def scrape(
                     auto_data=auto_data,
                     humanize=humanize,
                     humanize_profile=humanize_profile,
+                    tech_detect=tech_detect,
                 )
                 if timing:
                     console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
@@ -2274,6 +2594,7 @@ def scrape(
                     auto_data=auto_data,
                     humanize=humanize,
                     humanize_profile=humanize_profile,
+                    tech_detect=tech_detect,
                     )
                     if timing:
                         console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
@@ -2300,6 +2621,7 @@ def scrape(
                     auto_data=auto_data,
                     humanize=humanize,
                     humanize_profile=humanize_profile,
+                    tech_detect=tech_detect,
                     )
                     if timing:
                         console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
@@ -2338,6 +2660,9 @@ def scrape(
                         _time.sleep(1)
                 except KeyboardInterrupt:
                     pass
+
+            if tech_detect:
+                _apply_tech_detection(results, emit_summary=not json_output)
 
             if json_output:
                 data = results if len(results) > 1 else results[0]
@@ -2557,6 +2882,30 @@ def scrape(
             console.print(f"[red]Error:[/red] {err_msg}")
         raise typer.Exit(EXIT_ERROR)
 
+    if tech_detect:
+        # REST path: CF's /content endpoint returns rendered HTML but
+        # doesn't surface the upstream page's HTTP response headers. We
+        # side-fetch via httpx/curl_cffi (HEAD with GET fallback, ~10s
+        # timeout, best-effort) so header- and cookie-only fingerprints
+        # fire. Adds zero CF browser time. Uses --stealth + --proxy from
+        # the parent invocation when set.
+        for r in results:
+            if not isinstance(r, dict):
+                continue
+            r_url = r.get("url", "")
+            r_headers: dict[str, str] = {}
+            r_cookies: dict[str, str] = {}
+            if r_url:
+                r_headers, r_cookies = _collect_response_signals(
+                    r_url, proxy=effective_proxy, stealth=stealth,
+                )
+            _attach_tech(
+                r,
+                headers=r_headers or None,
+                cookies=r_cookies or None,
+                emit_summary=not json_output,
+            )
+
     # Output
     if json_output:
         data = results if len(results) > 1 else results[0]
@@ -2694,6 +3043,7 @@ def fetch(
     proxy: Annotated[str | None, typer.Option("--proxy", help="Proxy URL (http/https/socks5)")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Overwrite existing files")] = False,
+    tech_detect: Annotated[bool, typer.Option("--tech-detect", help="Wappalyzer tech detection (HTML + response headers + cookies from the same transport). HTML branch only.")] = False,
 ):
     """Fetch a URL with content-type awareness.
 
@@ -2956,6 +3306,57 @@ def fetch(
             )
 
             content = result.get("content", "")
+
+            # --tech-detect on HTML branch: fetch raw HTML alongside the
+            # markdown conversion so Wappalyzer can see <script>, <meta>,
+            # DOM, and class signals (markdown strips all of those). Also
+            # capture the response headers + cookie jar from the same call
+            # so header-only fingerprints (Server: cloudflare,
+            # X-Powered-By: PHP/8.2, X-Drupal-Cache, ...) and cookie-only
+            # fingerprints (PHPSESSID, wp_*, _ga_*) fire too. Cheap (no
+            # CF browser time) - reuses the existing transport session.
+            if tech_detect:
+                _tech_headers: dict[str, str] = {}
+                _tech_cookies: dict[str, str] = {}
+                _tech_html = ""
+                try:
+                    if use_stealth:
+                        from curl_cffi import requests as _cffi_req  # noqa: PLC0415
+                        with _cffi_req.Session(impersonate=impersonate, timeout=60) as _cs:  # type: ignore[arg-type]
+                            if custom_headers:
+                                _cs.headers.update(custom_headers)
+                            if _cookies:
+                                from .cookies import cookies_to_httpx as _c2h  # noqa: PLC0415
+                                _cs.cookies = {c.name: c.value for c in _c2h(_cookies).jar}
+                            if effective_proxy:
+                                _cs.proxies = {"http": effective_proxy, "https": effective_proxy}
+                            _gr = _cs.get(url, allow_redirects=True)
+                            _gr.raise_for_status()
+                            _tech_html = _gr.content.decode("utf-8", errors="replace")
+                            _tech_headers = {str(k): str(v) for k, v in _gr.headers.items()}
+                            _tech_cookies = {
+                                c.name: c.value for c in _cs.cookies.jar
+                                if c.value is not None
+                            }
+                    else:
+                        _r = http_session.get(url, headers=custom_headers or {})
+                        _r.raise_for_status()
+                        _tech_html = _r.text
+                        _tech_headers = dict(_r.headers)
+                        _tech_cookies = {
+                            c.name: c.value for c in http_session.cookies.jar
+                            if c.value is not None
+                        }
+                    _attach_tech(
+                        result,
+                        html=_tech_html,
+                        headers=_tech_headers,
+                        cookies=_tech_cookies,
+                        emit_summary=not json_output,
+                    )
+                except Exception:
+                    pass  # tech detection is best-effort, never fails the fetch
+
             if output:
                 output.write_text(content, encoding="utf-8")
                 console.print(f"[green]Saved:[/green] {output}")
@@ -2980,6 +3381,388 @@ def fetch(
             _error(f"Unexpected error: {e}", "ERROR", EXIT_ERROR, as_json=json_output)
     finally:
         http_session.close()
+
+
+# ------------------------------------------------------------------
+# tech-detect - dedicated Wappalyzer fingerprint subcommand
+# ------------------------------------------------------------------
+
+
+def _fetch_for_tech_detect(
+    url: str,
+    *,
+    cookies_in: list[dict] | None = None,
+    custom_headers: dict[str, str] | None = None,
+    proxy: str | None = None,
+    stealth: bool = False,
+    impersonate: str = "chrome131",
+    timeout: float = 30.0,
+) -> tuple[str, dict[str, str], dict[str, str]]:
+    """Single GET that yields (html, response_headers, cookies).
+
+    The transport mirrors `flarecrawl fetch`: curl_cffi when stealth or
+    session cookies are present (real Chrome JA3/JA4 fingerprint),
+    httpx otherwise. Honours --proxy.
+
+    Returns empty strings/dicts on transport error - tech-detect should
+    not crash on a single bad URL.
+    """
+    import httpx as _httpx  # noqa: PLC0415
+
+    NETWORK_ERRORS: tuple[type[BaseException], ...] = (
+        _httpx.HTTPError,
+        ConnectionError,
+        OSError,
+        TimeoutError,
+    )
+
+    # Note: we deliberately do NOT raise on 4xx/5xx — a 404 from Cloudflare
+    # still carries `Server: cloudflare` + `CF-Ray:` headers that are valid
+    # tech signals. Transport-level errors (connection refused, timeout,
+    # TLS failure) return empty triples.
+    try:
+        if stealth:
+            try:
+                from curl_cffi import requests as _cffi  # noqa: PLC0415
+                from curl_cffi.requests.exceptions import RequestException as _CFFIError  # noqa: PLC0415
+            except ImportError:
+                return "", {}, {}
+            try:
+                with _cffi.Session(impersonate=impersonate, timeout=timeout) as cs:  # type: ignore[arg-type]
+                    if custom_headers:
+                        cs.headers.update(custom_headers)
+                    if cookies_in:
+                        from .cookies import cookies_to_httpx as _c2h  # noqa: PLC0415
+                        cs.cookies = {
+                            c.name: c.value
+                            for c in _c2h(cookies_in).jar
+                            if c.value is not None
+                        }
+                    if proxy:
+                        cs.proxies = {"http": proxy, "https": proxy}
+                    r = cs.get(url, allow_redirects=True)
+                    html = r.content.decode("utf-8", errors="replace")
+                    headers = {str(k): str(v) for k, v in r.headers.items()}
+                    cookies = {
+                        c.name: c.value for c in cs.cookies.jar
+                        if c.value is not None
+                    }
+                    return html, headers, cookies
+            except (_CFFIError, ConnectionError, OSError, TimeoutError):
+                return "", {}, {}
+        else:
+            with _httpx.Client(
+                follow_redirects=True, timeout=timeout, proxy=proxy,
+            ) as session:
+                if custom_headers:
+                    session.headers.update(custom_headers)
+                if cookies_in:
+                    from .cookies import cookies_to_httpx as _c2h  # noqa: PLC0415
+                    jar = _c2h(cookies_in)
+                    session.cookies = jar  # type: ignore[assignment]
+                r = session.get(url)
+                return (
+                    r.text,
+                    dict(r.headers),
+                    {c.name: c.value for c in session.cookies.jar if c.value is not None},
+                )
+    except NETWORK_ERRORS:
+        return "", {}, {}
+    return "", {}, {}
+
+
+@app.command("tech-detect")
+def tech_detect_command(
+    urls: Annotated[
+        list[str] | None,
+        typer.Argument(help="URL(s) to identify. With --stdin, omit URLs and pipe HTML on stdin."),
+    ] = None,
+    stdin_mode: Annotated[bool, typer.Option("--stdin", help="Read HTML from stdin (no network).")] = False,
+    input_file: Annotated[
+        Path | None,
+        typer.Option("--input", "-i", help="File with URLs (one per line)"),
+    ] = None,
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Cookie file or @NAME for saved session"),
+    ] = None,
+    auth: Annotated[
+        str | None,
+        typer.Option("--auth", help="HTTP Basic Auth (user:password)"),
+    ] = None,
+    headers_opt: Annotated[
+        list[str] | None,
+        typer.Option("--headers", help="Custom HTTP request headers (Key: Value)"),
+    ] = None,
+    user_agent: Annotated[
+        str | None,
+        typer.Option("--user-agent", help="Custom User-Agent string"),
+    ] = None,
+    proxy: Annotated[
+        str | None,
+        typer.Option("--proxy", help="Proxy URL (http/https/socks5)"),
+    ] = None,
+    stealth: Annotated[
+        bool,
+        typer.Option("--stealth", help="Use browser TLS fingerprint (curl_cffi)."),
+    ] = False,
+    impersonate: Annotated[
+        str,
+        typer.Option("--impersonate", help="curl_cffi browser profile when --stealth."),
+    ] = "chrome131",
+    timeout: Annotated[
+        float,
+        typer.Option("--timeout", help="Per-URL fetch timeout (seconds)."),
+    ] = 30.0,
+    workers: Annotated[
+        int,
+        typer.Option("--workers", "-w", help="Parallel workers for multi-URL"),
+    ] = 5,
+    min_confidence: Annotated[
+        int,
+        typer.Option("--min-confidence", help="Drop detections below this score (0-100)"),
+    ] = 0,
+    only_categories: Annotated[
+        str | None,
+        typer.Option("--only-categories", help="Comma-separated category names to keep (e.g. 'CMS,Frameworks')"),
+    ] = None,
+    exclude_categories: Annotated[
+        str | None,
+        typer.Option("--exclude-categories", help="Comma-separated category names to drop (e.g. 'Analytics,Tag managers')"),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON envelope"),
+    ] = False,
+    ndjson: Annotated[
+        bool,
+        typer.Option("--ndjson", help="Stream one JSON record per line (multi-URL)"),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output file path"),
+    ] = None,
+) -> None:
+    """Identify the technologies a page is built on.
+
+    Local Wappalyzer fingerprint matching over fetched HTML + HTTP
+    response headers + cookies. Roughly 7,500 technologies covered;
+    detection adds zero CF browser time and zero CF API calls (the
+    fetch itself uses your own connection, optionally with --stealth /
+    --proxy / --session).
+
+    Output (JSON):
+
+        {
+          "data": [
+            {
+              "url": "...",
+              "technologies": [
+                {"name": "WordPress", "version": "6.4",
+                 "categories": ["CMS"], "groups": ["Content"]},
+                ...
+              ]
+            }
+          ],
+          "meta": {"count": N}
+        }
+
+    Text mode prints a compact table per URL.
+
+    Example:
+        flarecrawl tech-detect https://example.com
+        flarecrawl tech-detect https://a.com https://b.com --json
+        flarecrawl tech-detect -i urls.txt -w 10 --only-categories CMS,Frameworks
+        flarecrawl tech-detect https://example.com --stealth --proxy http://...
+        cat page.html | flarecrawl tech-detect --stdin --json
+    """
+    if not stdin_mode and not urls and not input_file:
+        _error(
+            "Provide URL(s), --input FILE, or --stdin.",
+            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+        )
+
+    only_cats = _parse_category_list(only_categories)
+    excl_cats = _parse_category_list(exclude_categories)
+
+    # ---- stdin: detect from piped HTML --------------------------------
+    if stdin_mode:
+        html = sys.stdin.read()
+        rec: dict = {"url": "(stdin)"}
+        _attach_tech(
+            rec,
+            html=html,
+            emit_summary=not json_output,
+            min_confidence=min_confidence,
+            only_categories=only_cats,
+            exclude_categories=excl_cats,
+        )
+        techs = rec.get("technologies", [])
+        if json_output:
+            payload = {"data": [{"url": "(stdin)", "technologies": techs}],
+                       "meta": {"count": 1}}
+            if output:
+                output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                console.print(f"Saved to {output}")
+            else:
+                _output_json(payload)
+        else:
+            _print_tech_table("(stdin)", techs)
+        return
+
+    # ---- collect URL list --------------------------------------------
+    all_urls: list[str] = list(urls or [])
+    if input_file:
+        try:
+            file_urls = parse_batch_file(input_file)
+        except (OSError, ValueError) as e:
+            _error(
+                f"Cannot read --input: {e}",
+                "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+            )
+            return
+        all_urls.extend(u for u in file_urls if isinstance(u, str))
+    if not all_urls:
+        _error(
+            "No URLs to detect.",
+            "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+        )
+
+    # ---- session/auth/headers/proxy -----------------------------------
+    _session_cookies: list[dict] | None = None
+    if session:
+        if session.startswith("@"):
+            from .config import load_session as _load_session  # noqa: PLC0415
+            try:
+                _session_cookies = _load_session(session[1:])
+            except FileNotFoundError:
+                _error(
+                    f"Session not found: {session[1:]}",
+                    "NOT_FOUND", EXIT_NOT_FOUND, as_json=json_output,
+                )
+                return
+        else:
+            from .cookies import load_cookies as _load_cookies  # noqa: PLC0415
+            try:
+                _session_cookies = _load_cookies(Path(session))
+            except (OSError, json.JSONDecodeError, ValueError) as e:
+                _error(
+                    f"Cannot read session file: {e}",
+                    "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+                )
+                return
+
+    parsed_headers = _parse_headers(headers_opt, json_output) or {}
+    if user_agent:
+        parsed_headers.setdefault("User-Agent", user_agent)
+    if auth:
+        if ":" not in auth:
+            _error(
+                "Invalid --auth format. Expected user:password",
+                "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
+            )
+            return
+        import base64 as _b64  # noqa: PLC0415
+        u, _, p = auth.partition(":")
+        parsed_headers.setdefault(
+            "Authorization",
+            "Basic " + _b64.b64encode(f"{u}:{p}".encode()).decode(),
+        )
+
+    from .config import get_proxy as _gp  # noqa: PLC0415
+    effective_proxy = proxy or _gp()
+
+    # ---- detect per URL ----------------------------------------------
+    def _one(target: str) -> dict:
+        html, hdrs, cks = _fetch_for_tech_detect(
+            target,
+            cookies_in=_session_cookies,
+            custom_headers=parsed_headers or None,
+            proxy=effective_proxy,
+            stealth=stealth,
+            impersonate=impersonate,
+            timeout=timeout,
+        )
+        rec: dict = {"url": target}
+        if not (html or hdrs or cks):
+            rec["technologies"] = []
+            rec["error"] = "fetch failed"
+            return rec
+        _attach_tech(
+            rec,
+            html=html,
+            headers=hdrs or None,
+            cookies=cks or None,
+            min_confidence=min_confidence,
+            only_categories=only_cats,
+            exclude_categories=excl_cats,
+        )
+        rec.setdefault("technologies", [])
+        return rec
+
+    if ndjson:
+        # Stream mode: one record per line as completed
+        if len(all_urls) > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=min(workers, DEFAULT_MAX_WORKERS),
+            ) as pool:
+                futures = {pool.submit(_one, u): u for u in all_urls}
+                for fut in concurrent.futures.as_completed(futures):
+                    _output_ndjson(fut.result())
+        else:
+            _output_ndjson(_one(all_urls[0]))
+        return
+
+    if len(all_urls) > 1:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(workers, DEFAULT_MAX_WORKERS),
+        ) as pool:
+            future_to_url = {pool.submit(_one, u): u for u in all_urls}
+            results = []
+            for fut in concurrent.futures.as_completed(future_to_url):
+                results.append(fut.result())
+        # Preserve input order
+        order = {u: i for i, u in enumerate(all_urls)}
+        results.sort(key=lambda r: order.get(r.get("url", ""), 0))
+    else:
+        results = [_one(all_urls[0])]
+
+    if json_output:
+        payload = {"data": results, "meta": {"count": len(results)}}
+        if output:
+            output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            console.print(f"Saved to {output}")
+        else:
+            _output_json(payload)
+    else:
+        for r in results:
+            _print_tech_table(r["url"], r.get("technologies", []), error=r.get("error"))
+
+
+def _print_tech_table(url: str, techs: list[dict], *, error: str | None = None) -> None:
+    """Pretty-print one URL's detections to the console."""
+    from rich.table import Table  # noqa: PLC0415
+
+    title = url
+    if error:
+        console.print(f"[red]✗[/red] {title}: {error}")
+        return
+    if not techs:
+        console.print(f"[dim]{title}: no technologies detected[/dim]")
+        return
+    table = Table(title=title, title_style="bold", show_lines=False, expand=False)
+    table.add_column("Technology", style="bold")
+    table.add_column("Version", style="cyan")
+    table.add_column("Categories")
+    table.add_column("Conf", justify="right", style="dim")
+    for t in techs:
+        table.add_row(
+            t.get("name", ""),
+            t.get("version", ""),
+            ", ".join(t.get("categories", [])),
+            str(t.get("confidence", 100)),
+        )
+    console.print(table)
 
 
 # ------------------------------------------------------------------
@@ -3022,6 +3805,7 @@ def crawl(
     ignore_robots: Annotated[bool, typer.Option("--ignore-robots", help="Ignore robots.txt and AI Crawl Control directives")] = False,
     rate_limit: Annotated[float, typer.Option("--rate-limit", help="Max requests/sec per hostname (0 disables)")] = 2.0,
     session: Annotated[str | None, typer.Option("--session", help="Cookie file or @NAME for saved session")] = None,
+    tech_detect: Annotated[bool, typer.Option("--tech-detect", help="Wappalyzer tech detection on each crawled record's HTML. Header- and cookie-only fingerprints don't fire here (CF crawl doesn't surface upstream response headers per record).")] = False,
 ):
     """Crawl a website. Returns JSON by default (like firecrawl).
 
@@ -3200,6 +3984,9 @@ def crawl(
     except FlareCrawlError as e:
         _handle_api_error(e, json_output)
         return
+
+    if tech_detect:
+        _apply_tech_detection(records, emit_summary=not json_output)
 
     result = {
         "job_id": job_id,

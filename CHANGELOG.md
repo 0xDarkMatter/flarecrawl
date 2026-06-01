@@ -5,6 +5,92 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-06-01
+
+Local technology detection. Wappalyzer fingerprint matching now ships
+in the wheel; runs over the data each command already collected (HTML
++ response headers + cookies + injected JS-globals probe where the path
+allows it) so detection adds zero CF browser time and zero extra API
+calls.
+
+### Added
+
+- **`flarecrawl tech-detect <URL>`.** Dedicated subcommand — the primary
+  surface for the feature. Single GET per URL (curl_cffi when `--stealth`
+  or `--session`, httpx otherwise), full HTML + response headers +
+  cookies signal set, JSON envelope or compact table output, parallel
+  batch via `-i FILE -w N`, streaming via `--ndjson`. Filters:
+  `--min-confidence N`, `--only-categories CMS,Frameworks`,
+  `--exclude-categories Analytics,Tag\ managers`. Accepts `--stdin` to
+  read HTML from a pipe with no network. Discoverable via
+  `flarecrawl guide tech-detect` (aliases: `tech`, `wappalyzer`,
+  `fingerprint`, `stack`, `detect`).
+
+- **`Client.detect_tech(html, headers, url, cookies, js_globals)`.**
+  Local Python API returning a confidence-sorted list of detection dicts
+  (`name`, `version`, `categories`, `groups`, …). All six Wappalyzer
+  signal layers are reachable when the caller supplies them. Lazy-loaded
+  process-wide singleton, thread-safe under concurrent crawl/scrape.
+
+- **`--tech-detect` flag on `scrape`, `crawl`, `fetch`.** In-line
+  detection during the existing workflows. Attaches `technologies:
+  [...]` at the top of the result record; emits a compact `[tech]`
+  summary line to stderr on non-JSON output. Signal coverage per path:
+
+  | Path | HTML | Headers | Cookies | JS globals |
+  |---|---|---|---|---|
+  | `tech-detect` subcommand | yes | yes | yes | no |
+  | `fetch --tech-detect` (HTML branch) | yes | yes (same transport) | yes (cookie jar) | no |
+  | `scrape --tech-detect` (CDP path) | yes | yes (`Network.responseReceived`) | yes (`CDP.getCookies`) | **yes** (probe injected via `Runtime.evaluate`) |
+  | `scrape --tech-detect` (REST path) | yes | yes (streaming GET side-fetch, 32 KB cap) | yes (side-fetch) | no |
+  | `scrape --stdin --tech-detect` | yes | no | no | no |
+  | `crawl --tech-detect` | yes (per record) | no | no | no |
+
+- **`MainDocumentHeaders` CDP collector.** Subscribes to
+  `Network.responseReceived`, filters to the navigation document only
+  (subresources skipped), surfaces headers for the tech-detect pipeline.
+
+- **`WappalyzerClient.build_js_probe()`.** Generates the CDP-injectable
+  JS that probes every `js`-keyed property path in the fingerprint DB
+  (~5,500 paths). Result is parsed from a hidden `#wap-probe` element
+  and fed back as `js_globals=` for higher-confidence matches on
+  JS-heavy SPAs.
+
+- **Vendored fingerprint database.** ~7,500 upstream technologies from
+  `enthec/webappanalyzer` (GPL-3.0 data — see
+  `src/flarecrawl/wappalyzer_data/LICENSE.wappalyzer_data`) plus a
+  60-entry custom overlay covering CMS platforms (Craft CMS), CSS
+  frameworks (Tailwind CSS), hospitality/tourism booking engines
+  (SevenRooms, ResDiary, OpenTable, Mr Yum, me&u, Rezdy, FareHarbor,
+  SiteMinder, …), accommodation PMS, channel managers, and POS systems.
+
+### Notes
+
+- The bundled fingerprint data is GPL-3.0; the rest of flarecrawl stays
+  MIT. Strip `wappalyzer_data/` from the wheel if you need to ship a
+  pure-MIT artefact, or pass `data_dir=` to `WappalyzerClient` to use a
+  custom fingerprint set.
+
+- REST scrape's side-fetch uses a streaming GET (not HEAD) with a 32 KB
+  body cap — HEAD is unreliable (servers often omit `Set-Cookie`,
+  `X-Powered-By`, or `Server` on HEAD). Honours `--proxy` and
+  `--stealth`. Transport errors are caught narrowly (`httpx.HTTPError`,
+  `ConnectionError`, `OSError`, `TimeoutError`) and never fail the
+  parent command.
+
+- `_attach_tech` is idempotent — a second call against a record that
+  already has a `technologies` key is a no-op.
+
+- Test coverage: 35 dedicated tests including a local HTTP fixture
+  server that validates header-only fingerprints (Cloudflare via
+  `Server: cloudflare`), cookie-only fingerprints (Java via
+  `JSESSIONID`), filter flags, transport resilience (unreachable host,
+  500 response), and an end-to-end CLI integration check.
+
+- `tests/test_cli.py::TestHelp::test_version` now reads
+  `flarecrawl.__version__` instead of asserting a hardcoded string, so
+  it no longer lags behind release bumps.
+
 ## [0.29.0] - 2026-05-17
 
 Agent-discoverability layer. v0.28.0 landed a large feature surface; this

@@ -28,9 +28,10 @@ class TestHelp:
         assert "auth" in result.output
 
     def test_version(self):
+        from flarecrawl import __version__
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "flarecrawl 0.22.0" in result.output
+        assert f"flarecrawl {__version__}" in result.output
 
     def test_crawl_has_rate_limit_flag(self):
         result = runner.invoke(app, ["crawl", "--help"])
