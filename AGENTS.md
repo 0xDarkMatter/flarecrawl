@@ -149,6 +149,7 @@ model: when/why each command, JSON shapes, exit codes, footgun rules.
 | Recipe resume after failure | `flarecrawl recipe scrape-flow.yml --resume` |
 | **Tech detection (v0.30.0)** ||
 | Detect technologies on a URL | `flarecrawl tech-detect URL --json` |
+| Detect technologies (clean output) | `flarecrawl tech-detect URL --json --exclude-categories "Miscellaneous,Security,Tag managers,RUM"` |
 | Batch tech detection | `flarecrawl tech-detect -i urls.txt --workers 10 --json` |
 | Filter to a category | `flarecrawl tech-detect URL --only-categories CMS,Frameworks` |
 | Drop noisy categories | `flarecrawl tech-detect URL --exclude-categories Analytics,Tag\ managers` |
@@ -497,6 +498,32 @@ flarecrawl tech-detect URL --only-categories CMS,Frameworks --min-confidence 50
 cat page.html | flarecrawl tech-detect --stdin --json
 flarecrawl tech-detect URL --stealth --proxy http://localhost:8080
 ```
+
+**Cleaning the output.** Raw detection surfaces protocol/markup features
+(`HSTS`, `Open Graph`, `HTTP/3`, `PWA`, `RSS`) on practically every site
+— useful for compliance audits, noise for stack-picture questions. For
+the "what is this site built on?" use case, the recommended recipe is:
+
+```bash
+flarecrawl tech-detect URL --json \
+  --exclude-categories "Miscellaneous,Security,Tag managers,RUM"
+```
+
+Live examples with the cleaning recipe applied:
+
+| Site | Cleaned detections |
+|---|---|
+| `drupal.org` | Apache, Drupal v10, PHP, Varnish, ZURB Foundation |
+| `vercel.com` | AWS, Next.js, React, Tailwind, Vercel, LinkedIn Insight |
+| `shopify.com` | Cloudflare, Shopify, Tailwind |
+| `nytimes.com` | Akamai mPulse, Boomerang, Envoy, Fastly, MySQL, PHP |
+
+**Honest caveat:** the vendored fingerprint DB ships well-known
+upstream false positives. `Element UI`, `Cart Functionality`, and
+`Google Sites` sometimes fire on sites that don't use them (Stripe is
+a canonical offender). When that matters, raise `--min-confidence 80`
+or check the specific detection's evidence in the JSON envelope before
+acting on it.
 
 Output (JSON):
 
