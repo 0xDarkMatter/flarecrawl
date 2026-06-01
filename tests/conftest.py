@@ -69,6 +69,38 @@ def routing_server():
     server.shutdown()
 
 
+# ---------------------------------------------------------------------------
+# Real-keyring safety net
+# ---------------------------------------------------------------------------
+#
+# Several tests in this suite invoke commands that, on a misconfigured
+# day, will call keyring.set_password() / keyring.delete_password()
+# against the real OS keyring - wiping a developer's actual Cloudflare
+# credentials. The canonical offender is the `auth logout` CLI command,
+# but anything that touches flarecrawl.config.save_credentials() or
+# clear_credentials() is at risk.
+#
+# This autouse fixture forces every test in the suite to behave as if
+# keyring is unavailable, so any accidental write/delete falls through
+# to the .env file fallback (which runs against the per-test tmp cwd or
+# the project root, not the OS keyring). Individual tests that need to
+# exercise the keyring code path can still re-enable it locally with
+#   monkeypatch.setattr("flarecrawl.credentials.KEYRING_AVAILABLE", True)
+# while mocking the keyring module itself.
+
+@pytest.fixture(autouse=True)
+def _disable_real_keyring(monkeypatch):
+    """Belt-and-braces: never let a test touch the real OS keyring.
+
+    Sets KEYRING_AVAILABLE=False and resets the module-level
+    CredentialStore singleton so the next call picks up the patched
+    flag. Safe to layer over per-test mocks - they take precedence.
+    """
+    monkeypatch.setattr("flarecrawl.credentials.KEYRING_AVAILABLE", False, raising=False)
+    import flarecrawl.credentials as _creds
+    monkeypatch.setattr(_creds, "_store", None, raising=False)
+
+
 @pytest.fixture
 def mock_credentials(monkeypatch):
     """Set fake credentials via env vars."""
