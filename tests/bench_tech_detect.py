@@ -318,6 +318,190 @@ CORPUS: list[dict] = [
             "Element UI", "Google Sites", "Cart Functionality",
         ],
     },
+    # -----------------------------------------------------------------
+    # Tourism / travel sector - exercises real customer-facing stacks
+    # roamcrawler audits and validates more of our hospitality overlay
+    # -----------------------------------------------------------------
+    {
+        "url": "https://www.booking.com",
+        "must_detect": [],  # Custom React-based OTA stack
+        "acceptable_also": [
+            "React", "Webpack", "Amazon Web Services", "Akamai",
+            "Akamai mPulse", "Booking.com",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.expedia.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "React", "Amazon Web Services", "Akamai", "Expedia",
+            "Cloudflare",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.tripadvisor.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "React", "Akamai", "TripAdvisor", "Amazon Web Services",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.marriott.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Adobe Experience Manager", "Akamai", "AEM",
+            "Marriott", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Hilton runs Adobe AEM on the main site but also operates
+        # WordPress-powered properties (stories.hilton.com, etc.) -
+        # WordPress detection on the brand domain is plausible.
+        "url": "https://www.hilton.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Adobe Experience Manager", "Akamai", "Akamai Bot Manager",
+            "Hilton", "AEM", "React", "WordPress", "PHP", "MySQL",
+            "Dynatrace", "Dynatrace RUM", "Clarip", "Tailwind CSS",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.klook.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "React", "Next.js", "Node.js", "Cloudflare", "Amazon Web Services",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.viator.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "React", "Akamai", "TripAdvisor", "Amazon Web Services",
+            "Viator",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.getyourguide.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "React", "Next.js", "Node.js", "Cloudflare",
+            "Amazon Web Services", "GetYourGuide",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Australian destination marketing - common roamcrawler audit target
+        "url": "https://www.tourism.australia.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Adobe Experience Manager", "AEM", "Akamai",
+            "jQuery", "Bootstrap",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.visitvictoria.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Drupal", "PHP", "MySQL", "Cloudflare", "Nginx",
+            "Apache HTTP Server", "WordPress",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.sydney.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Drupal", "PHP", "MySQL", "Akamai", "WordPress",
+            "Cloudflare", "Nginx",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    # -----------------------------------------------------------------
+    # Custom overlay self-tests - vendor brand sites for the
+    # hospitality fingerprints we ship. Like sevenrooms.com, these
+    # may or may not self-embed their own widget; we list the vendor
+    # in acceptable_also for the case where they do.
+    # -----------------------------------------------------------------
+    {
+        "url": "https://fareharbor.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "FareHarbor", "Amazon Web Services", "Cloudflare",
+            "React", "Next.js", "Node.js", "WordPress",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "Rezdy", "OpenTable", "SevenRooms",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.rezdy.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "Rezdy", "Amazon Web Services", "Cloudflare",
+            "WordPress", "PHP",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "FareHarbor", "OpenTable", "SevenRooms",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.siteminder.com",
+        "must_detect": [],
+        "acceptable_also": [
+            "SiteMinder", "Amazon Web Services", "Cloudflare",
+            "WordPress", "PHP",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "FareHarbor", "Rezdy",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
 ]
 
 

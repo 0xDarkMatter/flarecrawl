@@ -891,6 +891,41 @@ def test_custom_overlay_disabled_strips_implies(tmp_path):
     assert any("Gamma" in entry for entry in acme_implies)
 
 
+def test_implies_chain_patches():
+    """Overlay-extended implies chains for techs that ship broken
+    upstream. If any of these regress, detection of the runtime stack
+    behind common frameworks vanishes silently."""
+    from flarecrawl.wappalyzer import get_wappalyzer
+    w = get_wappalyzer()
+    w._load()
+    assert w._techs is not None
+
+    def implies_contains(tech: str, target: str) -> bool:
+        impls = w._techs.get(tech, {}).get("implies") or []
+        for impl in impls:
+            name = impl.split("\\;", 1)[0] if isinstance(impl, str) else ""
+            if name == target:
+                return True
+        return False
+
+    # JS framework -> Node.js (10 patched)
+    for js_framework in ("Astro", "Remix", "SvelteKit", "SolidStart",
+                        "Gatsby", "Strapi", "Eleventy", "Gridsome",
+                        "VuePress", "VitePress", "Next.js", "Nuxt.js",
+                        "Vercel"):
+        assert implies_contains(js_framework, "Node.js"), \
+            f"{js_framework} should imply Node.js"
+
+    # PHP framework -> PHP
+    for php_framework in ("Zend", "WooCommerce"):
+        assert implies_contains(php_framework, "PHP"), \
+            f"{php_framework} should imply PHP"
+
+    # WooCommerce is a WordPress plugin
+    assert implies_contains("WooCommerce", "WordPress")
+    assert implies_contains("WooCommerce", "MySQL")
+
+
 def test_patched_empty_upstream_fingerprints_fire():
     """Six upstream Wappalyzer entries (Loom, DocuSign, Dropbox, Index
     Exchange, Sitecore Experience Platform, Triple Whale) ship with

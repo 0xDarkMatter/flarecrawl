@@ -33,7 +33,9 @@
     "Dropbox": "Upstream entry has zero patterns. Match scriptSrc to www.dropbox.com/static/api or *.dropboxstatic.com, and Saver/Chooser button classes.",
     "Index Exchange": "Upstream entry has zero patterns. Match scriptSrc to indexww.com (their bid CDN).",
     "Sitecore Experience Platform": "Upstream entry has zero patterns. Match the canonical SC_ANALYTICS_GLOBAL_COOKIE plus X-Powered-By header plus <meta generator='Sitecore'> when present.",
-    "Triple Whale": "Upstream entry has zero patterns. Match scriptSrc to triplewhale.com / triplewhale-pixel.com."
+    "Triple Whale": "Upstream entry has zero patterns. Match scriptSrc to triplewhale.com / triplewhale-pixel.com.",
+    "Implies chain - JS frameworks need Node.js": "Audit 2026-06-01: 10 JS frameworks ship without Node.js in their upstream implies chain (Astro, Remix, SvelteKit, SolidStart, Gatsby, Strapi, Eleventy, Gridsome, VuePress, VitePress). All are Node.js build tools; even when they output static HTML, the build is Node-driven. Patched.",
+    "Implies chain - PHP frameworks need PHP": "Zend and WooCommerce both ship without PHP in implies. WooCommerce is especially broken - it's a WordPress plugin and should imply WordPress + PHP + MySQL. Patched."
   },
   "Tailwind CSS": {
     "_overlay": true,
@@ -81,6 +83,54 @@
   "Vercel": {
     "_overlay": true,
     "implies": ["Node.js"]
+  },
+  "Astro": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Remix": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "SvelteKit": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "SolidStart": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Gatsby": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Strapi": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Eleventy": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Gridsome": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "VuePress": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "VitePress": {
+    "_overlay": true,
+    "implies": ["Node.js"]
+  },
+  "Zend": {
+    "_overlay": true,
+    "implies": ["PHP"]
+  },
+  "WooCommerce": {
+    "_overlay": true,
+    "implies": ["WordPress", "PHP", "MySQL"]
   },
   "Express": {
     "_overlay": true,
