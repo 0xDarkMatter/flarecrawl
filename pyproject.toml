@@ -39,6 +39,7 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "lxml>=5.0.0",
     "pyyaml>=6.0",
+    "keyring>=24.0",
 ]
 
 [project.optional-dependencies]
@@ -48,7 +49,7 @@ dev = [
 ]
 cdp = ["websockets>=13.0"]
 cookies = ["browser-cookie3>=0.20"]
-secure = ["keyring>=24.0"]
+secure = []  # keyring is now a core dep; extra kept for backwards compatibility
 stealth = ["curl_cffi>=0.7.0"]
 local-browser = ["playwright>=1.40.0"]
 videos = ["yt-dlp>=2024.1.0"]
