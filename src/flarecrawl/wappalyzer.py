@@ -97,12 +97,17 @@ class WappalyzerClient:
             # Custom fingerprint overlay - merges with the upstream DB.
             # Extends list-valued fields (html, scriptSrc, ...) and dict-
             # valued fields (meta, headers, ...) for techs that already
-            # exist upstream; adds wholly-new techs verbatim.
+            # exist upstream; adds wholly-new techs verbatim. A top-level
+            # `_disabled` array removes techs from the merged DB - used
+            # to suppress upstream fingerprints with chronic false-
+            # positive problems (Element UI, Google Sites, etc.).
             custom_file = self._data_dir / "custom_fingerprints.json"
             if custom_file.exists():
                 try:
                     custom = json.loads(custom_file.read_text(encoding="utf-8"))
                     custom.pop("_meta", None)
+                    custom.pop("_disabled_meta", None)
+                    disabled = custom.pop("_disabled", None) or []
                     for tech_name, fingerprint in custom.items():
                         if not isinstance(fingerprint, dict):
                             continue
@@ -120,7 +125,30 @@ class WappalyzerClient:
                                     existing[key] = value
                         else:
                             techs[tech_name] = fingerprint
-                    logger.debug(f"Loaded {len(custom)} custom fingerprints")
+                    # Strip disabled techs AFTER overlay merge so the merge
+                    # logic is unaffected. Also drop them from all `implies`
+                    # chains so a high-confidence tech doesn't drag a
+                    # disabled tech back in via the implies resolver.
+                    if disabled:
+                        disabled_set = set(disabled)
+                        for name in list(techs.keys()):
+                            if name in disabled_set:
+                                del techs[name]
+                                continue
+                            implies = techs[name].get("implies")
+                            if implies:
+                                if isinstance(implies, list):
+                                    techs[name]["implies"] = [
+                                        impl for impl in implies
+                                        if _implied_name(impl) not in disabled_set
+                                    ]
+                                elif isinstance(implies, str):
+                                    if _implied_name(implies) in disabled_set:
+                                        techs[name].pop("implies", None)
+                    logger.debug(
+                        f"Loaded {len(custom)} custom fingerprints; "
+                        f"disabled {len(disabled)} upstream"
+                    )
                 except (json.JSONDecodeError, OSError) as e:
                     logger.warning(f"Failed to load custom_fingerprints.json: {e}")
 
@@ -531,6 +559,13 @@ def _parse_pattern(pattern: str) -> tuple[str, dict]:
                 meta[key] = value
 
     return regex, meta
+
+
+def _implied_name(implied: str) -> str:
+    """Pull the tech name out of an `implies` entry (strip metadata suffix)."""
+    if isinstance(implied, str) and "\\;" in implied:
+        return implied.split("\\;", 1)[0]
+    return implied if isinstance(implied, str) else ""
 
 
 def _parse_implies(implied: str) -> tuple[str, dict]:

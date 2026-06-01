@@ -839,6 +839,70 @@ def test_custom_overlay_adds_new_tech(tmp_path):
     assert "NewTech" in w._techs
 
 
+def test_custom_overlay_disabled_list_removes_techs(tmp_path):
+    """Top-level `_disabled` array drops the listed techs from the merged DB."""
+    import json as _json
+
+    data = tmp_path
+    (data / "a.json").write_text(_json.dumps({
+        "Acme": {"cats": [1]},
+        "Beta": {"cats": [1]},
+        "Gamma": {"cats": [1]},
+    }), encoding="utf-8")
+    (data / "custom_fingerprints.json").write_text(_json.dumps({
+        "_meta": {"description": "test"},
+        "_disabled": ["Beta", "Gamma"],
+    }), encoding="utf-8")
+    (data / "categories.json").write_text(_json.dumps({"1": {"name": "X", "groups": []}}), encoding="utf-8")
+    (data / "groups.json").write_text("{}", encoding="utf-8")
+
+    w = WappalyzerClient(data_dir=data)
+    w._load()
+    assert w._techs is not None
+    assert "Acme" in w._techs
+    assert "Beta" not in w._techs
+    assert "Gamma" not in w._techs
+
+
+def test_custom_overlay_disabled_strips_implies(tmp_path):
+    """A disabled tech is removed from `implies` chains so the implies
+    resolver can't drag it back in via a different detected tech."""
+    import json as _json
+
+    data = tmp_path
+    (data / "a.json").write_text(_json.dumps({
+        "Acme": {"cats": [1], "implies": ["Beta", "Gamma\\;confidence:50"]},
+        "Beta": {"cats": [1]},
+        "Gamma": {"cats": [1]},
+    }), encoding="utf-8")
+    (data / "custom_fingerprints.json").write_text(_json.dumps({
+        "_meta": {"description": "test"},
+        "_disabled": ["Beta"],
+    }), encoding="utf-8")
+    (data / "categories.json").write_text(_json.dumps({"1": {"name": "X", "groups": []}}), encoding="utf-8")
+    (data / "groups.json").write_text("{}", encoding="utf-8")
+
+    w = WappalyzerClient(data_dir=data)
+    w._load()
+    assert w._techs is not None
+    acme_implies = w._techs["Acme"].get("implies", [])
+    # Beta dropped from implies; Gamma (with confidence suffix) preserved.
+    assert "Beta" not in acme_implies
+    assert any("Gamma" in entry for entry in acme_implies)
+
+
+def test_well_known_false_positives_are_disabled():
+    """The shipped overlay disables Element UI / Google Sites / etc.
+    These have chronic upstream FP issues - if they sneak back in,
+    detection quality regresses sharply."""
+    w = WappalyzerClient()
+    w._load()
+    assert w._techs is not None
+    for fp_tech in ("Element UI", "Google Sites", "Cart Functionality",
+                    "C3.js", "Contentful", "ZURB Foundation"):
+        assert fp_tech not in w._techs, f"{fp_tech} should be disabled"
+
+
 def test_custom_overlay_malformed_json_does_not_break_load(tmp_path):
     """A broken overlay file logs a warning but leaves the upstream DB intact."""
     import json as _json

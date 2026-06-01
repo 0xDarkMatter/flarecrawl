@@ -3,6 +3,23 @@
     "description": "Custom technology fingerprints loaded as an overlay on top of the upstream Wappalyzer database. Adds detections for CMS platforms, hospitality and tourism booking engines, accommodation PMS, channel managers, CSS frameworks, and POS systems where the upstream fingerprints are insufficient or missing.",
     "notes": "Do not edit the a-z.json files (vendored from enthec/webappanalyzer). Add custom fingerprints here instead."
   },
+  "_disabled": [
+    "Element UI",
+    "Cart Functionality",
+    "Google Sites",
+    "C3.js",
+    "Contentful",
+    "ZURB Foundation"
+  ],
+  "_disabled_meta": {
+    "description": "Techs explicitly removed from the loaded DB after overlay merge. These upstream Wappalyzer fingerprints have well-known false-positive issues that no amount of pattern-tightening fixes (their HTML selectors match too-generic markup). Validated against tests/bench_tech_detect.py: disabling this list raises corpus precision from 0.621 -> ~0.9+ with no recall loss on the curated 10-site corpus.",
+    "Element UI": "Matches generic 'el-' class prefixes used by countless unrelated component libraries. Fires on Stripe, Shopify, GitHub, Squarespace, etc.",
+    "Cart Functionality": "Loose regex on cart-shaped patterns; fires on any site mentioning 'cart' or 'checkout' in marketing copy.",
+    "Google Sites": "Pattern matches generic Google CSS - fires on any site that pulls a Google font or analytics asset.",
+    "C3.js": "Generic chart-library pattern; fires on sites using unrelated charting code or with 'c3' in class names.",
+    "Contentful": "Overbroad - fires on sites referencing the word 'contentful' or shipping similar SDK-style class names.",
+    "ZURB Foundation": "Loose class-name match; fires on sites with unrelated 'foundation' word usage. Real Foundation usage has dropped sharply post-2020."
+  },
   "Tailwind CSS": {
     "_overlay": true,
     "html": [
