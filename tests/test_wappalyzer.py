@@ -412,6 +412,22 @@ def tech_fixture_server():
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if path.startswith("/spa"):
+                # Synthetic SPA page that sets window.testSignal on load.
+                # Paired with the FlarecrawlTestSignal custom fingerprint to
+                # exercise the Playwright --render JS-globals probe path.
+                body = (
+                    b'<!doctype html><html><head><title>spa</title></head>'
+                    b'<body><div id="root"></div>'
+                    b'<script>window.testSignal = "match";</script>'
+                    b'</body></html>'
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             self.send_response(404)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -1423,5 +1439,118 @@ def test_concurrent_load_is_safe():
     for t in threads:
         t.join()
     assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# tech-detect --render (Playwright JS-globals probe path)
+#
+# These tests exercise `_fetch_for_tech_detect_render` end-to-end against the
+# local fixture server's /spa route. The route sets `window.testSignal` on
+# load; paired with the FlarecrawlTestSignal custom fingerprint (which has a
+# `js: {"testSignal": ""}` pattern), a successful render proves the entire
+# pipeline: Playwright launch -> page goto -> JS probe injection -> globals
+# capture -> Wappalyzer match. None of these tests touch external network.
+# ---------------------------------------------------------------------------
+
+
+def _chromium_available() -> bool:
+    """Best-effort check that Chromium is installed for Playwright."""
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: PLC0415
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as p:
+            b = p.chromium.launch(headless=True)
+            b.close()
+        return True
+    except Exception:  # noqa: BLE001 - browser missing / launch failed
+        return False
+
+
+def test_fetch_for_tech_detect_render_returns_signal_tuple(tech_fixture_server):
+    """Direct helper invocation: --render path returns (html, headers, cookies, js_globals)."""
+    pytest.importorskip("playwright")
+    if not _chromium_available():
+        pytest.skip("Playwright Chromium not installed (run `playwright install chromium`)")
+
+    from flarecrawl.cli import _fetch_for_tech_detect_render
+
+    html, headers, cookies, js_globals = _fetch_for_tech_detect_render(
+        f"{tech_fixture_server}/spa",
+        timeout=30.0,
+    )
+    # Transport succeeded (non-empty page).
+    assert "<html" in html.lower()
+    assert "testsignal" in html.lower()
+    # Headers captured via the Network.responseReceived hook.
+    lowered = {k.lower(): v for k, v in headers.items()}
+    assert lowered.get("content-type", "").startswith("text/html")
+    # No cookies on this route.
+    assert cookies == {}
+    # The JS-globals probe ran and captured window.testSignal.
+    assert js_globals.get("testSignal") == "match"
+
+
+def test_cli_tech_detect_render_subcommand_end_to_end(tech_fixture_server):
+    """`flarecrawl tech-detect <url>/spa --render --json` fires FlarecrawlTestSignal."""
+    pytest.importorskip("playwright")
+    if not _chromium_available():
+        pytest.skip("Playwright Chromium not installed (run `playwright install chromium`)")
+
+    result = subprocess.run(
+        [_flarecrawl_cmd(), "tech-detect",
+         f"{tech_fixture_server}/spa", "--render", "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    payload = json.loads(result.stdout)
+    techs = payload["data"][0]["technologies"]
+    names = {t["name"] for t in techs}
+    # The synthetic fingerprint must fire — proves the JS-globals probe path.
+    assert "FlarecrawlTestSignal" in names, (
+        f"Expected FlarecrawlTestSignal in {names}; "
+        "JS-globals probe likely failed to inject/capture."
+    )
+
+
+def test_fetch_for_tech_detect_render_missing_playwright(monkeypatch):
+    """Helper raises FlareCrawlError(MISSING_DEPENDENCY) when Playwright isn't installed."""
+    from flarecrawl.cli import _fetch_for_tech_detect_render
+    from flarecrawl.client import FlareCrawlError
+
+    # Force the `from playwright.sync_api import sync_playwright` line to fail
+    # regardless of whether playwright is actually installed on this machine.
+    monkeypatch.setitem(sys.modules, "playwright", None)
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
+
+    with pytest.raises(FlareCrawlError) as excinfo:
+        _fetch_for_tech_detect_render("http://127.0.0.1:1/whatever")
+    assert excinfo.value.code == "MISSING_DEPENDENCY"
+    msg = str(excinfo.value).lower()
+    assert "playwright" in msg
+    assert "install" in msg  # actionable hint
+
+
+def test_fetch_for_tech_detect_render_transport_error_returns_empty():
+    """Unreachable URL returns empty tuples — never raises."""
+    pytest.importorskip("playwright")
+    if not _chromium_available():
+        pytest.skip("Playwright Chromium not installed (run `playwright install chromium`)")
+
+    from flarecrawl.cli import _fetch_for_tech_detect_render
+
+    # Unallocated port on localhost - connection refused.
+    html, headers, cookies, js_globals = _fetch_for_tech_detect_render(
+        "http://127.0.0.1:1/nope",
+        timeout=5.0,
+    )
+    assert html == ""
+    assert headers == {}
+    assert cookies == {}
+    assert js_globals == {}
 
 
