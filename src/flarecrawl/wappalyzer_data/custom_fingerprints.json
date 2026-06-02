@@ -235,7 +235,7 @@
   },
   "Localis": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): tried surfcoast.vic.gov.au, warrnambool.vic.gov.au, glenelg.vic.gov.au - none use the Localis CMS at the surfaces we probed. Pattern unverified; meta-generator + explicit CDN-host requirements should keep it safe.",
     "cats": [1],
     "scriptSrc": [
       "(?:[a-z0-9-]+\\.)?localis\\.com\\.au/",
@@ -263,7 +263,7 @@
   },
   "Mews": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.amistathostels.com (real Mews customer). Locked in by tests/bench_tech_detect.py.",
     "cats": [5, 93],
     "scriptSrc": [
       "(?:book|app|api)\\.mews\\.com/",
@@ -301,7 +301,7 @@
   },
   "Tock": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): tried alinearestaurant.com, atomixnyc.com, saisonsf.com, elskerestaurant.com, canlis.com, singlethreadfarms.com - all show OpenTable or Squarespace, none show Tock. Either the corpus migrated off Tock or the widget script src changed. Pattern unverified; needs a current Tock customer page.",
     "cats": [93],
     "scriptSrc": [
       "widget\\.exploretock\\.com/",
@@ -315,7 +315,7 @@
   },
   "TheFork": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): TheFork's own domains return DataDome 403s and customer restaurant pages JS-inject the widget. Tried angelinaparis.com, cafedeflore.fr, brasserieflo.com, alocafe.com, restaurantgrace.com, eleven-madison.com - none fire. Pattern unverified.",
     "cats": [93],
     "scriptSrc": [
       "(?:widget|module|cdn)\\.thefork\\.com/",
@@ -340,7 +340,7 @@
   },
   "Eventbrite": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): widget is JS-injected post-render on customer pages. Tried tedxsydney.com, lanewayfestival.com, startupgrind.com, tropfest.com - none fire `Eventbrite` (only the generic React/Next.js host). CDP probe also misses (DataDome on www.eventbrite.com itself). Pattern plausible but needs a non-DataDome-blocked customer page that statically embeds the widget script src to lock in.",
     "cats": [5, 104],
     "scriptSrc": [
       "(?:www|widgets|cdn)\\.eventbrite\\.com/",
@@ -370,7 +370,7 @@
   },
   "SevenRooms": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.thehoxton.com (real SevenRooms customer). Locked in by tests/bench_tech_detect.py.",
     "cats": [93],
     "html": [
       "sevenrooms\\.com/(?:reservations|events|explore)"
@@ -399,7 +399,7 @@
   },
   "OpenTable": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.singlethreadfarms.com (real OpenTable customer). Locked in by tests/bench_tech_detect.py.",
     "dom": [
       "a[href*='opentable.com/restProfile']",
       "a[href*='opentable.com/r/']"
@@ -407,7 +407,7 @@
   },
   "Mr Yum": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): vendor consolidated under me&u and now ships customer widgets at `meandu.app`. The `mryum.com` regex no longer matches a live customer surface. Bench coverage will move under the me&u fingerprint instead; this entry kept as a legacy substring catch.",
     "cats": [
       93
     ],
@@ -487,7 +487,7 @@
   },
   "Square Online": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): every `*.square.site` URL returns a DataDome challenge with no surface scripts; merchants on custom domains load the storefront via a JS bootstrap. Tried shop.square.site, soadough.com, harlemshakenyc.com, popeyesbattlesouthernfried.square.site - no hits. Pattern unverified; needs a Square-on-custom-domain site we can fetch.",
     "dom": [
       "link[href*='square.site']",
       "script[src*='squareup.com']"
@@ -499,13 +499,18 @@
   },
   "Bento": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Pattern tightened 2026-06-02: original `bfresco.com` substring match was a false-positive trap (the apex bfresco.com is unrelated 'Buon Fresco' decorative arts, which self-links and falsely fires Bento). Bento customer storefronts live on `<merchant>.bfresco.com/(menu|order)` subdomains, so the pattern now requires a subdomain prefix AND a Bento path segment. Still unverified against a real customer site - TODO add one to the bench corpus.",
     "cats": [
       93
     ],
     "description": "Bento is an Australian online ordering platform for hospitality.",
+    "html": [
+      "[a-z0-9-]+\\.bfresco\\.com/(?:menu|order|cart|checkout)"
+    ],
     "dom": [
-      "a[href*='bfresco.com']"
+      "a[href*='.bfresco.com/menu']",
+      "a[href*='.bfresco.com/order']",
+      "iframe[src*='.bfresco.com/']"
     ],
     "website": "https://www.bfresco.com/"
   },
@@ -593,7 +598,7 @@
     "website": "https://www.bookingboss.com/"
   },
   "Cobber": {
-    "_overlay_note": "Vendor brand site could not be probed via CDP (timeout/connection error 2026-06-02). Pattern is plausible but unverified.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.cairnsadventuregroup.com.au (real Cobber/ResPax customer). Locked in by tests/bench_tech_detect.py.",
     "cats": [
       5,
       72
@@ -627,7 +632,7 @@
     "website": "https://cobber.one/"
   },
   "Nabooki": {
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.thequietcone.com.au (real Nabooki customer). Locked in by tests/bench_tech_detect.py.",
     "cats": [
       5,
       72
@@ -679,7 +684,7 @@
   },
   "SiteMinder": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 against https://stayhotels.com.au and https://www.southaustralia.com (real SiteMinder customers). Locked in by tests/bench_tech_detect.py.",
     "cats": [32],
     "html": [
       "thebookingbutton\\.com",
@@ -722,7 +727,7 @@
   },
   "Ventrata": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.esbnyc.com (Empire State Building - real Ventrata customer). Locked in by tests/bench_tech_detect.py.",
     "html": [
       "ventrata-checkout",
       "ventrata-embedded-widget",
@@ -735,7 +740,7 @@
   },
   "Bokun": {
     "_overlay": true,
-    "_overlay_note": "Vendor brand site could not be probed via CDP (timeout/connection error 2026-06-02). Pattern is plausible but unverified.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.bokun.io (vendor brand site self-embeds the widget loader as of this audit). Locked in by tests/bench_tech_detect.py.",
     "cats": [104],
     "html": [
       "bokunWidget",
@@ -825,7 +830,7 @@
     "website": "https://www.rmscloud.com/"
   },
   "NewBook": {
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): customer iframes for `newbook.cloud` are JS-injected post-render. Tried discoveryparks.com.au, tasmanholidayparks.com, nrmaparksandresorts.com.au, amaroopark.com.au - none expose the iframe in static HTML and CDP didn't surface it either. Pattern unverified; would need a holiday-park site that ships server-rendered booking iframes.",
     "cats": [
       5,
       72
@@ -895,7 +900,7 @@
     "website": "https://www.seekom.com/"
   },
   "STAAH": {
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): booking-engine iframe is JS-injected by the hotel's CMS. Tried staah.com, bonaccordhotel.com.au, tigerhotel.com.au, westernerhotel.com.au, mountainbluesresort.com.au - none expose the iframe statically. Pattern unverified.",
     "cats": [
       5
     ],
@@ -1074,7 +1079,7 @@
     "website": "https://www.priava.com/"
   },
   "ATDW": {
-    "_overlay_note": "Vendor brand site could not be probed via CDP (timeout/connection error 2026-06-02). Pattern is plausible but unverified.",
+    "_overlay_note": "Validated 2026-06-02 against https://www.southaustralia.com (bench corpus entry confirms ATDW fires on a real customer site). Locked in by tests/bench_tech_detect.py.",
     "cats": [
       5,
       1
@@ -1131,7 +1136,7 @@
     "website": "https://www.redballoon.com.au/"
   },
   "Adrenaline": {
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): vendor brand site does not self-embed. Tried bridgeclimb.com, skydive.com.au, bigredgroup.com.au (parent) - no hits via static HTTP or CDP. Marketplace customers link in via JS-rendered deep-linked widgets, which neither static nor CDP rendered fetch surfaces. Bench guard still pending a known customer site.",
     "cats": [
       5,
       104
@@ -1148,7 +1153,7 @@
     "website": "https://www.adrenaline.com.au/"
   },
   "Experience Oz": {
-    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
+    "_overlay_note": "Validated 2026-06-02 (round 2): same root cause as Adrenaline (sibling Big Red Group brand). Tried experienceoz.com.au, bigredgroup.com.au, skydivetours.com.au - vendor SPA + no static referrers. Bench guard still pending a known customer.",
     "cats": [
       5,
       104

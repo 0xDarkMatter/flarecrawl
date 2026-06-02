@@ -1002,6 +1002,40 @@ def test_patched_empty_upstream_fingerprints_fire():
         assert tech_name in names, f"Patched fingerprint for {tech_name!r} did not fire"
 
 
+def test_bento_pattern_requires_subdomain_not_apex():
+    """The original Bento overlay matched the bare substring `bfresco.com`,
+    which falsely fires on https://bfresco.com (Buon Fresco, an unrelated
+    decorative-arts business that owns the apex domain and self-links in
+    its footer). Bento customer storefronts live on
+    `<merchant>.bfresco.com/(menu|order|cart|checkout)` subdomains, so
+    the pattern now requires both a subdomain prefix AND a Bento path
+    segment.
+
+    This test guards against the regex being loosened back to a bare
+    substring match - which would silently re-introduce the false
+    positive on every site that links to the apex.
+    """
+    w = WappalyzerClient()
+    # 1) Bare apex MUST NOT fire (the false positive).
+    apex_html = '<html><body><a href="https://bfresco.com/">about us</a></body></html>'
+    detections = w.analyze(html=apex_html)
+    assert "Bento" not in [d.name for d in detections], (
+        "Bento overlay pattern is too loose - fired on bare apex bfresco.com"
+    )
+
+    # 2) Subdomain + Bento path MUST fire (a real customer surface).
+    customer_html = (
+        '<html><body>'
+        '<a href="https://acme.bfresco.com/menu">order online</a>'
+        '<iframe src="https://acme.bfresco.com/order/widget"></iframe>'
+        '</body></html>'
+    )
+    detections = w.analyze(html=customer_html)
+    assert "Bento" in [d.name for d in detections], (
+        "Bento overlay pattern stopped firing on a real customer-shaped URL"
+    )
+
+
 def test_well_known_false_positives_are_disabled():
     """The shipped overlay disables Element UI / Google Sites / etc.
     These have chronic upstream FP issues - if they sneak back in,

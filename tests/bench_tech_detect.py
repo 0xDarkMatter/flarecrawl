@@ -858,6 +858,164 @@ CORPUS: list[dict] = [
             "Element UI", "Google Sites", "Cart Functionality",
         ],
     },
+    # -------------------------------------------------------------------
+    # Customer-site validators for hospitality overlay fingerprints.
+    # Each site below is a real *customer* of the vendor named in
+    # must_detect - distinct from the vendor-brand entries above. The
+    # original synthetic-only validation didn't catch real-world drift
+    # in vendors whose marketing sites stopped self-embedding the
+    # widget (Mews, OpenTable, SevenRooms, SiteMinder, Ventrata, ...).
+    # See docs/custom-overlay-validation.md for the audit.
+    # -------------------------------------------------------------------
+    {
+        # Bokun's own marketing site (now self-embeds the widget loader
+        # - the earlier 2026-06-02 audit flagged Bokun as a non-self-embed
+        # case, but re-probing 2026-06-02 confirms bokun.io ships the
+        # `BokunWidgetsLoader` script in static HTML).
+        "url": "https://www.bokun.io",
+        "must_detect": ["Bokun"],
+        "acceptable_also": [
+            "Autoptimize", "Cloudflare", "Cloudflare Bot Management",
+            "Cookie Notice", "Facebook Pixel", "Font Awesome",
+            "Google Font API", "HTTP/3", "Kinsta", "Linkedin Ads",
+            "MySQL", "Open Graph", "PHP", "RSS", "Swiper", "Tailwind CSS",
+            "WordPress", "Yoast SEO", "cdnjs", "jQuery", "jQuery Migrate",
+            "jsDelivr",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "Rezdy", "FareHarbor", "OpenTable", "SevenRooms",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Tourism South Australia - destination marketing site that
+        # embeds both the ATDW pixel AND a SiteMinder booking surface.
+        # Two-in-one guard for both overlay fingerprints.
+        "url": "https://www.southaustralia.com",
+        "must_detect": ["ATDW", "SiteMinder"],
+        "acceptable_also": [
+            "Azure", "Bootstrap", "Cloudflare", "Google Tag Manager",
+            "HSTS", "HTTP/3", "Handlebars", "OneTrust", "Open Graph",
+            "RMS Cloud", "Tourism Exchange Australia", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "OpenTable", "SevenRooms", "Bokun", "Rezdy",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Cairns Adventure Group - AU tour operator on Cobber/ResPax.
+        "url": "https://www.cairnsadventuregroup.com.au",
+        "must_detect": ["Cobber"],
+        "acceptable_also": [
+            "Google Analytics", "Google Maps", "Google Tag Manager",
+            "HubSpot", "Lightbox", "MySQL", "Nginx", "Open Graph",
+            "PHP", "Site Kit", "Slick", "WOW", "WordPress", "Yoast SEO",
+            "jQuery", "jQuery Migrate",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "Rezdy", "FareHarbor", "Bokun", "OpenTable",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Amista Hostels - small hotel chain on Mews PMS.
+        "url": "https://www.amistathostels.com",
+        "must_detect": ["Mews"],
+        "acceptable_also": [
+            "Cookiebot", "Google Tag Manager", "HSTS", "Nginx",
+            "Open Graph", "PHP", "Spotify Web API", "Swiper",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Cloudbeds", "SiteMinder", "STAAH", "OpenTable", "SevenRooms",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Small AU tour operator with embedded Nabooki widget.
+        "url": "https://www.thequietcone.com.au",
+        "must_detect": ["Nabooki"],
+        "acceptable_also": [
+            "Cloudflare", "Cloudflare Bot Management", "MySQL",
+            "Open Graph", "PHP", "Weebly", "jQuery", "reCAPTCHA",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Rezdy", "FareHarbor", "Bokun", "Cobber",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # SingleThread Farms (3-Michelin-star CA restaurant) - OpenTable.
+        "url": "https://www.singlethreadfarms.com",
+        "must_detect": ["OpenTable"],
+        "acceptable_also": [
+            "Elementor", "Google Analytics", "Google Maps",
+            "Google Tag Manager", "Gravity Forms", "MySQL", "Nginx",
+            "Open Graph", "PHP", "RSS", "Revinate", "SiteGround",
+            "WordPress", "jQuery", "jQuery Migrate", "jsDelivr",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "SevenRooms", "Tock", "TheFork", "ResDiary",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # The Hoxton - boutique hotel chain using SevenRooms for
+        # restaurant reservations on their dining surfaces.
+        "url": "https://www.thehoxton.com",
+        "must_detect": ["SevenRooms"],
+        "acceptable_also": [
+            "AB Tasty", "Drupal Multisite", "Google Tag Manager", "HSTS",
+            "MySQL", "Nginx", "OneTrust", "Open Graph", "PHP", "Swiper",
+            "Weglot", "WordPress", "WordPress Multisite", "WordPress VIP",
+            "Yoast SEO",
+        ],
+        "confirmed_not": [
+            "Shopify", "Wix", "Squarespace",
+            "OpenTable", "Tock", "TheFork", "ResDiary",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Stay Hotels (AU group) - direct-booking via SiteMinder's
+        # TheBookingButton widget.
+        "url": "https://stayhotels.com.au",
+        "must_detect": ["SiteMinder"],
+        "acceptable_also": [
+            "Adobe Fonts", "Google Analytics", "Google Maps", "HTTP/3",
+            "LiteSpeed", "LiteSpeed Cache", "Litespeed Cache", "MySQL",
+            "Open Graph", "PHP", "RSS", "Typekit", "Underscore.js",
+            "WordPress", "Yoast SEO", "jQuery", "jQuery Migrate",
+        ],
+        "confirmed_not": [
+            "Drupal", "Shopify", "Wix", "Squarespace",
+            "Cloudbeds", "Mews", "STAAH", "OpenTable", "SevenRooms",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        # Empire State Building - sells observation-deck tickets via
+        # Ventrata's checkout widget.
+        "url": "https://www.esbnyc.com",
+        "must_detect": ["Ventrata"],
+        "acceptable_also": [
+            "Acquia Cloud Platform", "AddToAny", "Akamai", "Akamai mPulse",
+            "Amazon Web Services", "Boomerang", "Drupal", "HSTS",
+            "Magnific Popup", "OneTrust", "Open Graph", "PHP", "PWA",
+            "Refersion", "Select2", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Shopify", "Wix", "Squarespace",
+            "Rezdy", "FareHarbor", "Bokun", "OpenTable", "SevenRooms",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
 ]
 
 
