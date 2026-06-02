@@ -1499,15 +1499,5 @@
       "X-ROAM": ""
     },
     "website": "https://roam.industries"
-  },
-  "FlarecrawlTestSignal": {
-    "_overlay": true,
-    "cats": [
-      19
-    ],
-    "description": "Synthetic fingerprint used by tests/test_wappalyzer.py to verify the Playwright --render JS-globals probe path. Fires only when window.testSignal is set on the loaded page, which no real site does. Do not remove without also updating tests/test_wappalyzer.py.",
-    "js": {
-      "testSignal": ""
-    }
   }
 }

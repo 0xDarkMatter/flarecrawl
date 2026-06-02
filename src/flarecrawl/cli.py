@@ -3388,125 +3388,121 @@ def fetch(
 # ------------------------------------------------------------------
 
 
-def _fetch_for_tech_detect_render(
+def _fetch_for_tech_detect_cdp(
     url: str,
     *,
     cookies_in: list[dict] | None = None,
     custom_headers: dict[str, str] | None = None,
     proxy: str | None = None,
     timeout: float = 60.0,
+    as_json: bool = False,
 ) -> tuple[str, dict[str, str], dict[str, str], "dict[str, str | None]"]:
-    """Render a URL via Playwright Chromium and return (html, headers, cookies, js_globals).
+    """Render a URL via Cloudflare Browser Run CDP and return (html, headers, cookies, js_globals).
 
     Unlocks the ~880 Wappalyzer fingerprints that only fire via a
     window-globals probe (jQuery version, Next.js buildId, React
-    internals, framework-detect lib markers, ...). Also captures the
-    main document's response headers via Network.responseReceived,
-    which the static-HTTP path can sometimes get wrong on sites that
-    redirect through edge proxies.
+    internals, framework-detect lib markers, ...). Reuses the same CDP
+    machinery the v0.30.0 scrape `--cdp --tech-detect` path uses —
+    `Network.responseReceived` for the main document's headers,
+    `Runtime.evaluate` for the probe — so the JS-globals coverage is
+    identical between this command and `scrape --cdp --tech-detect`.
 
-    Returns empty tuples on transport / Playwright error.
+    Costs CF browser time like any other CDP-routed command. Returns
+    empty tuples on transport / CDP error.
     """
+    from .cdp import MainDocumentHeaders
     from .wappalyzer import get_wappalyzer
-
-    try:
-        from playwright.sync_api import sync_playwright  # noqa: PLC0415
-    except ImportError:
-        raise FlareCrawlError(
-            "--render requires Playwright. Install with:\n"
-            "  uv pip install playwright && playwright install chromium",
-            code="MISSING_DEPENDENCY",
-        ) from None
 
     html = ""
     headers: dict[str, str] = {}
     cookies: dict[str, str] = {}
     js_globals: dict[str, "str | None"] = {}
 
-    main_doc_headers: dict[str, str] = {}
+    cdp_client = _get_cdp_client(as_json=as_json, proxy=proxy)
+    page = None
+    try:
+        page = cdp_client.new_page()
 
-    def _on_response(response):
-        # Only capture the navigation document, not subresources.
-        if response.request.resource_type != "document":
-            return
-        # Last-wins handles redirect chains - the final 200 overwrites
-        # any 30x interim responses.
-        nonlocal main_doc_headers
+        # Header collector — Network.responseReceived for the main document.
+        # Must be subscribed before navigate, and Network domain must be
+        # enabled for the event to fire.
+        header_collector = MainDocumentHeaders(expected_url=url)
+        cdp_client.subscribe(
+            "Network.responseReceived",
+            lambda p: header_collector._on_response_received(p),
+        )
+        page.enable_network()
+
+        if custom_headers:
+            try:
+                page.send("Network.setExtraHTTPHeaders",
+                          {"headers": dict(custom_headers)})
+            except Exception:  # noqa: BLE001
+                pass
+
+        if cookies_in:
+            try:
+                page.set_cookies([c for c in cookies_in if isinstance(c, dict)])
+            except Exception:  # noqa: BLE001
+                pass
+
         try:
-            main_doc_headers = {str(k): str(v) for k, v in response.headers.items()}
+            page.navigate(url, wait_until="networkidle0",
+                          timeout=int(timeout * 1000))
+        except Exception:  # noqa: BLE001
+            # A navigation timeout still leaves us a partially-loaded page
+            # to probe — better than nothing.
+            pass
+
+        try:
+            html = page.get_content() or ""
+        except Exception:  # noqa: BLE001
+            html = ""
+
+        headers = dict(header_collector.headers)
+
+        try:
+            for c in page.get_cookies(urls=[url]) or []:
+                name = c.get("name")
+                val = c.get("value")
+                if isinstance(name, str) and isinstance(val, str):
+                    cookies[name] = val
         except Exception:  # noqa: BLE001
             pass
 
-    try:
-        with sync_playwright() as p:
-            launch_args: dict = {"headless": True}
-            if proxy:
-                launch_args["proxy"] = {"server": proxy}
-            browser = p.chromium.launch(**launch_args)
-            try:
-                ctx_args: dict = {}
-                if custom_headers:
-                    ctx_args["extra_http_headers"] = custom_headers
-                context = browser.new_context(**ctx_args)
-                if cookies_in:
-                    pw_cookies = []
-                    for c in cookies_in:
-                        if not isinstance(c, dict) or not c.get("name"):
-                            continue
-                        pw_c: dict = {
-                            "name": c["name"],
-                            "value": c.get("value", ""),
-                        }
-                        if c.get("domain"):
-                            pw_c["domain"] = c["domain"]
-                            pw_c["path"] = c.get("path", "/")
-                        else:
-                            pw_c["url"] = url
-                        pw_cookies.append(pw_c)
-                    if pw_cookies:
-                        context.add_cookies(pw_cookies)
-                page = context.new_page()
-                page.on("response", _on_response)
-                page.goto(url, wait_until="load",
-                          timeout=int(timeout * 1000))
-                # Best-effort settle so SPAs hydrate before the probe runs.
-                try:
-                    page.wait_for_load_state("networkidle",
-                                             timeout=int(timeout * 1000 / 2))
-                except Exception:  # noqa: BLE001
-                    pass
-
-                html = page.content()
-                headers = dict(main_doc_headers)
-                for c in context.cookies():
-                    name = c.get("name")
-                    val = c.get("value")
-                    if isinstance(name, str) and isinstance(val, str):
-                        cookies[name] = val
-
-                # Inject the wappalyzer JS-globals probe.
-                probe = get_wappalyzer().build_js_probe()
-                try:
-                    page.evaluate(probe)
-                    raw = page.evaluate(
-                        "(function(){var e=document.getElementById('wap-probe');"
-                        "return e?e.textContent:'';})()"
-                    )
-                    if isinstance(raw, str) and raw.strip().startswith("{"):
-                        parsed = json.loads(raw)
-                        if isinstance(parsed, dict):
-                            for k, v in parsed.items():
-                                if isinstance(k, str):
-                                    js_globals[k] = (
-                                        v if (v is None or isinstance(v, str))
-                                        else str(v)
-                                    )
-                except Exception:  # noqa: BLE001 - probe is best-effort
-                    pass
-            finally:
-                browser.close()
+        # Inject the wappalyzer JS-globals probe (same shape as the
+        # scrape --cdp --tech-detect path).
+        try:
+            probe = get_wappalyzer().build_js_probe()
+            page.evaluate(probe, await_promise=False)
+            raw = page.evaluate(
+                "(function(){var e=document.getElementById('wap-probe');"
+                "return e?e.textContent:'';})()",
+                await_promise=False,
+            )
+            if isinstance(raw, str) and raw.strip().startswith("{"):
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    for k, v in parsed.items():
+                        if isinstance(k, str):
+                            js_globals[k] = (
+                                v if (v is None or isinstance(v, str))
+                                else str(v)
+                            )
+        except Exception:  # noqa: BLE001 - probe is best-effort
+            pass
     except Exception:  # noqa: BLE001
         return "", {}, {}, {}
+    finally:
+        if page is not None:
+            try:
+                page.close()
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            cdp_client.close()
+        except Exception:  # noqa: BLE001
+            pass
 
     return html, headers, cookies, js_globals
 
@@ -3665,15 +3661,15 @@ def tech_detect_command(
         Path | None,
         typer.Option("--output", "-o", help="Output file path"),
     ] = None,
-    render: Annotated[
+    cdp: Annotated[
         bool,
         typer.Option(
-            "--render",
-            help=("Render the page via Playwright Chromium and inject the "
-                  "JS-globals probe. Unlocks ~880 Wappalyzer fingerprints "
+            "--cdp",
+            help=("Render the page via Cloudflare Browser Run CDP and inject "
+                  "the JS-globals probe. Unlocks ~880 Wappalyzer fingerprints "
                   "that only fire via window globals (jQuery version, "
-                  "Next.js buildId, framework-detect markers, ...). Slower "
-                  "(~3-5s/URL); requires playwright + Chromium installed."),
+                  "Next.js buildId, framework-detect markers, ...). Costs CF "
+                  "browser time like any other --cdp command. Requires auth."),
         ),
     ] = False,
 ) -> None:
@@ -3809,13 +3805,14 @@ def tech_detect_command(
     # ---- detect per URL ----------------------------------------------
     def _one(target: str) -> dict:
         js_globals: "dict[str, str | None] | None" = None
-        if render:
-            html, hdrs, cks, js_globals = _fetch_for_tech_detect_render(
+        if cdp:
+            html, hdrs, cks, js_globals = _fetch_for_tech_detect_cdp(
                 target,
                 cookies_in=_session_cookies,
                 custom_headers=parsed_headers or None,
                 proxy=effective_proxy,
                 timeout=max(timeout, 60.0),
+                as_json=json_output,
             )
             js_globals = js_globals or None
         else:
