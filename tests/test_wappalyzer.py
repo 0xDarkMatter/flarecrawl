@@ -75,6 +75,30 @@ def test_categories_loaded():
     assert w.category_count > 50
 
 
+def test_custom_overlay_categories_are_set():
+    """Every custom-overlay tech in the hospitality/tourism set must have a
+    non-empty `cats` after the overlay merge. An uncategorised fingerprint
+    silently breaks --only-categories / --exclude-categories filtering and
+    downstream consumers that group detections by category.
+    """
+    w = WappalyzerClient()
+    w._load()
+    assert w._techs is not None
+    must_have_cats = [
+        "Roam", "Localis", "Simpleview CMS", "Craft CMS", "ATDW",
+        "SevenRooms", "OpenTable", "ResDiary", "Quandoo", "Resy",
+        "Tock", "TheFork", "FareHarbor", "Rezdy", "Bokun",
+        "Mews", "Cloudbeds", "SiteMinder", "Square Online",
+        "Triptease", "Eventbrite", "Tailwind CSS",
+    ]
+    missing = []
+    for name in must_have_cats:
+        fp = w._techs.get(name)
+        if fp is None or not fp.get("cats"):
+            missing.append(name)
+    assert not missing, f"Techs without cats: {missing}"
+
+
 # ---------------------------------------------------------------------------
 # Detection
 # ---------------------------------------------------------------------------

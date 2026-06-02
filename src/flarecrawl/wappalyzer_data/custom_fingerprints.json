@@ -243,6 +243,7 @@
   },
   "Localis": {
     "_overlay": true,
+    "cats": [1],
     "scriptSrc": [
       "(?:[a-z0-9-]+\\.)?localis\\.com\\.au/",
       "(?:[a-z0-9-]+\\.)?localiscdn\\.com/"
@@ -257,6 +258,7 @@
   },
   "Simpleview CMS": {
     "_overlay": true,
+    "cats": [1],
     "scriptSrc": [
       "(?:[a-z0-9-]+\\.)?simpleviewinc\\.com/",
       "(?:[a-z0-9-]+\\.)?simpleviewcms\\.com/"
@@ -268,6 +270,7 @@
   },
   "Mews": {
     "_overlay": true,
+    "cats": [5, 93],
     "scriptSrc": [
       "(?:book|app|api)\\.mews\\.com/",
       "(?:[a-z0-9-]+\\.)?mews-systems\\.com/",
@@ -280,6 +283,7 @@
   },
   "Cloudbeds": {
     "_overlay": true,
+    "cats": [5, 93],
     "scriptSrc": [
       "(?:hotels|widget|app|cdn)\\.cloudbeds\\.com/",
       "(?:[a-z0-9-]+\\.)?mybookings\\.cloudbeds\\.com/"
@@ -315,6 +319,7 @@
   },
   "Tock": {
     "_overlay": true,
+    "cats": [93],
     "scriptSrc": [
       "widget\\.exploretock\\.com/",
       "(?:[a-z0-9-]+\\.)?exploretock\\.com/widget",
@@ -327,6 +332,7 @@
   },
   "TheFork": {
     "_overlay": true,
+    "cats": [93],
     "scriptSrc": [
       "(?:widget|module|cdn)\\.thefork\\.com/",
       "(?:widget|module)\\.lafourchette\\.com/",
@@ -339,6 +345,7 @@
   },
   "Triptease": {
     "_overlay": true,
+    "cats": [5, 32],
     "scriptSrc": [
       "(?:[a-z0-9-]+\\.)?triptease\\.com/",
       "(?:[a-z0-9-]+\\.)?triptease\\.net/"
@@ -349,6 +356,7 @@
   },
   "Eventbrite": {
     "_overlay": true,
+    "cats": [5, 104],
     "scriptSrc": [
       "(?:www|widgets|cdn)\\.eventbrite\\.com/",
       "(?:[a-z]{2}\\.)?eventbrite\\.com/static/"
@@ -377,6 +385,7 @@
   },
   "SevenRooms": {
     "_overlay": true,
+    "cats": [93],
     "html": [
       "sevenrooms\\.com/(?:reservations|events|explore)"
     ],
@@ -651,6 +660,7 @@
   },
   "FareHarbor": {
     "_overlay": true,
+    "cats": [104],
     "html": [
       "fh-ready",
       "fareharbor\\.com/embeds/"
@@ -661,6 +671,7 @@
   },
   "Rezdy": {
     "_overlay": true,
+    "cats": [104],
     "html": [
       "rezdy\\.com/(?:pluginJs|widget)",
       "rezdy-widget"
@@ -676,6 +687,7 @@
   },
   "SiteMinder": {
     "_overlay": true,
+    "cats": [32],
     "html": [
       "thebookingbutton\\.com",
       "direct-book\\.com",
@@ -729,6 +741,7 @@
   },
   "Bokun": {
     "_overlay": true,
+    "cats": [104],
     "html": [
       "bokunWidget",
       "BokunWidgetsLoader",
@@ -1060,7 +1073,8 @@
   },
   "ATDW": {
     "cats": [
-      5
+      5,
+      1
     ],
     "description": "Australian Tourism Data Warehouse — national tourism listing platform. Tracking pixel embeds productId for cross-referencing.",
     "html": [
@@ -1465,6 +1479,15 @@
       "a[href*='ibisreservations.com']"
     ],
     "website": "https://ibis.co.nz/"
+  },
+  "Roam": {
+    "cats": [1],
+    "description": "Tourism content platform powering destination-marketing sites. Detected via the X-ROAM response header set by Roam's edge cache.",
+    "saas": true,
+    "headers": {
+      "X-ROAM": ""
+    },
+    "website": "https://roam.industries"
   },
   "FlarecrawlTestSignal": {
     "_overlay": true,
