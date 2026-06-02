@@ -235,6 +235,7 @@
   },
   "Localis": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [1],
     "scriptSrc": [
       "(?:[a-z0-9-]+\\.)?localis\\.com\\.au/",
@@ -262,6 +263,7 @@
   },
   "Mews": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [5, 93],
     "scriptSrc": [
       "(?:book|app|api)\\.mews\\.com/",
@@ -299,6 +301,7 @@
   },
   "Tock": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [93],
     "scriptSrc": [
       "widget\\.exploretock\\.com/",
@@ -312,6 +315,7 @@
   },
   "TheFork": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [93],
     "scriptSrc": [
       "(?:widget|module|cdn)\\.thefork\\.com/",
@@ -336,6 +340,7 @@
   },
   "Eventbrite": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [5, 104],
     "scriptSrc": [
       "(?:www|widgets|cdn)\\.eventbrite\\.com/",
@@ -365,6 +370,7 @@
   },
   "SevenRooms": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [93],
     "html": [
       "sevenrooms\\.com/(?:reservations|events|explore)"
@@ -393,6 +399,7 @@
   },
   "OpenTable": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "dom": [
       "a[href*='opentable.com/restProfile']",
       "a[href*='opentable.com/r/']"
@@ -400,6 +407,7 @@
   },
   "Mr Yum": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       93
     ],
@@ -479,6 +487,7 @@
   },
   "Square Online": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "dom": [
       "link[href*='square.site']",
       "script[src*='squareup.com']"
@@ -490,6 +499,7 @@
   },
   "Bento": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       93
     ],
@@ -583,6 +593,7 @@
     "website": "https://www.bookingboss.com/"
   },
   "Cobber": {
+    "_overlay_note": "Vendor brand site could not be probed via CDP (timeout/connection error 2026-06-02). Pattern is plausible but unverified.",
     "cats": [
       5,
       72
@@ -616,6 +627,7 @@
     "website": "https://cobber.one/"
   },
   "Nabooki": {
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       5,
       72
@@ -667,6 +679,7 @@
   },
   "SiteMinder": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [32],
     "html": [
       "thebookingbutton\\.com",
@@ -709,6 +722,7 @@
   },
   "Ventrata": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "html": [
       "ventrata-checkout",
       "ventrata-embedded-widget",
@@ -721,6 +735,7 @@
   },
   "Bokun": {
     "_overlay": true,
+    "_overlay_note": "Vendor brand site could not be probed via CDP (timeout/connection error 2026-06-02). Pattern is plausible but unverified.",
     "cats": [104],
     "html": [
       "bokunWidget",
@@ -810,6 +825,7 @@
     "website": "https://www.rmscloud.com/"
   },
   "NewBook": {
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       5,
       72
@@ -879,6 +895,7 @@
     "website": "https://www.seekom.com/"
   },
   "STAAH": {
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       5
     ],
@@ -1057,6 +1074,7 @@
     "website": "https://www.priava.com/"
   },
   "ATDW": {
+    "_overlay_note": "Vendor brand site could not be probed via CDP (timeout/connection error 2026-06-02). Pattern is plausible but unverified.",
     "cats": [
       5,
       1
@@ -1113,6 +1131,7 @@
     "website": "https://www.redballoon.com.au/"
   },
   "Adrenaline": {
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       5,
       104
@@ -1129,6 +1148,7 @@
     "website": "https://www.adrenaline.com.au/"
   },
   "Experience Oz": {
+    "_overlay_note": "Vendor brand site does not self-embed widget (validated 2026-06-02: HTTP probe + CDP/JS-globals probe both negative on vendor marketing domain). Pattern is plausible but unverified against a real customer site. TODO: add a known customer site to the bench corpus to lock this in.",
     "cats": [
       5,
       104

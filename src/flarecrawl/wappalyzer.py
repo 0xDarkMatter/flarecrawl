@@ -115,12 +115,41 @@ class WappalyzerClient:
                         if tech_name in techs:
                             existing = techs[tech_name]
                             for key, value in fingerprint.items():
-                                if isinstance(value, list) and isinstance(existing.get(key), list):
+                                existing_val = existing.get(key)
+                                if isinstance(value, list) and isinstance(existing_val, list):
                                     for item in value:
-                                        if item not in existing[key]:
-                                            existing[key].append(item)
-                                elif isinstance(value, dict) and isinstance(existing.get(key), dict):
-                                    existing[key].update(value)
+                                        if item not in existing_val:
+                                            existing_val.append(item)
+                                elif isinstance(value, dict) and isinstance(existing_val, dict):
+                                    existing_val.update(value)
+                                elif isinstance(value, list) and isinstance(existing_val, dict):
+                                    # Overlay declared a list (e.g. `dom`:
+                                    # ["a[href*=...]"]) but upstream stores
+                                    # this field as a dict (e.g. `dom`:
+                                    # {selector: {attributes: ...}}). Without
+                                    # this branch the overlay value falls
+                                    # through to "key not in existing" and is
+                                    # silently dropped. Promote bare selector
+                                    # strings to {selector: {}} so the overlay
+                                    # signals actually fire.
+                                    logger.debug(
+                                        "overlay merge: promoting list -> dict "
+                                        "for %s.%s", tech_name, key
+                                    )
+                                    for sel in value:
+                                        if isinstance(sel, str) and sel not in existing_val:
+                                            existing_val[sel] = {}
+                                elif isinstance(value, dict) and isinstance(existing_val, list):
+                                    logger.debug(
+                                        "overlay merge: promoting upstream list -> dict "
+                                        "for %s.%s", tech_name, key
+                                    )
+                                    promoted: dict = {
+                                        sel: {} for sel in existing_val
+                                        if isinstance(sel, str)
+                                    }
+                                    promoted.update(value)
+                                    existing[key] = promoted
                                 elif key not in existing:
                                     existing[key] = value
                         else:

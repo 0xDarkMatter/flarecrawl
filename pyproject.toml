@@ -40,6 +40,11 @@ dependencies = [
     "lxml>=5.0.0",
     "pyyaml>=6.0",
     "keyring>=24.0",
+    # selectolax is imported unconditionally by extract.py and authcrawl.py,
+    # both of which are pulled in transitively whenever the CLI runs (e.g.
+    # `flarecrawl scrape ...`). Listing it as a core dependency keeps a
+    # bare `uv sync` install actually runnable.
+    "selectolax>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -57,7 +62,6 @@ recipes = ["pyyaml>=6.0"]
 perf = [
   "uvloop>=0.19.0; sys_platform != 'win32'",
   "orjson>=3.9.0",
-  "selectolax>=0.3.0",
   "aiolimiter>=1.1.0",
   "protego>=0.3.0",
   "rbloom>=1.0.0",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -1583,4 +1584,117 @@ def test_fetch_for_tech_detect_render_transport_error_returns_empty():
     assert cookies == {}
     assert js_globals == {}
 
+
+# ---------------------------------------------------------------------------
+# Custom-overlay structural guards.
+#
+# Catch two classes of silent breakage in custom_fingerprints.json:
+#   1. The overlay loader's per-key type-merge gives up when overlay and
+#      upstream disagree on the structural type of a field (e.g. overlay's
+#      `dom: [list]` vs upstream's `dom: {dict}`). Without normalisation the
+#      overlay value was silently dropped, so SevenRooms (an upstream tech
+#      with dict-form `dom`) was not gaining the overlay's bare-selector
+#      patterns. The fix promotes overlay lists to dicts on the fly.
+#   2. JSON does not forbid duplicate object keys; Python's parser silently
+#      keeps the last. A duplicate `"Bokun"` definition had been silently
+#      shadowing the first, losing several scriptSrc patterns. A canonical
+#      load-as-pairs check guards against the same hazard returning.
+# ---------------------------------------------------------------------------
+
+
+def test_custom_overlay_no_duplicate_top_level_keys():
+    """custom_fingerprints.json must not contain duplicate top-level keys.
+
+    JSON does not technically forbid this, but Python's json.load() keeps
+    only the last occurrence. If a future edit accidentally introduces
+    a second `"Bokun"` (or similar), the earlier entry's patterns are
+    silently dropped - hard to spot in code review and easy to do when
+    appending new fingerprints into a non-alphabetical file.
+    """
+    import json as _json
+    from collections import Counter
+
+    from flarecrawl import wappalyzer as _wmod
+
+    overlay_path = (
+        Path(_wmod.__file__).parent / "wappalyzer_data" / "custom_fingerprints.json"
+    )
+    raw = overlay_path.read_text(encoding="utf-8")
+
+    def _pairs_hook(pairs):  # type: ignore[no-untyped-def]
+        return pairs
+
+    pairs = _json.loads(raw, object_pairs_hook=_pairs_hook)
+    counts = Counter(k for k, _ in pairs)
+    dupes = {k: c for k, c in counts.items() if c > 1}
+    assert not dupes, (
+        f"Duplicate top-level keys in custom_fingerprints.json: {dupes}. "
+        "JSON allows them but Python's parser silently keeps only the last, "
+        "so the earlier entry's patterns are dropped. Merge into a single entry."
+    )
+
+
+def test_custom_overlay_list_dom_merges_into_upstream_dict_dom():
+    """Overlay list-form `dom` must merge into upstream dict-form `dom`.
+
+    Regression: previously the merge loop only handled list+list and
+    dict+dict; an overlay list onto an upstream dict fell through to
+    `key not in existing` and was silently dropped. The fix promotes
+    overlay list selectors to `{selector: {}}` before dict-merging.
+
+    SevenRooms is the canonical case: upstream ships
+        "dom": {"iframe[src*='sevenrooms']": {"attributes": {...}}}
+    and the overlay adds bare selectors
+        "dom": ["a[href*='sevenrooms.com/reservations']",
+                "iframe[src*='sevenrooms.com']"]
+    Without the fix, the overlay selectors never reach the engine and a
+    page that links to /reservations but lacks the .sevenrooms.* iframe
+    is not detected.
+    """
+    w = WappalyzerClient()
+    w._load()
+    assert w._techs is not None
+
+    dom = w._techs["SevenRooms"].get("dom")
+    # Must be a dict after merge (upstream's form wins as the container).
+    assert isinstance(dom, dict), f"SevenRooms.dom is {type(dom).__name__}, expected dict"
+
+    # Both overlay selectors must be present as keys.
+    assert "a[href*='sevenrooms.com/reservations']" in dom
+    assert "iframe[src*='sevenrooms.com']" in dom
+
+    # End-to-end: a page with only the overlay-form anchor must fire.
+    html = '<a href="https://sevenrooms.com/reservations/foo">Book</a>'
+    names = [d.name for d in w.analyze(html=html)]
+    assert "SevenRooms" in names, (
+        "SevenRooms dom merge regressed: overlay-form selector is no longer "
+        "matching. Re-check the list+dict merge branch in WappalyzerClient._load()."
+    )
+
+
+def test_custom_overlay_unified_bokun_carries_both_pattern_sets():
+    """The deduped Bokun entry must carry patterns from both prior copies.
+
+    The file previously defined `"Bokun": {...}` twice. Python's json
+    parser kept only the second, dropping these scriptSrc patterns:
+        widget.bokun.io, bokun.io, bokuncdn.com
+    and these html patterns:
+        widget.bokun.io iframe, data-src=...bokun
+    After merging the two entries into one, both pattern sets must fire.
+    """
+    w = WappalyzerClient()
+    w._load()
+    assert w._techs is not None
+
+    bokun = w._techs.get("Bokun", {})
+    script_src = " ".join(bokun.get("scriptSrc") or [])
+    html_pats = " ".join(bokun.get("html") or [])
+
+    # From the first (previously-shadowed) definition:
+    assert "widget\\.bokun\\.io" in script_src
+    assert "bokuncdn" in script_src
+    assert "data-src" in html_pats
+    # From the second (previously-winning) definition:
+    assert "bokunWidget" in html_pats
+    assert "BokunWidgetsLoader" in html_pats
 
