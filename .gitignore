@@ -18,6 +18,11 @@ out_*/
 # Forma protocol working files
 .forma/
 
+# Agent worktrees — owned by the spawning session, never commit.
+# Past `git add -A` sweeps captured these as gitlinks (mode 160000)
+# with no .gitmodules entry, breaking CI submodule recursion.
+.claude/worktrees/
+
 # IDE
 .vscode/
 .idea/
