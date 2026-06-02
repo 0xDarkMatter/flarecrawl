@@ -925,6 +925,20 @@ def test_implies_chain_patches():
     assert implies_contains("WooCommerce", "WordPress")
     assert implies_contains("WooCommerce", "MySQL")
 
+    # Non-JS/non-PHP language ecosystems (audit 2026-06-02)
+    for tech, lang in (
+        ("Amber", "Crystal"),
+        ("Kemal", "Crystal"),
+        ("Streamlit", "Python"),
+        ("PyWebIO", "Python"),
+        ("CherryPy", "Python"),
+        ("WEBrick", "Ruby"),
+        ("Yaws", "Erlang"),
+        ("Hugo", "Go"),
+        ("Turbopack", "Rust"),
+    ):
+        assert implies_contains(tech, lang), f"{tech} should imply {lang}"
+
 
 def test_patched_empty_upstream_fingerprints_fire():
     """Six upstream Wappalyzer entries (Loom, DocuSign, Dropbox, Index
