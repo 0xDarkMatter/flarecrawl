@@ -93,10 +93,10 @@ packages = ["src/flarecrawl"]
 # bare `pip install` (no repo on disk). Single source of truth — same file
 # repo readers see.
 "AGENTS.md" = "flarecrawl/AGENTS.md"
-# Vendored Wappalyzer fingerprint database (GPL-3.0 data — see
-# wappalyzer_data/LICENSE.wappalyzer_data). Ships so `--detect-tech` and
-# Client.detect_tech() work after a bare install with no repo on disk.
-"src/flarecrawl/wappalyzer_data" = "flarecrawl/wappalyzer_data"
+# Note: src/flarecrawl/wappalyzer_data/ is auto-included via the
+# `packages = ["src/flarecrawl"]` directive above. Listing it here too
+# triggers hatchling's "second file added at same path" guard on the
+# wappalyzer_data/LICENSE.wappalyzer_data file and breaks the wheel build.
 
 # ============================================================
 # CODE QUALITY
