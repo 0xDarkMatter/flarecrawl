@@ -14,7 +14,7 @@ CLI that wraps Cloudflare's [Browser Run API](https://developers.cloudflare.com/
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v0.30.0** | 2026-06-01 | **Local tech detection.** New `flarecrawl tech-detect URL` subcommand (HTML + response headers + cookies, all over your own connection — zero CF browser time). Filters: `--min-confidence`, `--only-categories`, `--exclude-categories`. Batch via `-i FILE -w N`, streaming via `--ndjson`, local HTML via `--stdin`. Live-verified — Drupal.org → `Drupal v10 + Apache + PHP + Varnish`; Vercel.com → `Next.js + React + Tailwind + Vercel`. Also exposed as `--tech-detect` flag on `scrape`/`crawl`/`fetch` and `Client.detect_tech()` Python API. CDP scrape path additionally injects a `Runtime.evaluate` JS-globals probe (~5,500 property paths). Bundled DB: ~7,500 upstream fingerprints (`enthec/webappanalyzer`, GPL-3.0 — see `wappalyzer_data/LICENSE.wappalyzer_data`) + 60-entry overlay (Craft CMS, Tailwind, AU hospitality SaaS). Discoverable via `flarecrawl guide tech-detect`. 73 new tests incl. local fixture server. |
+| **v0.30.1** | 2026-06-02 | **Stack fingerprinting.** New `flarecrawl tech-detect URL` subcommand — identify what a site runs (CMS, framework, JS libs, CDN, analytics, payment, hospitality SaaS) over a single HTTP GET, zero CF browser time. Also surfaces as `--tech-detect` on `scrape`/`crawl`/`fetch` and `Client.detect_tech()`. ~7,500 upstream Wappalyzer fingerprints + 71-entry custom overlay (Craft CMS, Tailwind, Roam via `X-ROAM: HIT` header across 20 sites, plus AU hospitality/tourism SaaS — Mews, Cloudbeds, Bokun, Resy, Tock, TheFork, Triptease, Eventbrite, ATDW). Filters: `--min-confidence`, `--only-categories`, `--exclude-categories`. New `--cdp` flag routes through CF Browser Run + injects a `Runtime.evaluate` JS-globals probe (~5,500 property paths) — same machinery as `scrape --cdp --tech-detect`, unlocks the ~880 fingerprints that only fire via window globals. Batch via `-i FILE -w N`, streaming via `--ndjson`, local HTML via `--stdin`. 60-site bench, P/R/F1 = 1.000. Discoverable via `flarecrawl guide tech-detect`. |
 | **v0.29.0** | 2026-05-17 | **Agent discoverability.** New `flarecrawl guide [topic]` — emits the packaged AGENTS.md (force-included in the wheel, works after a bare install with no repo) as on-tool orientation: `guide` overview + Quick Reference + topic index, `guide <topic>` one section with fuzzy + alias resolution (`hard-targets`, `json`, `errors`, `rules`, `auth`), `guide --list`. |
 | **v0.28.0** | 2026-05-16 | **Hard-target field-report closure.** New `flarecrawl p6` mint→replay primitive (local-Chromium cookie-shell mint → curl_cffi TLS replay, proactive re-mint, cumulative egress cool-down, terminal CF-1020 fast-fail). Machine-readable `meta.blocked` (Akamai/Cloudflare/Imperva/DataDome/PerimeterX/CloudFront). `flarecrawl session inspect` offline jar freshness. Windows cp1252 output crash fixed. `--json` no longer overrides `--output`/backend. HAR flushed on selector timeout. Recipe capture pre-armed before nav; `schema_version: 1`. 801 tests |
 | **v0.27.0** | 2026-05-16 | **Fetch routing + content-type coverage.** `fetch` no longer tracebacks on non-HTML types — new raw-text branch returns body verbatim without CF auth (fixes Google Maps KML, `text/xml`, `text/csv`, etc.). `--only-main-content` link-density gate (≥60%) prevents nav-soup from leaking into output. RFC 6839 `+json`/`+xml` suffix types (RSS, Atom, JSON-LD, GeoJSON, KML/vnd, SOAP) now route to text/JSON branch instead of binary download. E2E test corpus with local HTTP server. 1404 tests |
@@ -38,6 +38,7 @@ For older releases, see [CHANGELOG.md](CHANGELOG.md).
 | **Form filling** | No | **Yes** (`interact` command with human-like timing) |
 | **Session recordings** | No | **Yes** (`--record` — rrweb format, 30-day retention) |
 | **WebMCP tool discovery** | No | **Yes** (`webmcp discover/call`) |
+| **Stack fingerprinting** | No | **Yes** (`tech-detect` — single GET, ~7,500 + 71 Wappalyzer fingerprints, `--only-categories` filtering) |
 | **AI extraction** | Spark models | Workers AI (included) |
 | **Agent-safe sanitisation** | No | **Yes** (`--agent-safe` — 13 sanitisers, DeepMind taxonomy) |
 | **Paywall bypass** | Limited | **Multi-strategy cascade** (`--paywall --stealth`) |
@@ -111,6 +112,20 @@ compatible sites — zero browser time, higher quality output.
 extraction ("Get all product names and prices"). `flarecrawl schema` extracts
 LD+JSON, OpenGraph, and Twitter Cards. `flarecrawl openapi` discovers and
 downloads API specifications.
+
+### Stack fingerprinting and competitive intel
+
+`flarecrawl tech-detect` identifies what tech a site runs — CMS,
+frameworks, JS libraries, CDN, analytics, payment processors, niche
+SaaS — over a single HTTP GET with zero CF browser time. Useful for
+market research (how many AU restaurant sites run SevenRooms vs
+ResDiary?), competitive audits, and lead qualification (find every
+site on Mews or Cloudbeds). Bundled corpus ships ~7,500 upstream
+Wappalyzer fingerprints plus a 71-entry AU hospitality/tourism overlay
+(Roam, ATDW, Localis, Simpleview, Mews, Cloudbeds, Bokun, Resy, Tock,
+TheFork, Triptease, Eventbrite, …). `--cdp` mode routes through CF
+Browser Run + injects a `Runtime.evaluate` JS-globals probe (~5,500
+property paths) for SPAs that only declare their stack at runtime.
 
 ## CDP: Persistent Browser Control
 
@@ -194,6 +209,7 @@ flarecrawl scrape https://example.com --json | jq '.data.content'
 |---------|-------------|
 | `flarecrawl guide [topic]` | Agent orientation — when/why each command, JSON shapes, exit codes, footguns (start here) |
 | `flarecrawl scrape URL` | Scrape page to markdown (or html/links/images/summary) |
+| `flarecrawl tech-detect URL` | Stack fingerprinting (Wappalyzer-style) — CMS, framework, JS libs, CDN, analytics, payment, niche SaaS. Single HTTP GET, zero CF browser time. `--cdp` for SPAs (CF Browser Run + JS-globals probe). |
 | `flarecrawl crawl URL --wait --limit N` | Crawl site with async job system |
 | `flarecrawl download URL --limit N` | Save site pages to disk as markdown/html |
 | `flarecrawl extract PROMPT --urls URL` | AI-powered structured data extraction |

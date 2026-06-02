@@ -5,6 +5,80 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-06-02
+
+Tech-detect hardening — fingerprint corpus expansion, categorisation
+fixes, structural overlay-merge bug fix, and end-to-end validation
+audit. No new commands; the hardening lands behind the existing
+`tech-detect` / `--tech-detect` surface plus a new `--render` mode.
+
+### Added
+
+- `tech-detect --cdp` flag — routes the command through Cloudflare
+  Browser Run CDP and injects the JS-globals probe (~5,500 property
+  paths) via `Runtime.evaluate`. Reuses the same probe machinery the
+  v0.30.0 `scrape --cdp --tech-detect` path uses, so JS-globals
+  coverage is identical between the two surfaces. Unlocks the ~880
+  Wappalyzer fingerprints that only fire via window globals
+  (`jQuery.fn.jquery`, `Next.js buildId`, framework-detect markers,
+  …). Costs CF browser time like any other CDP-routed command.
+- 11 new custom-overlay vendors: Roam (with `X-ROAM: HIT` response-
+  header detection across all 20 registered tourism sites), Mews,
+  Cloudbeds, Bokun, Resy, Tock, TheFork, Triptease, Eventbrite, ATDW,
+  Localis, Simpleview. Overlay grew from 60 to 71 entries.
+- `_overlay_note` annotation field on overlay fingerprints —
+  documents validation status (e.g. "vendor brand site does not self-
+  embed widget — TODO: add a known customer site to bench corpus").
+- 9 new bench corpus entries (Beds24, Bopple, Channex, Peek Pro,
+  RedBalloon, Resy, Windcave, Quandoo, Triptease) as regression guards
+  for the corresponding overlay fingerprints. 60-site corpus still
+  scores precision = recall = F1 = 1.000.
+- Operator scripts under `tests/` (`validate_custom_overlay.py`,
+  `_probe_vendor_sites.py`, `_probe_vendor_sites_cdp.py`) for the next
+  audit pass. Not pytest targets.
+- `docs/architecture/` — interactive component/flow diagram (16
+  components, 11 flows) from codebase-cartographer.
+
+### Fixed
+
+- 19 custom overlays were silently emitting `categories: []`, breaking
+  `--only-categories` / `--exclude-categories` filtering against
+  overlay detections (SevenRooms, OpenTable, ResDiary, Quandoo, Resy,
+  Tock, TheFork, FareHarbor, Rezdy, Bokun, Mews, Cloudbeds, SiteMinder,
+  Triptease, Square Online, Eventbrite, Localis, Simpleview, Craft CMS).
+- Overlay-merge type mismatch silently dropped list-form `dom`
+  selectors when upstream stored `dom` as a dict. SevenRooms regression:
+  its overlay selectors `a[href*='sevenrooms.com/reservations']` and
+  `iframe[src*='sevenrooms.com']` never reached the engine. The merge
+  now promotes overlay list selectors to `{selector: {}}` before dict-
+  merging, with a `logger.debug` line per promotion. New regression
+  test: `test_custom_overlay_list_dom_merges_into_upstream_dict_dom`.
+- Duplicate top-level JSON keys silently shadowed each other under
+  Python's last-key-wins parser. `Bokun` and `ATDW` were each declared
+  twice, losing the earlier entry's patterns. Entries merged into a
+  single object holding the union of patterns. New regression test:
+  `test_custom_overlay_no_duplicate_top_level_keys`
+  (`object_pairs_hook` check).
+- 9 non-JS/non-PHP implies chains patched: Amber/Kemal (Crystal),
+  Streamlit/PyWebIO/CherryPy (Python), WEBrick (Ruby), Yaws (Erlang),
+  Hugo (Go), Turbopack (Rust).
+- GSAP + CloudFront + Node.js (Express/Next.js header patterns)
+  upstream implies-chain gaps.
+- `crawl_start` rejected CF-incompatible kwargs with confusing errors;
+  now validates explicitly and accepts CLI-shaped name aliases so SDK
+  calls match CLI semantics.
+
+### Changed
+
+- `selectolax` promoted from `[perf]` optional extra to core
+  dependency. It is imported unconditionally by `extract.py` and
+  `authcrawl.py` (both pulled in transitively whenever the CLI runs),
+  so a bare `uv sync` install left the CLI crashing with
+  `ModuleNotFoundError` on `flarecrawl scrape`.
+- `keyring` promoted from optional extra to core dependency (same
+  rationale).
+- Bench corpus expanded to 60 sites; P/R/F1 = 1.000 maintained.
+
 ## [0.30.0] - 2026-06-01
 
 Local technology detection. Wappalyzer fingerprint matching now ships
