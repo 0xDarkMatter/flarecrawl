@@ -747,6 +747,117 @@ CORPUS: list[dict] = [
             "Element UI", "Google Sites", "Cart Functionality",
         ],
     },
+    # -------------------------------------------------------------------
+    # Custom-overlay regression guards (validated 2026-06-02).
+    # Each vendor's own marketing site has been confirmed to self-embed
+    # its own widget/marker at the HTTP layer, so adding these as bench
+    # entries locks the corresponding overlay fingerprint against silent
+    # breakage. See docs/custom-overlay-validation.md for the full audit.
+    # -------------------------------------------------------------------
+    {
+        "url": "https://www.beds24.com",
+        "must_detect": ["Beds24"],
+        "acceptable_also": [
+            "Apache HTTP Server", "Bootstrap", "Font Awesome",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.bopple.com",
+        "must_detect": ["Bopple"],
+        "acceptable_also": [
+            "Amazon Web Services", "Facebook Pixel", "Node.js", "Vercel",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://channex.io",
+        "must_detect": ["Channex"],
+        "acceptable_also": [
+            "Fastly", "GitHub Pages", "Google Font API", "Lovable",
+            "Varnish",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.peek.com",
+        "must_detect": ["Peek Pro"],
+        "acceptable_also": [
+            "Cloudflare", "Rudderstack", "Sentry", "Tailwind CSS",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.redballoon.com.au",
+        "must_detect": ["RedBalloon"],
+        "acceptable_also": [
+            "Bootstrap", "Cloudflare", "Google Font API",
+            "Google Optimize", "Nginx", "Salesforce",
+            "Salesforce Commerce Cloud", "Trustpilot",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.resy.com",
+        "must_detect": ["Resy"],
+        "acceptable_also": [
+            "Amazon S3", "Amazon Web Services", "AngularJS", "Imperva",
+            "Linkedin Insight Tag", "Nginx", "Stripe",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.windcave.com",
+        "must_detect": ["Windcave"],
+        "acceptable_also": [
+            "Cloudflare", "Tailwind CSS",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.quandoo.com",
+        "must_detect": ["Quandoo"],
+        "acceptable_also": [
+            "Loadable-Components", "Nginx",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://triptease.com",
+        "must_detect": ["Triptease"],
+        "acceptable_also": [
+            "Cloudflare", "HubSpot", "HubSpot CMS Hub", "Railway",
+            "Swiper", "Varnish", "jQuery",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
 ]
 
 
