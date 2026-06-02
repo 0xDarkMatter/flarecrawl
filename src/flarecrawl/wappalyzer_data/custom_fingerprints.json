@@ -193,6 +193,135 @@
       "config\\.triplewhale-pixel\\.com/"
     ]
   },
+  "ATDW": {
+    "_overlay": true,
+    "scriptSrc": [
+      "atdw-online\\.com\\.au/",
+      "(?:[a-z0-9-]+\\.)?atdw\\.com\\.au/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*atdw(?:-online)?\\.com\\.au/",
+      "data-atdw-"
+    ]
+  },
+  "Localis": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:[a-z0-9-]+\\.)?localis\\.com\\.au/",
+      "(?:[a-z0-9-]+\\.)?localiscdn\\.com/"
+    ],
+    "html": [
+      "<meta[^>]+content=[\"'][^\"']*Localis",
+      "<link[^>]+href=[\"'][^\"']*localis\\.com\\.au/"
+    ],
+    "meta": {
+      "generator": "Localis"
+    }
+  },
+  "Simpleview CMS": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:[a-z0-9-]+\\.)?simpleviewinc\\.com/",
+      "(?:[a-z0-9-]+\\.)?simpleviewcms\\.com/"
+    ],
+    "html": [
+      "/simpleview/[a-z0-9./_-]+\\.(?:js|css)",
+      "<meta[^>]+content=[\"'][^\"']*Simpleview"
+    ]
+  },
+  "Mews": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:book|app|api)\\.mews\\.com/",
+      "(?:[a-z0-9-]+\\.)?mews-systems\\.com/",
+      "distributor\\.mews\\.com/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*book\\.mews\\.com/",
+      "data-mews-"
+    ]
+  },
+  "Cloudbeds": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:hotels|widget|app|cdn)\\.cloudbeds\\.com/",
+      "(?:[a-z0-9-]+\\.)?mybookings\\.cloudbeds\\.com/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*(?:hotels|widget)\\.cloudbeds\\.com/",
+      "<script[^>]+data-cloudbeds-"
+    ]
+  },
+  "Bokun": {
+    "_overlay": true,
+    "scriptSrc": [
+      "widget\\.bokun\\.io/",
+      "(?:[a-z0-9-]+\\.)?bokun\\.io/",
+      "(?:[a-z0-9-]+\\.)?bokuncdn\\.com/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*widget\\.bokun\\.io/",
+      "data-src=[\"'][^\"']*bokun"
+    ]
+  },
+  "Resy": {
+    "_overlay": true,
+    "scriptSrc": [
+      "widgets\\.resy\\.com/",
+      "(?:[a-z0-9-]+\\.)?resy\\.com/widget"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*widgets\\.resy\\.com/",
+      "<script[^>]+data-resy-",
+      "<div[^>]+class=[\"'][^\"']*ResyWidget"
+    ]
+  },
+  "Tock": {
+    "_overlay": true,
+    "scriptSrc": [
+      "widget\\.exploretock\\.com/",
+      "(?:[a-z0-9-]+\\.)?exploretock\\.com/widget",
+      "(?:[a-z0-9-]+\\.)?tock\\.com/widget"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*(?:widget\\.)?exploretock\\.com/",
+      "<div[^>]+class=[\"'][^\"']*tock-"
+    ]
+  },
+  "TheFork": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:widget|module|cdn)\\.thefork\\.com/",
+      "(?:widget|module)\\.lafourchette\\.com/",
+      "(?:[a-z0-9-]+\\.)?lafourchette-static\\.com/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*(?:thefork|lafourchette)\\.com/",
+      "<div[^>]+data-thefork-"
+    ]
+  },
+  "Triptease": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:[a-z0-9-]+\\.)?triptease\\.com/",
+      "(?:[a-z0-9-]+\\.)?triptease\\.net/"
+    ],
+    "html": [
+      "<script[^>]+data-triptease-"
+    ]
+  },
+  "Eventbrite": {
+    "_overlay": true,
+    "scriptSrc": [
+      "(?:www|widgets|cdn)\\.eventbrite\\.com/",
+      "(?:[a-z]{2}\\.)?eventbrite\\.com/static/"
+    ],
+    "html": [
+      "<iframe[^>]+src=[\"'][^\"']*(?:www|widgets)\\.eventbrite\\.com/",
+      "<div[^>]+id=[\"']eventbrite-widget-",
+      "<div[^>]+data-eventbrite-"
+    ]
+  },
   "Craft CMS": {
     "_overlay": true,
     "html": [
