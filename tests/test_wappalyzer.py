@@ -853,6 +853,7 @@ def test_custom_overlay_extends_existing_tech(tmp_path):
 
     w = WappalyzerClient(data_dir=data)
     w._load()
+    assert w._techs is not None
     acme = w._techs["Acme"]
     # Lists extended
     assert "acme-html-pat-1" in acme["html"]
@@ -876,6 +877,7 @@ def test_custom_overlay_adds_new_tech(tmp_path):
 
     w = WappalyzerClient(data_dir=data)
     w._load()
+    assert w._techs is not None
     assert "NewTech" in w._techs
 
 
@@ -940,8 +942,11 @@ def test_implies_chain_patches():
     w._load()
     assert w._techs is not None
 
+    techs = w._techs
+    assert techs is not None
+
     def implies_contains(tech: str, target: str) -> bool:
-        impls = w._techs.get(tech, {}).get("implies") or []
+        impls = techs.get(tech, {}).get("implies") or []
         for impl in impls:
             name = impl.split("\\;", 1)[0] if isinstance(impl, str) else ""
             if name == target:
@@ -1036,6 +1041,7 @@ def test_custom_overlay_malformed_json_does_not_break_load(tmp_path):
 
     w = WappalyzerClient(data_dir=data)
     w._load()
+    assert w._techs is not None
     # Upstream entries still loaded
     assert "Acme" in w._techs
 

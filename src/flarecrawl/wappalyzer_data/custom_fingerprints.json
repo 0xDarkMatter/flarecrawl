@@ -36,7 +36,10 @@
     "Triple Whale": "Upstream entry has zero patterns. Match scriptSrc to triplewhale.com / triplewhale-pixel.com.",
     "Implies chain - JS frameworks need Node.js": "Audit 2026-06-01: 10 JS frameworks ship without Node.js in their upstream implies chain (Astro, Remix, SvelteKit, SolidStart, Gatsby, Strapi, Eleventy, Gridsome, VuePress, VitePress). All are Node.js build tools; even when they output static HTML, the build is Node-driven. Patched.",
     "Implies chain - PHP frameworks need PHP": "Zend and WooCommerce both ship without PHP in implies. WooCommerce is especially broken - it's a WordPress plugin and should imply WordPress + PHP + MySQL. Patched.",
-    "Implies chain - non-JS/non-PHP language ecosystems": "Audit 2026-06-02: swept Python/Ruby/Rust/Go/Java/.NET/Elixir/Crystal/Erlang frameworks for missing language implies. Patched 9 broken chains: Amber/Kemal (Crystal), Streamlit/PyWebIO/CherryPy (Python), WEBrick (Ruby), Yaws (Erlang), Hugo (Go), Turbopack (Rust). Most curated language ecosystems (Spring->Java, Rails->Ruby, Phoenix Framework->Elixir, Revel->Go, Django/Flask/FastAPI->Python) already had correct upstream chains. Skipped Bottle (upstream entry is meal-delivery SaaS, not Python framework), Sinatra (upstream entry is WordPress theme), Phoenix (upstream entry is a Node CMS, not Elixir Phoenix), Warp (Haskell Warp is correct as-is), Play (already implies Scala, Java optional)."
+    "Implies chain - non-JS/non-PHP language ecosystems": "Audit 2026-06-02: swept Python/Ruby/Rust/Go/Java/.NET/Elixir/Crystal/Erlang frameworks for missing language implies. Patched 9 broken chains: Amber/Kemal (Crystal), Streamlit/PyWebIO/CherryPy (Python), WEBrick (Ruby), Yaws (Erlang), Hugo (Go), Turbopack (Rust). Most curated language ecosystems (Spring->Java, Rails->Ruby, Phoenix Framework->Elixir, Revel->Go, Django/Flask/FastAPI->Python) already had correct upstream chains. Skipped Bottle (upstream entry is meal-delivery SaaS, not Python framework), Sinatra (upstream entry is WordPress theme), Phoenix (upstream entry is a Node CMS, not Elixir Phoenix), Warp (Haskell Warp is correct as-is), Play (already implies Scala, Java optional).",
+    "Categorise hospitality overlay (2026-06-02)": "Audit found 6 custom-overlay techs firing without `cats` (categories=[] in tech-detect output, silently breaking --only-categories/--exclude-categories filtering). Added cats to Localis, Simpleview CMS, Tock, TheFork, Eventbrite (truly uncategorised). Extended cats on ATDW, FareHarbor, Rezdy, Bokun, Mews, Cloudbeds, SiteMinder, Triptease, SevenRooms where upstream categorisation was incomplete for what the platforms actually are. Regression guard: test_custom_overlay_categories_are_set.",
+    "Roam": "Tourism content platform powering ~20 destination-marketing sites (melbournenow, visitphillipisland, visitgeelongbellarine, ...). Detected purely via the `X-ROAM` response header set by Roam's edge cache. Header is unique to Roam — no other vendor uses it.",
+    "Consolidate duplicate ATDW/Bokun entries (2026-06-02)": "custom_fingerprints.json had duplicate top-level keys for ATDW and Bokun. Python's json.loads silently keeps only the last duplicate, so the first entry's detection patterns were dead code. Consolidated each pair into a single entry, preserving the union of scriptSrc/html/dom patterns from both."
   },
   "Tailwind CSS": {
     "_overlay": true,
@@ -230,17 +233,6 @@
       "config\\.triplewhale-pixel\\.com/"
     ]
   },
-  "ATDW": {
-    "_overlay": true,
-    "scriptSrc": [
-      "atdw-online\\.com\\.au/",
-      "(?:[a-z0-9-]+\\.)?atdw\\.com\\.au/"
-    ],
-    "html": [
-      "<iframe[^>]+src=[\"'][^\"']*atdw(?:-online)?\\.com\\.au/",
-      "data-atdw-"
-    ]
-  },
   "Localis": {
     "_overlay": true,
     "cats": [1],
@@ -291,18 +283,6 @@
     "html": [
       "<iframe[^>]+src=[\"'][^\"']*(?:hotels|widget)\\.cloudbeds\\.com/",
       "<script[^>]+data-cloudbeds-"
-    ]
-  },
-  "Bokun": {
-    "_overlay": true,
-    "scriptSrc": [
-      "widget\\.bokun\\.io/",
-      "(?:[a-z0-9-]+\\.)?bokun\\.io/",
-      "(?:[a-z0-9-]+\\.)?bokuncdn\\.com/"
-    ],
-    "html": [
-      "<iframe[^>]+src=[\"'][^\"']*widget\\.bokun\\.io/",
-      "data-src=[\"'][^\"']*bokun"
     ]
   },
   "Resy": {
@@ -745,10 +725,15 @@
     "html": [
       "bokunWidget",
       "BokunWidgetsLoader",
-      "bookingChannelUUID"
+      "bookingChannelUUID",
+      "<iframe[^>]+src=[\"'][^\"']*widget\\.bokun\\.io/",
+      "data-src=[\"'][^\"']*bokun"
     ],
     "scriptSrc": [
-      "widgets\\.bokun\\.io"
+      "widgets\\.bokun\\.io",
+      "widget\\.bokun\\.io/",
+      "(?:[a-z0-9-]+\\.)?bokun\\.io/",
+      "(?:[a-z0-9-]+\\.)?bokuncdn\\.com/"
     ]
   },
   "Xola": {
@@ -1077,10 +1062,16 @@
       1
     ],
     "description": "Australian Tourism Data Warehouse — national tourism listing platform. Tracking pixel embeds productId for cross-referencing.",
+    "scriptSrc": [
+      "atdw-online\\.com\\.au/",
+      "(?:[a-z0-9-]+\\.)?atdw\\.com\\.au/"
+    ],
     "html": [
       "atlas\\.atdw-online\\.com\\.au/pixel",
       "atdw-online\\.com\\.au/redirect",
-      "atdw-online\\.com\\.au"
+      "atdw-online\\.com\\.au",
+      "<iframe[^>]+src=[\"'][^\"']*atdw(?:-online)?\\.com\\.au/",
+      "data-atdw-"
     ],
     "dom": [
       "img[src*='atdw-online.com.au/pixel']",

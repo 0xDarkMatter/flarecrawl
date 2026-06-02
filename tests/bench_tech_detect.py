@@ -705,6 +705,48 @@ CORPUS: list[dict] = [
             "Element UI", "Google Sites", "Cart Functionality",
         ],
     },
+    # -----------------------------------------------------------------
+    # Roam destination-marketing CMS - detected via the X-ROAM
+    # response header set by Roam's edge cache. Three of the ~20
+    # registered Roam sites; if the header pattern is tightened or
+    # the entry is removed, these three should all stop detecting.
+    # -----------------------------------------------------------------
+    {
+        "url": "https://www.melbournenow.com.au",
+        "must_detect": ["Roam"],
+        "acceptable_also": [
+            "Cloudflare", "Google Tag Manager", "Google Analytics",
+            "Nginx", "Apache HTTP Server",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.visitphillipisland.com.au",
+        "must_detect": ["Roam"],
+        "acceptable_also": [
+            "Cloudflare", "Google Tag Manager", "Google Analytics",
+            "Nginx", "Apache HTTP Server",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
+    {
+        "url": "https://www.visitgeelongbellarine.com.au",
+        "must_detect": ["Roam"],
+        "acceptable_also": [
+            "Cloudflare", "Google Tag Manager", "Google Analytics",
+            "Nginx", "Apache HTTP Server",
+        ],
+        "confirmed_not": [
+            "WordPress", "Drupal", "Shopify", "Wix", "Squarespace",
+            "Element UI", "Google Sites", "Cart Functionality",
+        ],
+    },
 ]
 
 
