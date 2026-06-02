@@ -75,3 +75,64 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           attestations: true
+
+  verify:
+    name: Verify on PyPI
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Catches "PyPI accepted the upload but the version isn't actually
+      # live" failure modes — silent rejection, CDN propagation lag, etc.
+      # v0.30.0 and v0.30.1 both had silent publish failures that nobody
+      # noticed because the GitHub release page looked fine.
+      - name: Confirm version is queryable on PyPI
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "Verifying flarecrawl==$version is live on PyPI..."
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS "https://pypi.org/pypi/flarecrawl/${version}/json" >/dev/null; then
+              echo "✓ flarecrawl==$version is live on PyPI"
+              exit 0
+            fi
+            echo "  attempt $attempt: not yet visible, waiting 15s..."
+            sleep 15
+          done
+          echo "✗ flarecrawl==$version not visible on PyPI after 75s"
+          exit 1
+
+  notify-failure:
+    # Surfaces the failure as a GitHub issue tagged release-failure so it
+    # can't sink quietly into Actions noise. Runs on any failure in the
+    # build / publish / verify chain.
+    name: Notify on release failure
+    needs: [build, publish, verify]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v8.0.0
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `Release **${tag}** failed in workflow run ${runUrl}.`,
+              '',
+              'Failed jobs:',
+              `- Build + audit: ${{ needs.build.result }}`,
+              `- Publish: ${{ needs.publish.result }}`,
+              `- Verify on PyPI: ${{ needs.verify.result }}`,
+              '',
+              'See `docs/RELEASING.md` for the post-mortem catalogue of',
+              'common publish failures.',
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Release ${tag} failed`,
+              body,
+              labels: ['release-failure'],
+            });

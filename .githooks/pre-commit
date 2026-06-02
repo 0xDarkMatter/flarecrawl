@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Pre-commit gate for flarecrawl.
+#
+# Catches the failure mode that broke v0.30.1 publish:
+# `git add -A` in repos containing `.claude/worktrees/agent-*` sweeps
+# those paths in as git submodule gitlinks (mode 160000). With no
+# `.gitmodules` entry, CI's `git submodule foreach --recursive` dies
+# on the first one.
+#
+# This hook refuses to commit any staged gitlink whose path is not
+# also registered in `.gitmodules`. Real submodules pass; rogue
+# agent-worktree gitlinks fail with an actionable message.
+#
+# Install with: just install-hooks
+#   (sets core.hooksPath to .githooks/)
+
+set -euo pipefail
+
+# Find every staged entry with mode 160000 (gitlink / submodule).
+gitlinks="$(git diff --cached --name-status | awk '
+    /^[AM]/ {
+        # need the file mode for staged additions; ls the index
+        cmd = "git ls-files --stage -- " $2
+        cmd | getline line
+        close(cmd)
+        split(line, parts, /[ \t]/)
+        if (parts[1] == "160000") print $2
+    }
+')"
+
+if [[ -z "$gitlinks" ]]; then
+    exit 0
+fi
+
+# A `.gitmodules` line for path X looks like: `path = X`.
+# Build the set of legitimate submodule paths.
+legit_paths=""
+if [[ -f .gitmodules ]]; then
+    legit_paths="$(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
+        | awk '{print $2}')"
+fi
+
+rogue=""
+for gl in $gitlinks; do
+    if ! grep -Fxq "$gl" <<<"$legit_paths"; then
+        rogue="${rogue}${gl}"$'\n'
+    fi
+done
+
+if [[ -n "$rogue" ]]; then
+    cat <<EOF >&2
+
+✗ pre-commit: refusing to commit rogue gitlinks.
+
+The following paths are staged as git submodules (mode 160000) but
+have no corresponding entry in .gitmodules:
+
+$(printf '  %s\n' $rogue)
+
+This is the failure mode that broke the v0.30.1 PyPI publish (CI's
+\`git submodule foreach --recursive\` dies with "No url found for
+submodule path …").
+
+The usual cause: an agent-worktree directory (\`.claude/worktrees/agent-*\`)
+got swept up by \`git add -A\`. See:
+  ~/.claude/rules/worktree-boundaries.md
+
+Unstage with:
+  git rm --cached <path>      # if filesystem entry should be removed
+  git restore --staged <path>  # if you want to keep it untracked
+
+Then commit again.
+
+EOF
+    exit 1
+fi
+
+exit 0
