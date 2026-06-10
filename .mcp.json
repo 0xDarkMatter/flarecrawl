@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "flarecrawl": {
+      "command": "flarecrawl",
+      "args": ["mcp"],
+      "description": "Flarecrawl web scraping/crawling MCP server (36 tools — call capabilities() first)"
+    }
+  }
+}
