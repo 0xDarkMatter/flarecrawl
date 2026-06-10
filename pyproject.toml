@@ -136,6 +136,7 @@ coverage_gaps = [
   {command = "batch", reason = "YAML-config driver; agents issue parallel tool calls instead", workaround = "Multiple MCP calls or: flarecrawl batch config.yml  # via CLI"},
   {command = "auth login/logout", reason = "Credential entry is human-in-the-loop; MCP must never handle secrets", workaround = "flarecrawl auth login  # run once; MCP uses the auth chain"},
   {command = "cache clear / negotiate clear", reason = "Destructive config management, low agent value", workaround = "flarecrawl cache clear  # or: flarecrawl negotiate clear"},
+  {command = "session save/delete/show/validate", reason = "Cookie-jar management writes/removes secrets on disk — CLI-shaped, low agent value", workaround = "flarecrawl session save/show/delete/validate via CLI; MCP exposes session_list + session_inspect (read-only)"},
   {command = "rules *", reason = "User config management", workaround = "flarecrawl rules list --json  # or rules show/add via CLI"},
   {command = "cdp *", reason = "Session lifecycle tied to terminal workflows", workaround = "flarecrawl cdp connect --json  # via CLI"},
   {command = "webmcp *", reason = "Calling third-party WebMCP tools through our MCP = confusing double-hop", workaround = "flarecrawl webmcp discover URL --json  # via CLI"},

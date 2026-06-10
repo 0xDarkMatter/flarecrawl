@@ -50,6 +50,14 @@ COVERAGE_GAPS: list[dict[str, str]] = [
         "workaround": "flarecrawl cache clear  # or: flarecrawl negotiate clear",
     },
     {
+        "command": "session save/delete/show/validate",
+        "reason": "Cookie-jar management writes/removes secrets on disk — CLI-shaped, low agent value",
+        "workaround": (
+            "flarecrawl session save/show/delete/validate via CLI; "
+            "MCP exposes session_list + session_inspect (read-only)"
+        ),
+    },
+    {
         "command": "rules *",
         "reason": "User config management",
         "workaround": "flarecrawl rules list --json  # or rules show/add via CLI",
@@ -400,16 +408,13 @@ def permissions_check_handler(action: str) -> dict[str, Any]:
     """
     action_lower = action.lower().replace("-", "_")
 
-    cf_authed = bool(os.environ.get("FLARECRAWL_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN"))
-    # also check keyring (best-effort)
-    if not cf_authed:
-        try:
-            from flarecrawl.credentials import CredentialStore
-            store = CredentialStore()
-            creds = store.load()
-            cf_authed = bool(creds and creds.get("api_token"))
-        except Exception:  # noqa: BLE001
-            pass
+    # Canonical credential chain: env -> keyring -> .env -> legacy config
+    try:
+        from flarecrawl.config import get_api_token
+
+        cf_authed = bool(get_api_token())
+    except Exception:  # noqa: BLE001
+        cf_authed = False
 
     extras = _check_optional_deps()
 

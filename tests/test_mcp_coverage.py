@@ -147,9 +147,9 @@ def test_covered_commands_exist_in_cli():
     )
 
 
-def test_gap_list_has_10_entries():
-    """Exactly 10 coverage gaps must be declared."""
+def test_gap_list_has_11_entries():
+    """Exactly 11 coverage gaps must be declared."""
     from flarecrawl.mcp_tools.orientation import COVERAGE_GAPS
-    assert len(COVERAGE_GAPS) == 10, (
-        f"Expected 10 coverage gaps, got {len(COVERAGE_GAPS)}"
+    assert len(COVERAGE_GAPS) == 11, (
+        f"Expected 11 coverage gaps, got {len(COVERAGE_GAPS)}"
     )

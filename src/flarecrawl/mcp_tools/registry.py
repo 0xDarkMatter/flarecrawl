@@ -524,7 +524,7 @@ _RAW_REGISTRY: dict[str, dict[str, Any]] = {
         "tier": "t2",
         "short_description": "List saved browser sessions (cookie jars).",
         "personas": ["power"],
-        "covers": ["session list", "session save", "session delete", "session show", "session validate"],
+        "covers": ["session list"],
         "parameters": {
             "type": "object",
             "properties": {},

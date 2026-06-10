@@ -107,9 +107,9 @@ def test_api_coverage_has_gaps(caps):
     assert "gaps" in caps["api_coverage"]
 
 
-def test_gap_list_has_10_entries(caps):
+def test_gap_list_has_11_entries(caps):
     gaps = caps["api_coverage"]["gaps"]
-    assert len(gaps) == 10, f"Expected 10 gaps, got {len(gaps)}"
+    assert len(gaps) == 11, f"Expected 11 gaps, got {len(gaps)}"
 
 
 def test_each_gap_has_reason_and_workaround(caps):
