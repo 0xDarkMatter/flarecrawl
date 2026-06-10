@@ -1575,7 +1575,7 @@ def test_fetch_for_tech_detect_cdp_calls_probe_and_returns_tuple(monkeypatch):
             self.closed = True
 
     fake_client = _FakeClient()
-    monkeypatch.setattr(_cli, "_get_cdp_client", lambda **_: fake_client)
+    monkeypatch.setattr("flarecrawl.cli.fetch._get_cdp_client", lambda **_: fake_client)
 
     html, headers, cookies, js_globals = _cli._fetch_for_tech_detect_cdp(
         "https://example.com/page",

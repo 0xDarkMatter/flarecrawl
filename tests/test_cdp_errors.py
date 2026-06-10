@@ -242,8 +242,8 @@ class TestJsEvalAutoPromotion:
         from unittest.mock import MagicMock, patch
 
         with (
-            patch("flarecrawl.cli.Client") as cli_client,
-            patch("flarecrawl.cli.console") as cons,
+            patch("flarecrawl.cli.scrape.Client") as cli_client,
+            patch("flarecrawl.cli.scrape.console") as cons,
         ):
             cli_client.return_value = MagicMock()
             # Force scrape to bail early but capture cdp= passed to client calls
@@ -277,8 +277,8 @@ class TestJsEvalAutoPromotion:
 
         runner = CliRunner()
         with (
-            patch("flarecrawl.cli.Client") as cli_client,
-            patch("flarecrawl.cli.console") as cons,
+            patch("flarecrawl.cli.scrape.Client") as cli_client,
+            patch("flarecrawl.cli.scrape.console") as cons,
         ):
             cli_client.return_value = MagicMock()
             cli_client.return_value.scrape.side_effect = SystemExit(0)
