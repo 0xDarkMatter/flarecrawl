@@ -2,75 +2,26 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
-import re
-import sys
-import time as _time
-from datetime import UTC
 from pathlib import Path
-from typing import Annotated, Any
-from urllib.parse import urlparse
+from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
-from ..config import (
-    DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
-    get_account_id,
-    get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
-)
+from ..client import FlareCrawlError
+from .scrape import _scrape_single
 from ._common import (
-    EXIT_AUTH_REQUIRED,
     EXIT_ERROR,
-    EXIT_FORBIDDEN,
     EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
-    _apply_browser_cookies,
-    _apply_tech_detection,
-    _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
-    _get_cdp_client,
     _get_client,
-    _handle_api_error,
     _output_json,
     _output_ndjson,
     _output_text,
-    _parse_auth,
-    _parse_body,
-    _parse_category_list,
-    _parse_headers,
-    _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
     _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -109,7 +60,7 @@ def recipe_command(
     Behaviour notes:
       - capture/capture_download steps are armed BEFORE navigation so the
         goto waterfall is intercepted regardless of step order (they show
-        status "pre-armed" in the summary). They require browser: local â€”
+        status "pre-armed" in the summary). They require browser: local —
         browser: cf fails fast (CF-hosted Chromium can't intercept bodies).
       - eval and get_content return values surface in steps[].result.
       - --json emits a frozen contract (schema_version: 1): canonical key
@@ -121,7 +72,8 @@ def recipe_command(
         flarecrawl recipe scrape-uap.yml --dry-run
         flarecrawl recipe scrape-uap.yml --resume
     """
-    from ..recipe import RecipeError, run as run_recipe
+    from ..recipe import RecipeError
+    from ..recipe import run as run_recipe
 
     try:
         summary = run_recipe(path, resume=resume, dry_run=dry_run)
@@ -155,7 +107,7 @@ def recipe_command(
 
 
 # ------------------------------------------------------------------
-# p6 â€” mint -> replay anti-bot primitive (v0.29.0 F1)
+# p6 — mint -> replay anti-bot primitive (v0.29.0 F1)
 # ------------------------------------------------------------------
 
 
@@ -185,7 +137,7 @@ def p6_command(
 
     Built-in: proactive re-mint when the jar goes stale, cumulative
     exponential cool-down (the Akamai egress-escalation trap), and a
-    fast-fail on terminal Cloudflare 1020 (minting can't help â€” it's
+    fast-fail on terminal Cloudflare 1020 (minting can't help — it's
     keyed on the egress, not the session).
 
     Example:
@@ -234,14 +186,14 @@ def p6_command(
         if json_output:
             return
         if event == "mint":
-            console.print(f"[dim]mint #{payload.get('n')} â€” {payload.get('reason')}[/dim]")
+            console.print(f"[dim]mint #{payload.get('n')} — {payload.get('reason')}[/dim]")
         elif event == "mint_empty":
-            console.print(f"[yellow]mint #{payload.get('n')} produced 0 cookies â€” "
+            console.print(f"[yellow]mint #{payload.get('n')} produced 0 cookies — "
                           f"check mint URL / network (wall deposited no shells)[/yellow]")
         elif event == "cooldown":
-            console.print(f"[yellow]cool-down {payload.get('seconds')}s â€” {payload.get('reason')}[/yellow]")
+            console.print(f"[yellow]cool-down {payload.get('seconds')}s — {payload.get('reason')}[/yellow]")
         elif event == "terminal":
-            console.print(f"[red]terminal block on {payload.get('url')} ({payload.get('reason')}) â€” aborting[/red]")
+            console.print(f"[red]terminal block on {payload.get('url')} ({payload.get('reason')}) — aborting[/red]")
         elif event == "target":
             st = str(payload.get("status", ""))
             colour = {"ok": "green", "blocked": "red", "error": "red"}.get(st, "white")
@@ -250,7 +202,7 @@ def p6_command(
     try:
         result = run_p6(cfg, on_event=_on_event)
     except Exception as e:
-        _error(f"P6 run failed: {e}  (mintâ†’replay walkthrough: "
+        _error(f"P6 run failed: {e}  (mint→replay walkthrough: "
                f"flarecrawl guide hard-targets)",
                "ERROR", EXIT_ERROR, as_json=json_output)
         return
@@ -273,7 +225,7 @@ def p6_command(
 
 
 # ------------------------------------------------------------------
-# batch â€” YAML config batch operations
+# batch — YAML config batch operations
 # ------------------------------------------------------------------
 
 
@@ -367,7 +319,7 @@ def batch_config(
 
 
 # ------------------------------------------------------------------
-# discover â€” feed/sitemap/link discovery
+# discover — feed/sitemap/link discovery
 # ------------------------------------------------------------------
 
 

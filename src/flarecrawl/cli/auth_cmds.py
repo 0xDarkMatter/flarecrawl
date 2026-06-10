@@ -2,75 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
-import json
-import re
-import sys
-import time as _time
-from datetime import UTC
-from pathlib import Path
-from typing import Annotated, Any
-from urllib.parse import urlparse
+from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
+from ..client import Client, FlareCrawlError
 from ..config import (
-    DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
     clear_credentials,
-    get_account_id,
-    get_api_token,
     get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
     save_credentials,
 )
 from ._common import (
-    EXIT_AUTH_REQUIRED,
-    EXIT_ERROR,
-    EXIT_FORBIDDEN,
-    EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
-    _apply_browser_cookies,
-    _apply_tech_detection,
-    _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
-    _get_cdp_client,
-    _get_client,
-    _handle_api_error,
     _output_json,
-    _output_ndjson,
-    _output_text,
-    _parse_auth,
-    _parse_body,
-    _parse_category_list,
-    _parse_headers,
-    _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
-    _validate_url,
     console,
 )
-
 
 auth_app = typer.Typer(help="Authentication")
 
@@ -107,7 +54,7 @@ def auth_login(
 
     if not token:
         console.print("\n2. Create an API token with [bold]Browser Rendering - Edit[/bold] permission")
-        console.print("   Custom Token â†’ Account â†’ Browser Rendering â†’ Edit\n")
+        console.print("   Custom Token → Account → Browser Rendering → Edit\n")
         if typer.confirm("Open token creation page in browser?", default=True):
             webbrowser.open("https://dash.cloudflare.com/profile/api-tokens")
         token = typer.prompt("API Token", hide_input=True)
@@ -179,7 +126,7 @@ def auth_logout():
 
 
 # ------------------------------------------------------------------
-# cache â€” manage response cache
+# cache — manage response cache
 # ------------------------------------------------------------------
 
 cache_app = typer.Typer(help="Response cache management")
@@ -192,7 +139,7 @@ def cache_clear():
     Example:
         flarecrawl cache clear
     """
-    from . import cache
+    from .. import cache
     count = cache.clear()
     console.print(f"Cleared {count} cached response{'s' if count != 1 else ''}")
 
@@ -207,7 +154,7 @@ def cache_status(
         flarecrawl cache status
         flarecrawl cache status --json
     """
-    from . import cache
+    from .. import cache
     cache_dir = cache._cache_dir()
     entries = list(cache_dir.glob("*.json"))
     total_bytes = sum(f.stat().st_size for f in entries)
@@ -229,7 +176,7 @@ def cache_status(
 
 
 # ------------------------------------------------------------------
-# negotiate â€” domain cache management
+# negotiate — domain cache management
 # ------------------------------------------------------------------
 
 
@@ -284,7 +231,7 @@ def negotiate_clear():
 
 
 # ------------------------------------------------------------------
-# rules â€” per-site header rulesets
+# rules — per-site header rulesets
 # ------------------------------------------------------------------
 
 rules_app = typer.Typer(help="Per-site header rulesets for enhanced extraction")
@@ -336,7 +283,7 @@ def rules_add(
     cookie: Annotated[str | None, typer.Option("--cookie", help="Cookie header")] = None,
 ):
     """Add or update a rule in user rules.yaml."""
-    from ..rules import _user_rules_path, _parse_yaml, clear_cache
+    from ..rules import _parse_yaml, _user_rules_path, clear_cache
 
     headers = {}
     if referer:
@@ -383,7 +330,7 @@ def rules_path():
 
 
 # ------------------------------------------------------------------
-# scrape â€” matches firecrawl scrape
+# scrape — matches firecrawl scrape
 # ------------------------------------------------------------------
 
 

@@ -2,75 +2,25 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
-import json
-import re
-import sys
-import time as _time
-from datetime import UTC
-from pathlib import Path
-from typing import Annotated, Any
-from urllib.parse import urlparse
+from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
 from ..config import (
     DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
     get_account_id,
     get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
+from .scrape import _scrape_single
 from ._common import (
     EXIT_AUTH_REQUIRED,
     EXIT_ERROR,
-    EXIT_FORBIDDEN,
-    EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
-    EXIT_VALIDATION,
-    _apply_browser_cookies,
-    _apply_tech_detection,
-    _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
-    _get_cdp_client,
     _get_client,
-    _handle_api_error,
     _output_json,
-    _output_ndjson,
     _output_text,
-    _parse_auth,
-    _parse_body,
-    _parse_category_list,
-    _parse_headers,
-    _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
-    _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -100,8 +50,8 @@ def search(
         flarecrawl search "topic" --scrape --limit 5 --json
         flarecrawl search "query" --json | jq '.data[].url'
     """
-    from ..search import jina_search
     from ..config import get_proxy
+    from ..search import jina_search
 
     effective_proxy = proxy or get_proxy()
 
@@ -109,7 +59,7 @@ def search(
         results = jina_search(query, limit=limit, proxy=effective_proxy)
     except RuntimeError as e:
         # jina_search raises RuntimeError specifically for the missing/invalid
-        # API-key case â€” surface it as an auth error with the actionable hint.
+        # API-key case — surface it as an auth error with the actionable hint.
         _error(str(e), "AUTH_REQUIRED", EXIT_AUTH_REQUIRED, as_json=json_output)
         return
     except Exception as e:
@@ -150,7 +100,7 @@ def search(
             console.print(f"[dim]{item['url']}[/dim]")
             console.print(item["snippet"])
             if "content" in item and item["content"]:
-                console.print(f"\n{'â”€' * 60}")
+                console.print(f"\n{'─' * 60}")
                 content = item["content"]
                 if len(content) > 2000:
                     content = content[:2000] + "\n\n[dim]... truncated[/dim]"
@@ -158,7 +108,7 @@ def search(
 
 
 # ------------------------------------------------------------------
-# fetch â€” content-type aware download
+# fetch — content-type aware download
 # ------------------------------------------------------------------
 
 

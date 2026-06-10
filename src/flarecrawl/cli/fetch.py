@@ -2,75 +2,31 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
-import re
-import sys
-import time as _time
-from datetime import UTC
 from pathlib import Path
-from typing import Annotated, Any
-from urllib.parse import urlparse
+from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
 from ..config import (
     DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
-    get_account_id,
-    get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
+from .scrape import _scrape_single
 from ._common import (
-    EXIT_AUTH_REQUIRED,
     EXIT_ERROR,
-    EXIT_FORBIDDEN,
     EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
-    _apply_browser_cookies,
-    _apply_tech_detection,
     _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
     _get_cdp_client,
     _get_client,
-    _handle_api_error,
     _output_json,
-    _output_ndjson,
     _output_text,
-    _parse_auth,
-    _parse_body,
-    _parse_category_list,
     _parse_headers,
     _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
     _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -99,7 +55,7 @@ def fetch(
 
     Backend / output flags are orthogonal:
       - --session (file or @name) implies the curl_cffi TLS path (a session
-        jar is for anti-bot replay â€” it carries a real Chrome JA3/JA4
+        jar is for anti-bot replay — it carries a real Chrome JA3/JA4
         fingerprint). --stealth/--impersonate force it explicitly.
       - --json is output-format only. It never downgrades the backend, and
         it JSON-sniffs the body even when the server mislabels it
@@ -115,17 +71,17 @@ def fetch(
         flarecrawl fetch https://api.example.com/data.json --json
         flarecrawl fetch https://api.example.com/data --session @site --json
     """
-    from ..fetch import ContentInfo, build_session, detect_content_type, download_binary, download_binary_stealth
+    from ..fetch import build_session, detect_content_type, download_binary, download_binary_stealth
 
     _validate_url(url, json_output)
     # --session implies --stealth: a session jar is specifically for curl_cffi
     # TLS-replay anti-bot (Akamai P6, Cloudflare, Imperva). There is no point
-    # loading a cookie jar and then making a plain httpx request â€” the TLS
+    # loading a cookie jar and then making a plain httpx request — the TLS
     # fingerprint would be rejected before the cookies are even sent.
     # --paywall also implies stealth for the binary path.
     use_stealth = stealth or paywall or bool(session)
     if session and not stealth and not paywall:
-        console.print("[dim]--session detected â€” implying curl_cffi TLS path (use --stealth to suppress this note)[/dim]")
+        console.print("[dim]--session detected — implying curl_cffi TLS path (use --stealth to suppress this note)[/dim]")
 
     # Resolve session cookies
     _cookies = None
@@ -198,7 +154,7 @@ def fetch(
             # falling through to a file download.
             from ..fetch import _filename_looks_binary
             if json_output and not _filename_looks_binary(info.filename):
-                # Only the fetch+parse is guarded â€” a parse/transport failure
+                # Only the fetch+parse is guarded — a parse/transport failure
                 # falls through to the normal binary download. Output writes
                 # happen *after* so a disk error isn't silently swallowed.
                 _parsed = None
@@ -211,7 +167,7 @@ def fetch(
                         _body = _r.content
                     _parsed = json.loads(_body)
                 except Exception:
-                    _parsed = None  # not JSON â€” fall through to binary download
+                    _parsed = None  # not JSON — fall through to binary download
                 if _parsed is not None:
                     if output:
                         output.write_text(json.dumps(_parsed, indent=2), encoding="utf-8")
@@ -265,7 +221,7 @@ def fetch(
                 console.print(f"[green]Saved:[/green] {result.path} ({result.size:,} bytes, {result.elapsed:.1f}s)")
 
         elif info.is_json:
-            # JSON response â€” use curl_cffi when stealth so the TLS fingerprint
+            # JSON response — use curl_cffi when stealth so the TLS fingerprint
             # matches the probe (avoids being blocked at the GET after passing HEAD).
             try:
                 if use_stealth:
@@ -282,7 +238,7 @@ def fetch(
                     except ValueError:
                         data = resp.text
             except ImportError:
-                # curl_cffi not installed â€” fall back to httpx
+                # curl_cffi not installed — fall back to httpx
                 resp = http_session.get(url)
                 resp.raise_for_status()
                 try:
@@ -298,9 +254,9 @@ def fetch(
                 _output_json(data)
 
         elif not info.is_html:
-            # Non-HTML text (XML, KML, CSV, YAML, plain text, etc.) â€” return raw body.
+            # Non-HTML text (XML, KML, CSV, YAML, plain text, etc.) — return raw body.
             # Do NOT attempt CF Browser Rendering markdown conversion on non-HTML content.
-            console.print(f"[dim]Text content ({info.content_type}) â€” fetching raw...[/dim]")
+            console.print(f"[dim]Text content ({info.content_type}) — fetching raw...[/dim]")
             try:
                 if use_stealth:
                     _body = _stealth_get_bytes(url)
@@ -326,9 +282,8 @@ def fetch(
                 _output_text(body)
 
         else:
-            # HTML â€” convert to markdown via CF Browser Rendering
-            console.print("[dim]HTML content â€” converting to markdown...[/dim]")
-            from ..config import get_proxy as _gp
+            # HTML — convert to markdown via CF Browser Rendering
+            console.print("[dim]HTML content — converting to markdown...[/dim]")
             _require_auth(json_output)
             cache_ttl = DEFAULT_CACHE_TTL
             client = _get_client(json_output, cache_ttl=cache_ttl, proxy=effective_proxy)
@@ -442,15 +397,15 @@ def _fetch_for_tech_detect_cdp(
     proxy: str | None = None,
     timeout: float = 60.0,
     as_json: bool = False,
-) -> tuple[str, dict[str, str], dict[str, str], "dict[str, str | None]"]:
+) -> tuple[str, dict[str, str], dict[str, str], dict[str, str | None]]:
     """Render a URL via Cloudflare Browser Run CDP and return (html, headers, cookies, js_globals).
 
     Unlocks the ~880 Wappalyzer fingerprints that only fire via a
     window-globals probe (jQuery version, Next.js buildId, React
     internals, framework-detect lib markers, ...). Reuses the same CDP
-    machinery the v0.30.0 scrape `--cdp --tech-detect` path uses â€”
+    machinery the v0.30.0 scrape `--cdp --tech-detect` path uses —
     `Network.responseReceived` for the main document's headers,
-    `Runtime.evaluate` for the probe â€” so the JS-globals coverage is
+    `Runtime.evaluate` for the probe — so the JS-globals coverage is
     identical between this command and `scrape --cdp --tech-detect`.
 
     Costs CF browser time like any other CDP-routed command. Returns
@@ -462,14 +417,14 @@ def _fetch_for_tech_detect_cdp(
     html = ""
     headers: dict[str, str] = {}
     cookies: dict[str, str] = {}
-    js_globals: dict[str, "str | None"] = {}
+    js_globals: dict[str, str | None] = {}
 
     cdp_client = _get_cdp_client(as_json=as_json, proxy=proxy)
     page = None
     try:
         page = cdp_client.new_page()
 
-        # Header collector â€” Network.responseReceived for the main document.
+        # Header collector — Network.responseReceived for the main document.
         # Must be subscribed before navigate, and Network domain must be
         # enabled for the event to fire.
         header_collector = MainDocumentHeaders(expected_url=url)
@@ -497,7 +452,7 @@ def _fetch_for_tech_detect_cdp(
                           timeout=int(timeout * 1000))
         except Exception:  # noqa: BLE001
             # A navigation timeout still leaves us a partially-loaded page
-            # to probe â€” better than nothing.
+            # to probe — better than nothing.
             pass
 
         try:
@@ -581,7 +536,7 @@ def _fetch_for_tech_detect(
         TimeoutError,
     )
 
-    # Note: we deliberately do NOT raise on 4xx/5xx â€” a 404 from Cloudflare
+    # Note: we deliberately do NOT raise on 4xx/5xx — a 404 from Cloudflare
     # still carries `Server: cloudflare` + `CF-Ray:` headers that are valid
     # tech signals. Transport-level errors (connection refused, timeout,
     # TLS failure) return empty triples.

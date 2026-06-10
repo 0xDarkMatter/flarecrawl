@@ -2,76 +2,31 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import concurrent.futures
 import json
-import re
 import sys
-import time as _time
-from datetime import UTC
 from pathlib import Path
-from typing import Annotated, Any
-from urllib.parse import urlparse
+from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
 from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
+from ..batch import parse_batch_file
 from ..config import (
-    DEFAULT_CACHE_TTL,
     DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
-    get_account_id,
-    get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
 from ._common import (
-    EXIT_AUTH_REQUIRED,
-    EXIT_ERROR,
-    EXIT_FORBIDDEN,
     EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
-    _apply_browser_cookies,
-    _apply_tech_detection,
     _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
     _get_cdp_client,
-    _get_client,
-    _handle_api_error,
     _output_json,
     _output_ndjson,
-    _output_text,
-    _parse_auth,
-    _parse_body,
     _parse_category_list,
     _parse_headers,
-    _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
-    _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -85,15 +40,15 @@ def _fetch_for_tech_detect_cdp(
     proxy: str | None = None,
     timeout: float = 60.0,
     as_json: bool = False,
-) -> tuple[str, dict[str, str], dict[str, str], "dict[str, str | None]"]:
+) -> tuple[str, dict[str, str], dict[str, str], dict[str, str | None]]:
     """Render a URL via Cloudflare Browser Run CDP and return (html, headers, cookies, js_globals).
 
     Unlocks the ~880 Wappalyzer fingerprints that only fire via a
     window-globals probe (jQuery version, Next.js buildId, React
     internals, framework-detect lib markers, ...). Reuses the same CDP
-    machinery the v0.30.0 scrape `--cdp --tech-detect` path uses â€”
+    machinery the v0.30.0 scrape `--cdp --tech-detect` path uses —
     `Network.responseReceived` for the main document's headers,
-    `Runtime.evaluate` for the probe â€” so the JS-globals coverage is
+    `Runtime.evaluate` for the probe — so the JS-globals coverage is
     identical between this command and `scrape --cdp --tech-detect`.
 
     Costs CF browser time like any other CDP-routed command. Returns
@@ -105,14 +60,14 @@ def _fetch_for_tech_detect_cdp(
     html = ""
     headers: dict[str, str] = {}
     cookies: dict[str, str] = {}
-    js_globals: dict[str, "str | None"] = {}
+    js_globals: dict[str, str | None] = {}
 
     cdp_client = _get_cdp_client(as_json=as_json, proxy=proxy)
     page = None
     try:
         page = cdp_client.new_page()
 
-        # Header collector â€” Network.responseReceived for the main document.
+        # Header collector — Network.responseReceived for the main document.
         # Must be subscribed before navigate, and Network domain must be
         # enabled for the event to fire.
         header_collector = MainDocumentHeaders(expected_url=url)
@@ -140,7 +95,7 @@ def _fetch_for_tech_detect_cdp(
                           timeout=int(timeout * 1000))
         except Exception:  # noqa: BLE001
             # A navigation timeout still leaves us a partially-loaded page
-            # to probe â€” better than nothing.
+            # to probe — better than nothing.
             pass
 
         try:
@@ -224,7 +179,7 @@ def _fetch_for_tech_detect(
         TimeoutError,
     )
 
-    # Note: we deliberately do NOT raise on 4xx/5xx â€” a 404 from Cloudflare
+    # Note: we deliberately do NOT raise on 4xx/5xx — a 404 from Cloudflare
     # still carries `Server: cloudflare` + `CF-Ray:` headers that are valid
     # tech signals. Transport-level errors (connection refused, timeout,
     # TLS failure) return empty triples.
@@ -493,7 +448,7 @@ def tech_detect_command(
 
     # ---- detect per URL ----------------------------------------------
     def _one(target: str) -> dict:
-        js_globals: "dict[str, str | None] | None" = None
+        js_globals: dict[str, str | None] | None = None
         if cdp:
             html, hdrs, cks, js_globals = _fetch_for_tech_detect_cdp(
                 target,
@@ -573,11 +528,10 @@ def tech_detect_command(
 
 def _print_tech_table(url: str, techs: list[dict], *, error: str | None = None) -> None:
     """Pretty-print one URL's detections to the console."""
-    from rich.table import Table  # noqa: PLC0415
 
     title = url
     if error:
-        console.print(f"[red]âœ—[/red] {title}: {error}")
+        console.print(f"[red]✗[/red] {title}: {error}")
         return
     if not techs:
         console.print(f"[dim]{title}: no technologies detected[/dim]")
@@ -598,7 +552,7 @@ def _print_tech_table(url: str, techs: list[dict], *, error: str | None = None) 
 
 
 # ------------------------------------------------------------------
-# crawl â€” matches firecrawl crawl
+# crawl — matches firecrawl crawl
 # ------------------------------------------------------------------
 
 

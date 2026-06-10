@@ -3,74 +3,30 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
-import re
-import sys
-import time as _time
-from datetime import UTC
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
+from ..client import FlareCrawlError
 from ..config import (
     DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
-    get_account_id,
-    get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
 from ._common import (
-    EXIT_AUTH_REQUIRED,
     EXIT_ERROR,
-    EXIT_FORBIDDEN,
-    EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
-    EXIT_VALIDATION,
     _apply_browser_cookies,
-    _apply_tech_detection,
-    _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
     _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
     _get_cdp_client,
     _get_client,
     _handle_api_error,
     _output_json,
-    _output_ndjson,
-    _output_text,
     _parse_auth,
-    _parse_body,
-    _parse_category_list,
-    _parse_headers,
-    _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
     _validate_url,
     console,
 )
-
 
 frontier_app = typer.Typer(
     name="frontier",
@@ -106,7 +62,7 @@ def frontier_dead_letter(
 
 
 # ============================================================
-# spider / authcrawl â€” direct BFS via AuthenticatedCrawler (no CF round-trip)
+# spider / authcrawl — direct BFS via AuthenticatedCrawler (no CF round-trip)
 # ============================================================
 
 
@@ -138,7 +94,7 @@ def authcrawl(
     tracing: Annotated[str, typer.Option("--tracing", help="OpenTelemetry exporter: none, console, json, otlp")] = "none",
     output: Annotated[Path | None, typer.Option("--output", "-o", help="Write NDJSON results to file")] = None,
 ):
-    """Direct HTTP spider â€” no browser rendering, no CF cost.
+    """Direct HTTP spider — no browser rendering, no CF cost.
 
     Crawls via httpx (not CF Browser Run), carrying cookies for
     authenticated sites. Orders of magnitude faster and cheaper than
@@ -148,8 +104,8 @@ def authcrawl(
     (protego), adaptive delay, resume, per-URL retry budget, NDJSON output.
 
     When to use spider vs crawl:
-        spider â€” static HTML sites, docs, APIs (fast, free, 50-100 concurrent)
-        crawl  â€” SPAs, JS-rendered content (slower, costs browser time)
+        spider — static HTML sites, docs, APIs (fast, free, 50-100 concurrent)
+        crawl  — SPAs, JS-rendered content (slower, costs browser time)
 
     Example:
         flarecrawl spider https://docs.example.com --limit 500
@@ -230,7 +186,7 @@ def authcrawl(
 
 
 # ------------------------------------------------------------------
-# videos â€” video URL discovery
+# videos — video URL discovery
 # ------------------------------------------------------------------
 
 
@@ -332,7 +288,8 @@ def videos(
             if depth > 1:
                 from selectolax.parser import HTMLParser
                 tree = HTMLParser(html)
-                from urllib.parse import urljoin as _urljoin, urlparse as _urlparse
+                from urllib.parse import urljoin as _urljoin
+                from urllib.parse import urlparse as _urlparse
                 base_parsed = _urlparse(url)
                 link_urls: list[str] = []
                 for a in tree.css("a[href]"):
@@ -378,7 +335,7 @@ def videos(
 
         # Load session cookies
         if session:
-            from ..cookies import load_cookies, cookies_to_header
+            from ..cookies import cookies_to_header, load_cookies
             cookies = load_cookies(session)
             parsed = urlparse(url)
             cookie_header = cookies_to_header(cookies, parsed.netloc)
@@ -399,7 +356,8 @@ def videos(
         if depth > 1:
             from selectolax.parser import HTMLParser
             tree = HTMLParser(html)
-            from urllib.parse import urljoin as _urljoin, urlparse as _urlparse
+            from urllib.parse import urljoin as _urljoin
+            from urllib.parse import urlparse as _urlparse
             base_parsed = _urlparse(url)
             link_urls = []
             for a in tree.css("a[href]"):
@@ -483,10 +441,6 @@ def videos(
         if output:
             output.write_text(json.dumps(video_dicts, indent=2), encoding="utf-8")
             console.print(f"[green]Saved to:[/green] {output}")
-
-
-if __name__ == "__main__":
-    app()
 
 
 def register(app: typer.Typer) -> None:

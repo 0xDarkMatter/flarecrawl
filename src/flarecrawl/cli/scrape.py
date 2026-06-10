@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import concurrent.futures
 import json
 import re
 import sys
@@ -14,10 +15,6 @@ from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
 from .. import __version__
 from ..batch import parse_batch_file, process_batch
@@ -25,24 +22,13 @@ from ..client import MOBILE_PRESET, Client, FlareCrawlError
 from ..config import (
     DEFAULT_CACHE_TTL,
     DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
     get_account_id,
     get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
     save_cdp_session,
-    save_credentials,
 )
 from ._common import (
-    EXIT_AUTH_REQUIRED,
     EXIT_ERROR,
-    EXIT_FORBIDDEN,
     EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
     _apply_browser_cookies,
     _apply_tech_detection,
@@ -51,9 +37,7 @@ from ._common import (
     _collect_response_signals,
     _enrich_cdp_error,
     _error,
-    _filter_detections,
     _filter_fields,
-    _filter_record_content,
     _get_cdp_client,
     _get_client,
     _handle_api_error,
@@ -62,15 +46,12 @@ from ._common import (
     _output_text,
     _parse_auth,
     _parse_body,
-    _parse_category_list,
     _parse_headers,
-    _require_auth,
     _run_then_fetch,
     _sanitize_filename,
     _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -80,15 +61,14 @@ def _classify_url_for_organize(url: str, mode: str) -> str:
     """Pick a subdirectory name for a URL given an organize-by mode.
 
     Modes:
-        flat        â†’ "" (everything in then_fetch_output)
-        extension   â†’ "pdfs" / "images" / "videos" / "docs" / "other"
-        content-type â†’ "image" / "application" / "text" / "video" / "audio"
+        flat        → "" (everything in then_fetch_output)
+        extension   → "pdfs" / "images" / "videos" / "docs" / "other"
+        content-type → "image" / "application" / "text" / "video" / "audio"
                       (best-effort from the URL extension; refined by
                       Content-Type at fetch time isn't worth the round trip)
-        thumbnail   â†’ war.gov-style: pull URLs containing "/thumbnail/" into
+        thumbnail   → war.gov-style: pull URLs containing "/thumbnail/" into
                       a thumbnails/ subdir; everything else by extension.
     """
-    from urllib.parse import urlparse
 
     if mode in (None, "flat"):
         return ""
@@ -130,7 +110,7 @@ def _classify_url_for_organize(url: str, mode: str) -> str:
 
 def _run_then_fetch(
     *,
-    cdp_client: "CDPClient",
+    cdp_client: CDPClient,
     then_fetch: str | None,
     then_fetch_from: Path | None,
     then_fetch_column: str | None,
@@ -142,7 +122,7 @@ def _run_then_fetch(
     """v0.24.0 P2.3: mass-download URLs reusing browser session + stealth TLS.
 
     Cookies extracted from the live CDP browser are handed off to a
-    curl_cffi thread pool (Chrome 131 impersonation). Resume-safe â€” files
+    curl_cffi thread pool (Chrome 131 impersonation). Resume-safe — files
     that already exist with non-zero size are skipped.
 
     Returns a summary dict for inclusion in scrape result metadata.
@@ -151,7 +131,7 @@ def _run_then_fetch(
 
     from ..fetch import download_binary_stealth
 
-    # â”€â”€ 1. Resolve URL list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 1. Resolve URL list ──────────────────────────────────────────────
     urls: list[str] = []
     if then_fetch:
         urls.extend(u.strip() for u in then_fetch.split(",") if u.strip())
@@ -199,7 +179,7 @@ def _run_then_fetch(
             "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output,
         )
 
-    # â”€â”€ 2. Extract cookies via a temporary page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 2. Extract cookies via a temporary page ──────────────────────────
     cookies: list[dict] = []
     try:
         cookie_page = cdp_client.new_page()
@@ -211,7 +191,7 @@ def _run_then_fetch(
         if not json_output:
             console.print(f"[yellow]Warning: cookie extraction failed ({e}); proceeding without[/yellow]")
 
-    # â”€â”€ 3. Output dir â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 3. Output dir ────────────────────────────────────────────────────
     then_fetch_output.mkdir(parents=True, exist_ok=True)
     if not json_output:
         console.print(
@@ -219,9 +199,8 @@ def _run_then_fetch(
             f"output={then_fetch_output}[/dim]"
         )
 
-    # â”€â”€ 4. Parallel downloads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 4. Parallel downloads ───────────────────────────────────────────
     def _do_one(url: str) -> dict:
-        from urllib.parse import urlparse
         name = Path(urlparse(url.split("?")[0]).path).name or "download"
         subdir = _classify_url_for_organize(url, then_fetch_organize_by or "flat")
         dest_dir = then_fetch_output / subdir if subdir else then_fetch_output
@@ -276,7 +255,7 @@ def _run_then_fetch(
 
 
 def _scrape_single_cdp(
-    cdp_client: "CDPClient",
+    cdp_client: CDPClient,
     url: str,
     format: str = "markdown",
     js_expression: str | None = None,
@@ -293,7 +272,7 @@ def _scrape_single_cdp(
     har_output: Path | None = None,
     load_cookies: Path | None = None,
     save_cookies: Path | None = None,
-    page: "SyncCDPPage | None" = None,
+    page: SyncCDPPage | None = None,
     skip_navigation: bool = False,
     capture_patterns: list[str] | None = None,
     capture_dir: Path | None = None,
@@ -308,7 +287,7 @@ def _scrape_single_cdp(
     If *page* is provided, reuse the existing page instead of creating a new
     one (used by --interactive mode where the user has already navigated and
     authenticated). When *skip_navigation* is True, the URL navigation step is
-    skipped â€” useful when the page is already on the target URL.
+    skipped — useful when the page is already on the target URL.
     """
     start = _time.time()
 
@@ -493,7 +472,7 @@ def _scrape_single_cdp(
                         _td_cookies[name] = val
             except Exception:
                 pass
-            _td_js_globals: dict[str, "str | None"] = {}
+            _td_js_globals: dict[str, str | None] = {}
             try:
                 from ..wappalyzer import get_wappalyzer
                 probe_js = get_wappalyzer().build_js_probe()
@@ -574,9 +553,9 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
                    recall: bool = False,
                    no_negotiate: bool = False,
                    negotiate_headers: dict | None = None,
-                   negotiate_session: "httpx.Client | None" = None,
+                   negotiate_session: httpx.Client | None = None,
                    paywall: bool = False,
-                   paywall_session: "httpx.Client | None" = None,
+                   paywall_session: httpx.Client | None = None,
                    stealth: bool = False,
                    clean: bool = False,
                    proxy: str | None = None,
@@ -585,7 +564,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
     start = _time.time()
 
     # ------------------------------------------------------------------
-    # Markdown content negotiation (fast path â€” no browser rendering)
+    # Markdown content negotiation (fast path — no browser rendering)
     # ------------------------------------------------------------------
     # Try Accept: text/markdown before spinning up headless Chromium.
     # Only for simple markdown scrapes with no browser-specific flags.
@@ -607,7 +586,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             ).decode()
             neg_headers["Authorization"] = f"Basic {_basic}"
 
-        # NOTE: do NOT pass client._session â€” it carries CF API auth
+        # NOTE: do NOT pass client._session — it carries CF API auth
         # headers that must not leak to arbitrary target sites.
         # Use negotiate_session if provided (batch mode reuse).
         neg_result = try_negotiate(
@@ -668,7 +647,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
     # Paywall bypass cascade
     # ------------------------------------------------------------------
     # When CF auth is available, only run the stealth tier (curl_cffi with
-    # browser TLS fingerprint) â€” other tiers use the user's IP directly.
+    # browser TLS fingerprint) — other tiers use the user's IP directly.
     # When no CF auth, run the full cascade.
     if paywall and not _browser_needed:
         pw_headers = dict(negotiate_headers or {})
@@ -683,7 +662,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
             pw_headers["Authorization"] = f"Basic {_basic_pw}"
 
         if client is not None:
-            # CF auth available: only run stealth tier (curl_cffi) â€” other
+            # CF auth available: only run stealth tier (curl_cffi) — other
             # tiers would expose the user's IP. If stealth fails, fall
             # through to browser rendering with site rules.
             from ..paywall import _try_stealth_fetch
@@ -980,7 +959,7 @@ def _scrape_single(client: Client, url: str, format: str, wait_for: int | None,
 
         content = _h2m(html) if format == "markdown" else html
     elif agent_safe and isinstance(content, str) and format == "html":
-        # No extraction block ran, but we have HTML â€” sanitise it directly
+        # No extraction block ran, but we have HTML — sanitise it directly
         from ..sanitise import sanitise_html as _sanitise_html_raw
         _html_san_raw = _sanitise_html_raw(content)
         content = _html_san_raw.content
@@ -1178,7 +1157,7 @@ def scrape(
     # behavioural fingerprinting hits hardest). User can override with
     # --no-humanize. Headed mode doesn't need it (real cursor history
     # comes from the OS).
-    # `humanize is None` means user didn't pass either flag â€” apply default.
+    # `humanize is None` means user didn't pass either flag — apply default.
     # `humanize is False` means user explicitly said --no-humanize; respect.
     # `humanize is True` means user said --humanize; respect.
     if humanize is None:
@@ -1267,7 +1246,7 @@ def scrape(
         else:
             content = html_to_markdown(html)
         if agent_safe and isinstance(content, str):
-            from ..sanitise import sanitise_text, SanitiseResult
+            from ..sanitise import SanitiseResult, sanitise_text
             _text_san = sanitise_text(content)
             content = _text_san.content
             _all_findings = _stdin_findings + _text_san.findings
@@ -1535,7 +1514,7 @@ def scrape(
                     tech_detect=tech_detect,
                 )
                 if timing:
-                    console.print(f"[dim]{url} â€” {result['elapsed']:.1f}s[/dim]")
+                    console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
                 results.append(result)
                 page.close()
 
@@ -1563,7 +1542,7 @@ def scrape(
                     tech_detect=tech_detect,
                     )
                     if timing:
-                        console.print(f"[dim]{url} â€” {result['elapsed']:.1f}s[/dim]")
+                        console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
                     results.append(result)
             else:
                 for url in all_urls:
@@ -1590,10 +1569,10 @@ def scrape(
                     tech_detect=tech_detect,
                     )
                     if timing:
-                        console.print(f"[dim]{url} â€” {result['elapsed']:.1f}s[/dim]")
+                        console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
                     results.append(result)
 
-            # v0.24.0 P2.3: --then-fetch â€” mass-download URLs reusing the
+            # v0.24.0 P2.3: --then-fetch — mass-download URLs reusing the
             # browser's session (cookies + stealth TLS via curl_cffi).
             if (then_fetch or then_fetch_from) and then_fetch_output:
                 _then_fetch_results = _run_then_fetch(
@@ -1620,7 +1599,7 @@ def scrape(
                     console.print(f"[green]Recording saved to:[/green] {rec_path}")
 
             if live_view:
-                console.print("[dim]Session active â€” press Ctrl+C to close[/dim]")
+                console.print("[dim]Session active — press Ctrl+C to close[/dim]")
                 try:
                     while True:
                         _time.sleep(1)
@@ -1722,7 +1701,7 @@ def scrape(
                 try:
                     result = future.result()
                     if timing:
-                        console.print(f"[dim]{url} â€” {result['elapsed']:.1f}s[/dim]")
+                        console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
                     results.append(result)
                 except FlareCrawlError as e:
                     console.print(f"[red]Failed:[/red] {url}: {e}")
@@ -1760,7 +1739,7 @@ def scrape(
                                     proxy=effective_proxy,
                                     agent_safe=agent_safe)
             if timing:
-                console.print(f"[dim]{url} â€” {result['elapsed']:.1f}s[/dim]")
+                console.print(f"[dim]{url} — {result['elapsed']:.1f}s[/dim]")
             results.append(result)
         except FlareCrawlError as e:
             _handle_api_error(e, json_output)
@@ -1774,7 +1753,7 @@ def scrape(
     if diff and results:
         import difflib
 
-        from . import cache as _cache
+        from .. import cache as _cache
         for r in results:
             content_str = r.get("content", "")
             if not isinstance(content_str, str):
@@ -1906,7 +1885,7 @@ def scrape(
 
 
 # ------------------------------------------------------------------
-# search â€” web search via Jina
+# search — web search via Jina
 # ------------------------------------------------------------------
 
 

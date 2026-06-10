@@ -2,75 +2,32 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
-import re
-import sys
-import time as _time
-from datetime import UTC
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 from urllib.parse import urlparse
 
 import typer
-from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
 from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
+from ..client import FlareCrawlError
 from ..config import (
     DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
-    get_account_id,
-    get_api_token,
-    get_auth_status,
     get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
 from ._common import (
-    EXIT_AUTH_REQUIRED,
-    EXIT_ERROR,
-    EXIT_FORBIDDEN,
     EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
-    _apply_browser_cookies,
-    _apply_tech_detection,
-    _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
-    _filter_fields,
-    _filter_record_content,
-    _get_cdp_client,
     _get_client,
     _handle_api_error,
     _output_json,
-    _output_ndjson,
     _output_text,
     _parse_auth,
-    _parse_body,
-    _parse_category_list,
     _parse_headers,
-    _require_auth,
-    _run_then_fetch,
-    _sanitize_filename,
     _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -102,7 +59,7 @@ def discover(
         flarecrawl discover https://example.com --limit 100
         flarecrawl discover https://example.com --openapi --json
     """
-    from urllib.parse import urljoin, urlparse
+    from urllib.parse import urljoin
 
     cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
     client = _get_client(json_output, cache_ttl=cache_ttl)
@@ -132,7 +89,7 @@ def discover(
         Returns (page_urls, sub_sitemap_urls).
         """
         from selectolax.parser import HTMLParser
-        # CF renders XML as HTML â€” use selectolax to extract text of <loc> tags
+        # CF renders XML as HTML — use selectolax to extract text of <loc> tags
         tree = HTMLParser(html_or_xml)
         pages, sub_sitemaps = [], []
         for loc in tree.css("loc"):
@@ -207,7 +164,7 @@ def discover(
             for feed_url in dict.fromkeys(feed_urls):  # dedupe, preserve order
                 try:
                     feed_html = client.get_content(feed_url, **kwargs)
-                    # CF renders XML as HTML â€” use selectolax to find link elements
+                    # CF renders XML as HTML — use selectolax to find link elements
                     feed_tree = HTMLParser(feed_html)
                     # RSS: <item><link>URL</link></item>
                     for item in feed_tree.css("item"):
@@ -295,7 +252,7 @@ def discover(
 
 
 # ------------------------------------------------------------------
-# schema â€” structured data extraction
+# schema — structured data extraction
 # ------------------------------------------------------------------
 
 
@@ -372,7 +329,7 @@ def schema(
 
 
 # ------------------------------------------------------------------
-# usage â€” browser time tracking
+# usage — browser time tracking
 # ------------------------------------------------------------------
 
 
@@ -443,7 +400,7 @@ def usage(
 
 
 # ------------------------------------------------------------------
-# openapi â€” OpenAPI/Swagger spec discovery
+# openapi — OpenAPI/Swagger spec discovery
 # ------------------------------------------------------------------
 
 
@@ -559,7 +516,7 @@ def openapi(
                 if not json_output:
                     v = result.validation
                     status = "[green]valid[/green]" if v.valid else "[yellow]invalid[/yellow]"
-                    console.print(f"  {status} {spec.url} â†’ {out_path}")
+                    console.print(f"  {status} {spec.url} → {out_path}")
                     if v.title:
                         console.print(f"    Title: {v.title}, Endpoints: {v.endpoint_count}")
             except Exception as e:
@@ -577,7 +534,7 @@ def openapi(
 
 
 # ------------------------------------------------------------------
-# session â€” saved session management
+# session — saved session management
 # ------------------------------------------------------------------
 
 

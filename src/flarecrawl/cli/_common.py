@@ -10,29 +10,17 @@ import base64
 import json
 import re
 import sys
-import time as _time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
 
-from .. import __version__
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
+from ..client import Client, FlareCrawlError
 from ..config import (
-    DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
     get_account_id,
     get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
 
 if TYPE_CHECKING:
@@ -312,7 +300,7 @@ def _filter_record_content(
         if agent_safe and key == "markdown":
             md_content = record.get(key)
             if md_content and isinstance(md_content, str):
-                from ..sanitise import sanitise_text, SanitiseResult
+                from ..sanitise import SanitiseResult, sanitise_text
                 _text_san = sanitise_text(md_content)
                 record[key] = _text_san.content
                 _record_findings.extend(_text_san.findings)
@@ -432,7 +420,7 @@ def _attach_tech(
     html: str | None = None,
     headers: dict[str, str] | None = None,
     cookies: dict[str, str] | None = None,
-    js_globals: "dict[str, str | None] | None" = None,
+    js_globals: dict[str, str | None] | None = None,
     emit_summary: bool = False,
     min_confidence: int = 0,
     only_categories: list[str] | None = None,

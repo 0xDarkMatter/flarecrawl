@@ -163,6 +163,7 @@ recipe.register(app)
 discover.register(app)
 # cdp interact command (direct on main app)
 from .cdp_cmds import register as _cdp_register  # noqa: E402
+
 _cdp_register(app)
 # frontier direct commands (spider, authcrawl, videos)
 _frontier_register(app)

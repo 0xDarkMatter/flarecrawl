@@ -2,59 +2,26 @@
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
-import re
-import sys
-import time as _time
-from datetime import UTC
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 from urllib.parse import urlparse
 
 import typer
-from rich.console import Console
 from rich.live import Live
 from rich.spinner import Spinner
-from rich.table import Table
 
-from .. import __version__
-from ..batch import parse_batch_file, process_batch
-from ..client import MOBILE_PRESET, Client, FlareCrawlError
+from ..client import FlareCrawlError
 from ..config import (
     DEFAULT_CACHE_TTL,
-    DEFAULT_MAX_WORKERS,
-    clear_cdp_session,
-    clear_credentials,
-    get_account_id,
-    get_api_token,
-    get_auth_status,
-    get_usage,
-    list_cdp_sessions,
-    load_cdp_session,
-    save_cdp_session,
-    save_credentials,
 )
 from ._common import (
-    EXIT_AUTH_REQUIRED,
-    EXIT_ERROR,
-    EXIT_FORBIDDEN,
     EXIT_NOT_FOUND,
-    EXIT_RATE_LIMITED,
-    EXIT_SUCCESS,
     EXIT_VALIDATION,
-    _apply_browser_cookies,
     _apply_tech_detection,
-    _attach_tech,
-    _classify_url_for_organize,
-    _collect_response_signals,
-    _enrich_cdp_error,
     _error,
-    _filter_detections,
     _filter_fields,
     _filter_record_content,
-    _get_cdp_client,
     _get_client,
     _handle_api_error,
     _output_json,
@@ -62,15 +29,11 @@ from ._common import (
     _output_text,
     _parse_auth,
     _parse_body,
-    _parse_category_list,
     _parse_headers,
-    _require_auth,
-    _run_then_fetch,
     _sanitize_filename,
     _validate_url,
     console,
 )
-
 
 # Module-local Typer — commands are mounted by register() in __init__.py
 _cmd = typer.Typer(add_completion=False)
@@ -203,7 +166,7 @@ def crawl(
         if _session_cookies:
             kwargs["cookies"] = _session_cookies
         if ignore_robots:
-            # CF /crawl always respects robots.txt â€” no API parameter exists
+            # CF /crawl always respects robots.txt — no API parameter exists
             console.print(
                 "[yellow]Warning:[/yellow] CF /crawl always respects robots.txt (blocked URLs get status 'disallowed').\n"
                 "  To crawl ignoring robots.txt, use:\n"
@@ -309,7 +272,7 @@ def crawl(
         payload = {"data": result, "meta": {"count": len(records)}}
         try:
             resp = _httpx.post(webhook, json=payload, headers=wh_headers, timeout=30)
-            console.print(f"[dim]Webhook: POST {webhook} â†’ {resp.status_code}[/dim]")
+            console.print(f"[dim]Webhook: POST {webhook} → {resp.status_code}[/dim]")
         except Exception as e:
             console.print(f"[yellow]Webhook failed:[/yellow] {e}")
 
@@ -323,7 +286,7 @@ def crawl(
 
 
 # ------------------------------------------------------------------
-# map â€” matches firecrawl map
+# map — matches firecrawl map
 # ------------------------------------------------------------------
 
 
@@ -401,7 +364,7 @@ def map_urls(
 
 
 # ------------------------------------------------------------------
-# download â€” matches firecrawl download
+# download — matches firecrawl download
 # ------------------------------------------------------------------
 
 
@@ -537,7 +500,7 @@ def download(
 
 
 # ------------------------------------------------------------------
-# extract â€” matches firecrawl agent
+# extract — matches firecrawl agent
 # ------------------------------------------------------------------
 
 
