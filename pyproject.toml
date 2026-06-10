@@ -45,6 +45,7 @@ dependencies = [
     # `flarecrawl scrape ...`). Listing it as a core dependency keeps a
     # bare `uv sync` install actually runnable.
     "selectolax>=0.3.0",
+    "websockets>=16.0",
 ]
 
 [project.optional-dependencies]
@@ -70,6 +71,7 @@ perf = [
   "opentelemetry-sdk>=1.20.0",
   "opentelemetry-instrumentation-httpx>=0.41b0",
 ]
+mcp = ["mcp>=1.0.0"]
 
 [project.scripts]
 flarecrawl = "flarecrawl.cli:app"
@@ -122,3 +124,26 @@ env-key = "FLARECRAWL_API_TOKEN"
 api-url = "https://dash.cloudflare.com/"
 maturity = "scaffold"
 status = "experimental"
+
+[tool.forma.mcp]
+enabled = true
+transport = "stdio"
+protocol = "forma/0.9"
+coverage_gaps = [
+  {command = "videos", reason = "Niche; yt-dlp pipeline is CLI-shaped (pipes)", workaround = "flarecrawl videos URL --json  # via CLI"},
+  {command = "authcrawl", reason = "Long-running (hours), resume-oriented — wrong shape for MCP call lifetime", workaround = "flarecrawl authcrawl URL --resume  # via CLI"},
+  {command = "frontier", reason = "Debug tool for authcrawl job DBs", workaround = "flarecrawl frontier dead-letter JOB_ID --json  # via CLI"},
+  {command = "batch", reason = "YAML-config driver; agents issue parallel tool calls instead", workaround = "Multiple MCP calls or: flarecrawl batch config.yml  # via CLI"},
+  {command = "auth login/logout", reason = "Credential entry is human-in-the-loop; MCP must never handle secrets", workaround = "flarecrawl auth login  # run once; MCP uses the auth chain"},
+  {command = "cache clear / negotiate clear", reason = "Destructive config management, low agent value", workaround = "flarecrawl cache clear  # or: flarecrawl negotiate clear"},
+  {command = "rules *", reason = "User config management", workaround = "flarecrawl rules list --json  # or rules show/add via CLI"},
+  {command = "cdp *", reason = "Session lifecycle tied to terminal workflows", workaround = "flarecrawl cdp connect --json  # via CLI"},
+  {command = "webmcp *", reason = "Calling third-party WebMCP tools through our MCP = confusing double-hop", workaround = "flarecrawl webmcp discover URL --json  # via CLI"},
+  {command = "--interactive/--live-view/--headed flags", reason = "Require a human at a browser", workaround = "Run CLI interactively, save session, then use session_list + raw tools"},
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-mock",
+]
