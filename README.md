@@ -38,7 +38,7 @@ For older releases, see [CHANGELOG.md](CHANGELOG.md).
 | **Form filling** | No | **Yes** (`interact` command with human-like timing) |
 | **Session recordings** | No | **Yes** (`--record` — rrweb format, 30-day retention) |
 | **WebMCP tool discovery** | No | **Yes** (`webmcp discover/call`) |
-| **Stack fingerprinting** | No | **Yes** (`tech-detect` — single GET, ~7,500 + 71 Wappalyzer fingerprints, `--only-categories` filtering) |
+| **Stack fingerprinting** | No | **Yes** (`tech-detect` — single GET, ~7,500 upstream + 104 custom Wappalyzer fingerprints, `--only-categories` filtering) |
 | **AI extraction** | Spark models | Workers AI (included) |
 | **Agent-safe sanitisation** | No | **Yes** (`--agent-safe` — 13 sanitisers, DeepMind taxonomy) |
 | **Paywall bypass** | Limited | **Multi-strategy cascade** (`--paywall --stealth`) |
@@ -121,7 +121,7 @@ SaaS — over a single HTTP GET with zero CF browser time. Useful for
 market research (how many AU restaurant sites run SevenRooms vs
 ResDiary?), competitive audits, and lead qualification (find every
 site on Mews or Cloudbeds). Bundled corpus ships ~7,500 upstream
-Wappalyzer fingerprints plus a 71-entry AU hospitality/tourism overlay
+Wappalyzer fingerprints plus a 104-entry AU hospitality/tourism overlay
 (Roam, ATDW, Localis, Simpleview, Mews, Cloudbeds, Bokun, Resy, Tock,
 TheFork, Triptease, Eventbrite, …). `--cdp` mode routes through CF
 Browser Run + injects a `Runtime.evaluate` JS-globals probe (~5,500
@@ -1187,7 +1187,7 @@ suite picks it up automatically.
 The `tests/corpus/` directory contains 61 fixture files that serve as both
 test data and a living catalogue of known attack vectors:
 
-- **`attacks/`** (45 files) - adversarial fixtures across 12 categories
+- **`attacks/`** (45 files) - adversarial fixtures across 13 categories
 - **`benign/`** (16 files) - false-positive traps: security articles, responsive
   CSS, ARIA accessibility, admin UIs, medical urgency, i18n content, code
   tutorials, system docs, journalism
@@ -1209,46 +1209,66 @@ Browser time is shared between REST API calls and Workers bindings. Track your u
 ```
 flarecrawl/
 ├── pyproject.toml              # Package config
-├── AGENTS.md                   # AI agent context
+├── AGENTS.md                   # AI agent context (served by `flarecrawl guide`)
 ├── README.md                   # This file
 ├── src/flarecrawl/
-│   ├── __init__.py             # Version
-│   ├── authcrawl.py            # Authenticated BFS crawler (session cookie propagation)
-│   ├── batch.py                # Batch processing (parse + parallel workers)
-│   ├── cache.py                # File-based response cache
+│   # Core
 │   ├── cli.py                  # Typer CLI (all commands)
-│   ├── cdp.py                  # CDP WebSocket client (persistent sessions, DevTools Protocol)
 │   ├── client.py               # CF Browser Run REST API client (httpx pooling, HTTP/2)
-│   ├── config.py               # Credentials, usage tracking, env-var config, session storage
-│   ├── cookies.py              # Cookie loading (Puppeteer/Netscape/Chrome), conversion, validation
-│   ├── design.py               # Design system extraction (tokens, coherence scoring, formatting)
-│   ├── extract.py              # HTML extraction (main content, images, schema, tags)
+│   ├── config.py               # Usage tracking, env-var config, session storage
+│   ├── credentials.py          # Credential chain: OS keyring / .env / legacy config
+│   ├── guide.py                # `flarecrawl guide` — serves the packaged AGENTS.md
+│   # Fetching & rendering
 │   ├── fetch.py                # Content-type aware download — 4-branch routing: binary / JSON / raw text / HTML→CF
 │   ├── negotiate.py            # Markdown content negotiation (Accept: text/markdown)
-│   ├── openapi.py              # OpenAPI/Swagger spec discovery and validation
-│   ├── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
-│   ├── rules.py                # Per-site YAML rulesets (load, merge, cache)
-│   ├── search.py               # Web search via Jina Search API
-│   ├── sanitise.py             # Agent-safety sanitisation (hidden text, injection, manipulation)
+│   ├── cdp.py                  # CDP WebSocket client (persistent sessions, DevTools Protocol)
+│   ├── local_browser.py        # Local Playwright Chromium backend (--browser local)
+│   ├── humanize.py             # Synthesised mouse/scroll/idle input for headless evasion
+│   ├── recipe.py               # YAML multi-step browser flows with resume journal
+│   # Anti-bot
 │   ├── stealth.py              # Stealth HTTP (curl_cffi TLS impersonation)
-│   └── default_rules.yaml      # Shipped per-site header rules
+│   ├── paywall.py              # Paywall bypass cascade (SSR, Referer, Wayback, Jina)
+│   ├── p6.py                   # Mint→replay primitive (local Chromium mint, curl_cffi replay)
+│   ├── jarhealth.py            # Offline cookie-jar freshness verdicts (session inspect)
+│   ├── blockdetect.py          # Machine-readable bot-wall verdicts (meta.blocked)
+│   ├── cookies.py              # Cookie loading (Puppeteer/Netscape/Chrome), conversion, validation
+│   ├── browser_cookies.py      # Grab cookies from local Chrome/Firefox (--browser-cookies)
+│   ├── fingerprint.py          # Browser fingerprint helpers (stealth_init.js wiring)
+│   # Crawling at scale
+│   ├── authcrawl.py            # Authenticated BFS crawler (Frontier v2, resume, refresh-days)
+│   ├── frontier_v2.py          # Persistent crawl frontier (SQLite, fair scheduling, circuit breakers)
+│   ├── sitemap.py              # Sitemap/RSS/Atom URL discovery
+│   ├── robots.py               # robots.txt compliance (protego, per-host crawl-delay)
+│   ├── canon.py                # URL canonicalisation (strips utm_*, gclid, fbclid, …)
+│   ├── ratelimit.py            # Adaptive politeness, Retry-After honouring
+│   ├── dead_letter.py          # Per-URL retry budget + dead-letter inspection
+│   ├── journal.py              # Crawl/recipe resume journals
+│   ├── delta.py                # Change tracking (--diff)
+│   ├── batch.py                # Batch processing (parse + parallel workers)
+│   # Extraction & analysis
+│   ├── extract.py              # HTML extraction (main content, images, schema, tags)
+│   ├── sanitise.py             # Agent-safety sanitisation (hidden text, injection, manipulation)
+│   ├── wappalyzer.py           # tech-detect engine (fingerprint matching + custom overlay)
+│   ├── wappalyzer_data/        # ~7,500 upstream fingerprints + custom_fingerprints.json overlay
+│   ├── design.py               # Design system extraction (tokens, coherence scoring, formatting)
+│   ├── openapi.py              # OpenAPI/Swagger spec discovery and validation
+│   ├── videos.py               # Video URL discovery (+ yt-dlp registry resolution)
+│   ├── search.py               # Web search via Jina Search API
+│   # Infrastructure
+│   ├── cache.py                # File-based response cache
+│   ├── rules.py                # Per-site YAML rulesets (load, merge, cache)
+│   ├── default_rules.yaml      # Shipped per-site header rules
+│   ├── telemetry.py            # OpenTelemetry tracing (--tracing)
+│   ├── _http.py / _validate.py / _bloom_io.py / json_compat.py / shutdown.py
+│   └── assets/                 # Vendored stealth_init.js
 └── tests/
-    ├── conftest.py             # Test fixtures
-    ├── corpus.py               # Feature test corpus (80 live tests x 8 sites)
-    ├── corpus/                 # Agent-safety attack/benign fixture corpus (48 files)
-    │   ├── attacks/            # Adversarial fixtures (35 files, 6 categories)
-    │   └── benign/             # False-positive traps (13 files)
-    ├── test_batch.py           # Batch module tests
-    ├── test_cache.py           # Cache module tests
-    ├── test_cli.py             # CLI tests
-    ├── test_client.py          # Client tests
-    ├── test_design.py          # Design extraction tests
-    ├── test_extract.py         # Extract module tests
-    ├── test_paywall.py         # Paywall bypass tests
-    ├── test_rules.py           # Per-site rules tests
-    ├── test_cdp.py             # CDP client tests (69 tests)
-    ├── test_sanitise.py        # Agent-safety tests (137 tests + corpus validation)
-    └── test_search.py          # Search module tests
+    ├── conftest.py             # Fixtures (incl. keyring isolation — tests never touch real creds)
+    ├── test_*.py               # 60+ unit test modules, 1,500+ tests, no network
+    ├── corpus.py               # Live feature corpus (80 tests x 8 sites, needs CF auth)
+    ├── corpus/                 # Agent-safety fixture corpus (61 files)
+    │   ├── attacks/            # Adversarial fixtures (45 files, 13 categories)
+    │   └── benign/             # False-positive traps (16 files)
+    └── validate_custom_overlay.py, bench*.py, compare_w3techs.py  # operator scripts (not pytest targets)
 ```
 
 ## Development
@@ -1260,7 +1280,7 @@ uv tool install --editable . --with pytest --with ruff
 # Install CDP support (optional — needed for --cdp, interact, webmcp)
 uv pip install websockets
 
-# Run unit tests (723 tests, no network)
+# Run unit tests (1,500+ tests, no network)
 pytest tests/ -v
 
 # Run live tests against public sites (needs CF auth)

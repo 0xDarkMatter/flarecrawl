@@ -587,7 +587,7 @@ js_globals=...)` runs the same match with full caller-supplied signals.
 
 Fingerprint database ships in the wheel: ~7,500 upstream technologies
 from `enthec/webappanalyzer` (GPL-3.0 data — see
-`wappalyzer_data/LICENSE.wappalyzer_data`) plus a 60-entry overlay
+`wappalyzer_data/LICENSE.wappalyzer_data`) plus a 104-entry overlay
 covering CMS platforms (Craft CMS), CSS frameworks (Tailwind CSS),
 hospitality/tourism booking engines (SevenRooms, ResDiary, OpenTable,
 Mr Yum, Rezdy, FareHarbor, SiteMinder), accommodation PMS, channel
@@ -828,10 +828,10 @@ A typical page scrape uses 100-200ms of browser time. A 30-page crawl uses ~50s 
 ## Testing
 
 ```bash
-# Unit tests (1404+ tests, no API calls)
+# Unit tests (1,500+ tests, no API calls)
 pytest tests/ -v
 
-# Agent-safety tests only (137 tests including corpus validation)
+# Agent-safety tests only (196 tests including corpus validation)
 pytest tests/test_sanitise.py -v
 
 # Agent-safety corpus only (attack detection + benign false-positive checks)
