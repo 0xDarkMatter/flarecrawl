@@ -226,6 +226,47 @@ flarecrawl scrape https://example.com --json | jq '.data.content'
 | `flarecrawl session inspect @name` | Offline cookie-jar freshness verdict (exit ≠0 unless fresh) |
 | `flarecrawl session list` | Manage saved cookie sessions |
 
+## MCP Server
+
+Flarecrawl exposes a [Model Context Protocol](https://modelcontextprotocol.io/) server
+so AI agents (Claude Code, Cursor, etc.) can use flarecrawl tools directly.
+
+```bash
+uv pip install 'flarecrawl[mcp]'
+```
+
+**Wire up in Claude Code** (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "flarecrawl": {
+      "command": "flarecrawl",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**36 tools** across 4 groups:
+
+| Group | Count | Description |
+|-------|------:|-------------|
+| Orientation | 5 | `capabilities`, `guide`, `diagnostics`, `permissions_check`, `schema_generate` |
+| T1 Composite | 5 | `read_page`, `research_web`, `site_overview`, `extract_data`, `check_page_changes` |
+| T2 Curated | 17 | `web_search`, `fetch_url`, `page_screenshot`, `tech_detect`, `crawl_start`, ... |
+| T3 Raw | 9 | `scrape_raw`, `p6_raw`, `spider_raw`, ... (full CLI fidelity) |
+
+Agents should call `capabilities()` first — one fetch returns the full tool
+catalogue, permissions, coverage map, and worked recipes. Content tools default
+to `--agent-safe` sanitisation (the MCP consumer is an LLM context window).
+Read-only mode (`flarecrawl mcp --read-only`) excludes write/destructive tools.
+
+**Coverage gaps** (CLI-only, declared in `capabilities()` with workarounds):
+`videos`, `authcrawl`, `frontier`, `batch`, `auth login/logout`, `cache clear`,
+`rules *`, `cdp *`, `webmcp *`, `session save/delete/show/validate`, and the
+`--interactive`/`--live-view`/`--headed` flags.
+
 ## Install
 
 ```bash

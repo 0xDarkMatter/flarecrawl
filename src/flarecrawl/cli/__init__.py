@@ -167,6 +167,10 @@ from .cdp_cmds import register as _cdp_register  # noqa: E402
 _cdp_register(app)
 # frontier direct commands (spider, authcrawl, videos)
 _frontier_register(app)
+# mcp server command (lazy import of mcp_serve)
+from .mcp_cmd import register as _mcp_register  # noqa: E402
+
+_mcp_register(app)
 
 # ---------------------------------------------------------------------------
 # Re-exports for backward compatibility

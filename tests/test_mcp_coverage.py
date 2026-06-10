@@ -97,6 +97,9 @@ def test_all_cli_commands_covered_or_declared_gap():
 
     missing: list[str] = []
     for cmd in cli_commands:
+        # The `mcp` command IS the MCP server — self-referential, not a gap.
+        if cmd == "mcp":
+            continue
         # Check direct match
         if cmd in all_covered_or_gap:
             continue

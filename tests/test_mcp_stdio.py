@@ -86,7 +86,7 @@ class TestStdioIntegration:
 
     def test_capabilities_gap_count(self, full_registry):
         result = _call_tool(full_registry, "capabilities")
-        assert len(result["api_coverage"]["gaps"]) == 10
+        assert len(result["api_coverage"]["gaps"]) == 11
 
     def test_diagnostics_returns_data(self, full_registry, monkeypatch):
         """diagnostics() returns a data dict (each section independently handled)."""

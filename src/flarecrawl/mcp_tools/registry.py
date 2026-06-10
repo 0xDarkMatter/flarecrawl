@@ -726,7 +726,10 @@ def build_registry(read_only: bool = False) -> dict[str, dict[str, Any]]:
     """
     from .orientation import capabilities_handler, schema_generate_handler  # noqa: F401
 
-    registry = dict(_RAW_REGISTRY)
+    # One-level-deep copy: the inner per-tool dicts get handler rebindings
+    # below, and a shallow dict(_RAW_REGISTRY) would leak those mutations
+    # into every other registry built from the same static table.
+    registry = {name: dict(defn) for name, defn in _RAW_REGISTRY.items()}
 
     # Patch handlers that need registry access
     registry["capabilities"]["handler"] = functools.partial(

@@ -4,8 +4,8 @@ This module is the ONLY place where ``mcp`` is imported.  All tool handlers
 live in ``flarecrawl.mcp_tools`` and are importable without ``mcp``.
 
 Usage (via CLI):
-    flarecrawl mcp serve
-    flarecrawl mcp serve --read-only
+    flarecrawl mcp
+    flarecrawl mcp --read-only
 
 Usage (programmatic):
     from flarecrawl.mcp_serve import serve
@@ -67,7 +67,7 @@ def serve(read_only: bool = False) -> None:
     try:
         from mcp.server import Server
         from mcp.server.stdio import stdio_server
-        from mcp.types import TextContent, Tool
+        from mcp.types import TextContent, Tool, ToolAnnotations
     except ImportError as exc:
         raise ImportError(
             "The 'mcp' package is required to run the MCP server. "
@@ -89,11 +89,11 @@ def serve(read_only: bool = False) -> None:
                 name=name,
                 description=defn.get("short_description", ""),
                 inputSchema=defn.get("parameters", {"type": "object", "properties": {}, "required": []}),
-                annotations={
-                    "readOnlyHint": not is_mutating,
-                    "destructiveHint": is_mutating,
-                    "openWorldHint": False,
-                },
+                annotations=ToolAnnotations(
+                    readOnlyHint=not is_mutating,
+                    destructiveHint=is_mutating,
+                    openWorldHint=False,
+                ),
             )
         )
 
@@ -154,4 +154,13 @@ def serve(read_only: bool = False) -> None:
 
         return [TextContent(type="text", text=json.dumps(result))]
 
-    asyncio.run(stdio_server(server).run())
+    async def _run() -> None:
+        # stdio_server is an async context manager yielding the stream pair.
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(),
+            )
+
+    asyncio.run(_run())

@@ -1265,8 +1265,10 @@ class TestIgnoreRobotsCrawl:
     def test_crawl_ignore_robots_warns(self):
         """Invoking crawl --ignore-robots prints a warning pointing at spider."""
         from unittest.mock import patch, MagicMock
-        with patch("flarecrawl.cli._require_auth"), \
-             patch("flarecrawl.cli.Client") as MockClient:
+        # Patch in _common: the split cli package resolves these names there
+        # (commands call _common._get_client, not module-local Client).
+        with patch("flarecrawl.cli._common._require_auth"), \
+             patch("flarecrawl.cli._common.Client") as MockClient:
             mock_client = MagicMock()
             mock_client.crawl_start.return_value = "fake-job-id"
             MockClient.return_value = mock_client
@@ -1301,8 +1303,9 @@ class TestCrawlSession:
     def test_crawl_session_at_name_resolves(self):
         """Passing --session @testsession resolves via saved session store."""
         from unittest.mock import patch, MagicMock
-        with patch("flarecrawl.cli._require_auth"), \
-             patch("flarecrawl.cli.Client") as MockClient, \
+        # Patch in _common: see TestIgnoreRobotsCrawl note on the cli split.
+        with patch("flarecrawl.cli._common._require_auth"), \
+             patch("flarecrawl.cli._common.Client") as MockClient, \
              patch("flarecrawl.config.load_session") as mock_load:
             mock_client = MagicMock()
             mock_client.crawl_start.return_value = "fake-job-id"
