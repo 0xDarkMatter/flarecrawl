@@ -40,10 +40,18 @@ _DEFAULT_MAX_CHARS = 40_000
 
 
 def _get_runner():  # type: ignore[return]
-    """Return a CliRunner instance (lazy import)."""
+    """Return a CliRunner instance (lazy import).
+
+    click < 8.2 needs mix_stderr=False to keep JSON stdout clean of the
+    Rich stderr chatter; click >= 8.2 removed the kwarg and separates
+    stderr by default.
+    """
     from typer.testing import CliRunner  # type: ignore[import-untyped]
 
-    return CliRunner(mix_stderr=False)
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        return CliRunner()
 
 
 def _get_app():  # type: ignore[return]
