@@ -40,6 +40,7 @@ For older releases, see [CHANGELOG.md](CHANGELOG.md).
 | **WebMCP tool discovery** | No | **Yes** (`webmcp discover/call`) |
 | **Stack fingerprinting** | No | **Yes** (`tech-detect` — single GET, ~7,500 upstream + 104 custom Wappalyzer fingerprints, `--only-categories` filtering) |
 | **AI extraction** | Spark models | Workers AI (included) |
+| **MCP server** | Yes (remote) | **Yes** — local stdio (`flarecrawl mcp`), 36 tools in a 3-tier surface (composite/curated/raw), `capabilities()` keystone, agent-safe by default |
 | **Agent-safe sanitisation** | No | **Yes** (`--agent-safe` — 13 sanitisers, DeepMind taxonomy) |
 | **Paywall bypass** | Limited | **Multi-strategy cascade** (`--paywall --stealth`) |
 | **Content negotiation** | No | **Yes** (auto `Accept: text/markdown`, zero browser time) |
@@ -75,6 +76,11 @@ Flarecrawl is often the first thing an AI agent sees when it reads the web.
 before it enters an LLM context window or RAG pipeline. 13 sanitisers
 defend against hidden text injection, prompt injection, and semantic
 manipulation — with findings reported in structured JSON metadata.
+
+For agents that speak [MCP](https://modelcontextprotocol.io/), `flarecrawl mcp`
+exposes the whole toolkit directly — no shelling out — with `--agent-safe`
+sanitisation on by default and bot-wall verdicts that suggest their own
+recovery steps. See [MCP Server](#mcp-server).
 
 ### Scraping behind authentication
 
@@ -208,6 +214,7 @@ flarecrawl scrape https://example.com --json | jq '.data.content'
 | Command | Description |
 |---------|-------------|
 | `flarecrawl guide [topic]` | Agent orientation — when/why each command, JSON shapes, exit codes, footguns (start here) |
+| `flarecrawl mcp [--read-only]` | Start the MCP stdio server — 36 tools for AI agents (Claude Code, Cursor, …). See [MCP Server](#mcp-server) |
 | `flarecrawl scrape URL` | Scrape page to markdown (or html/links/images/summary) |
 | `flarecrawl tech-detect URL` | Stack fingerprinting (Wappalyzer-style) — CMS, framework, JS libs, CDN, analytics, payment, niche SaaS. Single HTTP GET, zero CF browser time. `--cdp` for SPAs (CF Browser Run + JS-globals probe). |
 | `flarecrawl crawl URL --wait --limit N` | Crawl site with async job system |
@@ -1253,8 +1260,14 @@ flarecrawl/
 ├── AGENTS.md                   # AI agent context (served by `flarecrawl guide`)
 ├── README.md                   # This file
 ├── src/flarecrawl/
+│   # CLI (Typer) — one module per command family, assembled in cli/__init__.py
+│   ├── cli/                    # __init__ builds `app`; scrape, crawl, fetch, media,
+│   │                           #   techdetect, search, recipe, sessions, … + _common helpers
+│   # MCP server (optional [mcp] extra) — exposes the CLI as an agent tool surface
+│   ├── mcp_serve.py            # stdio transport entry point (only file importing `mcp`)
+│   ├── mcp_tools/              # 36-tool registry: orientation / composite / curated / raw,
+│   │                           #   in-process CLI exec, §30 error envelopes, capabilities()
 │   # Core
-│   ├── cli.py                  # Typer CLI (all commands)
 │   ├── client.py               # CF Browser Run REST API client (httpx pooling, HTTP/2)
 │   ├── config.py               # Usage tracking, env-var config, session storage
 │   ├── credentials.py          # Credential chain: OS keyring / .env / legacy config
@@ -1305,6 +1318,7 @@ flarecrawl/
 └── tests/
     ├── conftest.py             # Fixtures (incl. keyring isolation — tests never touch real creds)
     ├── test_*.py               # 60+ unit test modules, 1,500+ tests, no network
+    ├── test_mcp_*.py           # MCP server tests (registry, capabilities, coverage audit, exec, stdio)
     ├── corpus.py               # Live feature corpus (80 tests x 8 sites, needs CF auth)
     ├── corpus/                 # Agent-safety fixture corpus (61 files)
     │   ├── attacks/            # Adversarial fixtures (45 files, 13 categories)
@@ -1321,7 +1335,10 @@ uv tool install --editable . --with pytest --with ruff
 # Install CDP support (optional — needed for --cdp, interact, webmcp)
 uv pip install websockets
 
-# Run unit tests (1,500+ tests, no network)
+# Install the MCP server (optional — needed for `flarecrawl mcp`)
+uv tool install --editable '.[mcp]'
+
+# Run unit tests (1,500+ tests, no network; MCP tests need the [mcp] extra)
 pytest tests/ -v
 
 # Run live tests against public sites (needs CF auth)

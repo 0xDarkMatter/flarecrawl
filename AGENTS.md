@@ -14,6 +14,7 @@ model: when/why each command, JSON shapes, exit codes, footgun rules.
 | Task | Command |
 |------|---------|
 | Orientation guide (this doc) | `flarecrawl guide [topic]` / `flarecrawl guide --list` |
+| Start MCP server (36 tools) | `flarecrawl mcp` / `flarecrawl mcp --read-only` (see MCP Server section) |
 | Scrape page to markdown | `flarecrawl scrape URL` |
 | Scrape page to HTML | `flarecrawl scrape URL --format html` |
 | Scrape multiple URLs | `flarecrawl scrape URL1 URL2 URL3 --json` |

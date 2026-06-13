@@ -5,6 +5,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **MCP server** (`flarecrawl mcp`) — exposes flarecrawl as a Model Context
+  Protocol stdio server so agents (Claude Code, Cursor, …) can use the toolkit
+  directly. 36 tools across a three-tier surface (Forma Protocol §30): 5
+  orientation, 5 T1 composite (`read_page`, `research_web`, `site_overview`,
+  `extract_data`, `check_page_changes`), 17 T2 curated, 9 T3 raw (`*_raw`, full
+  CLI fidelity). `capabilities()` is the keystone — one call returns the full
+  catalogue, permissions, coverage map, and worked recipes. Content tools
+  default to `--agent-safe` sanitisation; `meta.blocked` bot-wall verdicts
+  auto-generate recovery `next_steps` (Akamai → stealth/p6; CF-1020 → terminal).
+  Binary tools (screenshot/pdf) return file paths, not base64. Read-only mode
+  (`flarecrawl mcp --read-only`) excludes the 5 write/destructive tools.
+  Optional dependency: `uv pip install 'flarecrawl[mcp]'`. Eleven CLI commands
+  are intentionally CLI-only (declared as coverage gaps in `capabilities()`
+  with workarounds — auth/secret entry, long-running crawls, config management,
+  interactive browser flows).
+- `.mcp.json` at the repo root wires flarecrawl as its own MCP server
+  (dogfooding; requires `uv tool install --editable '.[mcp]'`).
+
+### Changed
+
+- **`cli.py` split into a `cli/` package** — the 6,882-line monolith is now 17
+  command-family modules (`scrape`, `crawl`, `fetch`, `media`, `techdetect`,
+  `search`, `recipe`, `sessions`, … + shared `_common` helpers) assembled
+  behind the unchanged `flarecrawl.cli:app` entry point. Pure refactor: no
+  behaviour change, `--help` byte-identical, full suite green. Note for test
+  authors: patches that bound to `flarecrawl.cli.<helper>` now target the
+  module that owns the name (e.g. `flarecrawl.cli._common`).
+
+### Fixed
+
+- README/AGENTS doc drift: test counts (was 723 / 1404+, now 1,500+),
+  agent-safety test count (137 → 196), custom-overlay size (60/71 → 104),
+  attack-corpus categories (12 → 13), and the Project Structure tree
+  (listed 18 of 45 modules → now complete and grouped).
+
 ## [0.30.1] - 2026-06-02
 
 Tech-detect hardening — fingerprint corpus expansion, categorisation
