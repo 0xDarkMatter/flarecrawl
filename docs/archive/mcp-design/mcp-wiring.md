@@ -1,8 +1,9 @@
 # MCP Wiring Snippet
 
-**Status**: Staged for later application to `src/flarecrawl/cli.py`
-**Reason**: cli.py has a parallel refactor in progress — DO NOT apply yet.
-**Apply when**: The cli.py split lands and the new module structure is stable.
+**Status**: ARCHIVED — applied and shipped in v0.31.0 (2026-06-13). Frozen record.
+**Note**: The `mcp` subcommand now lives in the `src/flarecrawl/cli/` package
+(the cli.py monolith was split). The code below is the original staged snippet,
+kept for history; it references the pre-split `cli.py` path.
 
 ---
 

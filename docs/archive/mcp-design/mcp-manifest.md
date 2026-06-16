@@ -1,9 +1,9 @@
 # Flarecrawl MCP Surface — Design Manifest
 
-**Status**: DRAFT — awaiting human sign-off (forma-mcp-architect Phase 1)
-**Date**: 2026-06-10
+**Status**: ARCHIVED — shipped in v0.31.0 (2026-06-13). Frozen design record.
+**Date**: 2026-06-10 (design) · archived 2026-06-16
 **Spec**: Forma Protocol §29 (transport) + §30 (tool design)
-**Tool**: flarecrawl v0.30.1
+**Tool**: flarecrawl v0.30.1 (at design time; surface shipped in v0.31.0)
 
 ---
 

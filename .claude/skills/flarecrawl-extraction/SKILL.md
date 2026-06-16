@@ -110,6 +110,10 @@ flarecrawl extract "Get product name and price" --batch products.txt \
 
 Use `extract` when you need specific fields. Use `scrape --format json` for generic content.
 
+> **MCP equivalent:** the `extract_data(urls, prompt, json_schema)` T1 composite
+> tool exposes this over the flarecrawl MCP server — see the `flarecrawl-ops`
+> skill for MCP setup.
+
 ## Domain-Specific Gotchas
 
 - **Workers AI models** have context limits — very large pages may truncate

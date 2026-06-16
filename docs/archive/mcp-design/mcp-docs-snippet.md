@@ -1,8 +1,8 @@
 # MCP Documentation Snippets
 
-**Status**: Staged for later application.
-**Reason**: README.md and AGENTS.md have uncommitted edits in the main repo.
-**Apply when**: The parallel cli.py split + README/AGENTS edits land.
+**Status**: ARCHIVED — applied and shipped in v0.31.0 (2026-06-13). Frozen record.
+**Note**: The MCP sections below were merged into README.md and AGENTS.md; this
+is the original staged snippet, kept for history.
 
 ---
 

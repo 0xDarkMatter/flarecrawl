@@ -1,6 +1,11 @@
 # Firecrawl vs Flarecrawl Benchmark Report
 
-**Date:** 2026-03-19 | **Version:** Flarecrawl v0.3.0 | **Runs:** 3 per URL per tool | **Total requests:** 48
+> **Historical baseline (2026-03-19, ~v0.3.0-era).** These results predate the
+> hard-target stack, tech-detect, p6, recipes, and the MCP server. Treat the
+> numbers as a point-in-time snapshot, not current v0.31.0 performance — re-run
+> the bench before citing them as today's behaviour.
+
+**Date:** 2026-03-19 | **Version:** Flarecrawl v0.3.0 (historical) | **Runs:** 3 per URL per tool | **Total requests:** 48
 **Iterations:** 37 improvement cycles across 4 rounds (see `tests/bench-log.tsv`)
 
 ## Final Scores
