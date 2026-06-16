@@ -244,9 +244,16 @@ def run(
         return summary
 
     # Late import — runtime CDP session lives only inside this branch.
-    from .cdp import BodyCapture, CDPClient
+    from .cdp import BodyCapture, CDPClient, _require_websockets
     from .config import get_account_id, get_api_token
     from .local_browser import LocalBrowser
+
+    # Guard the optional `websockets` dependency before launching a browser or
+    # touching the network, so a missing install yields an actionable
+    # MISSING_DEPENDENCY error (caught cleanly by recipe_command) instead of a
+    # raw traceback from deep inside CDPClient. Every non-dry-run recipe needs
+    # CDP (both browser: local and CF-hosted connect over a WebSocket).
+    _require_websockets()
 
     use_local = data.get("browser") == "local"
     headed = bool(data.get("headed"))

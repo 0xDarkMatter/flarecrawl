@@ -16,6 +16,7 @@ from ._common import (
     EXIT_VALIDATION,
     _error,
     _get_client,
+    _handle_api_error,
     _output_json,
     _output_ndjson,
     _output_text,
@@ -80,6 +81,12 @@ def recipe_command(
     except RecipeError as e:
         _error(f"{e}  (recipe format + step kinds: flarecrawl guide recipe)",
                "VALIDATION_ERROR", EXIT_VALIDATION, as_json=json_output)
+        return
+    except FlareCrawlError as e:
+        # Notably the missing-`websockets` MISSING_DEPENDENCY guard — surface it
+        # as a clean error (exit 1 / JSON envelope) instead of an uncaught
+        # traceback. RecipeError is independent of FlareCrawlError, so order is moot.
+        _handle_api_error(e, as_json=json_output)
         return
 
     if dry_run:

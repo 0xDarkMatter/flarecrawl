@@ -236,6 +236,15 @@ def run_p6(
     mint_fn = mint_fn or _default_mint_fn
     replay_fn = replay_fn or _default_replay_fn
 
+    # The default minter drives a local Chromium over CDP, which needs the
+    # optional `websockets` package. Guard it up front — before any jar I/O or
+    # browser launch — so a missing install fails fast with an actionable
+    # MISSING_DEPENDENCY error instead of a deep traceback. Injected mint_fns
+    # (tests, custom flows) don't touch CDP, so only guard the default path.
+    if mint_fn is _default_mint_fn:
+        from .cdp import _require_websockets
+        _require_websockets()
+
     def emit(event: str, **payload) -> None:
         if on_event:
             on_event(event, payload)
