@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from ..client import Client, FlareCrawlError
 from ..config import (
@@ -110,7 +111,11 @@ def _error(
     if as_json:
         _output_json(error_obj)
     else:
-        console.print(f"[red]Error:[/red] {message}")
+        # Escape the message — it's data, not markup. Without this, literal
+        # brackets in a message (e.g. the "uv pip install 'flarecrawl[cdp]'"
+        # dependency hint) are parsed as Rich style tags and silently stripped,
+        # turning an actionable install command into a broken one.
+        console.print(f"[red]Error:[/red] {escape(message)}")
 
     raise typer.Exit(exit_code)
 
@@ -348,6 +353,26 @@ def _get_client(as_json: bool = False, cache_ttl: int = 3600, proxy: str | None 
     return Client(cache_ttl=cache_ttl, proxy=proxy)
 
 
+def _require_cdp_websockets(as_json: bool = False) -> None:
+    """Guard the optional `websockets` dependency for CDP.
+
+    Emits a clean, actionable MISSING_DEPENDENCY error (exit 1) instead of a
+    misleading "Not authenticated" or a deep traceback. Call this BEFORE any
+    auth or network work so a missing install is the first thing reported.
+
+    The import never raises — `cdp.py` sets `websockets = None` when the package
+    is absent — so an explicit `is None` check is the only reliable guard.
+    """
+    from ..cdp import websockets as _ws
+
+    if _ws is None:
+        _error(
+            "CDP requires the 'websockets' package. "
+            "Install with: uv pip install 'flarecrawl[cdp]'  (or: uv pip install websockets)",
+            "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
+        )
+
+
 def _get_cdp_client(
     as_json: bool = False,
     keep_alive: int = 0,
@@ -355,18 +380,12 @@ def _get_cdp_client(
     proxy: str | None = None,
 ):
     """Create and connect a CDP WebSocket client."""
-    from ..cdp import CDPClient, websockets as _ws
+    from ..cdp import CDPClient
 
-    # Guard the optional dependency up front — before the auth/network checks below —
-    # so a missing install yields an actionable message instead of a misleading
-    # "Not authenticated". The import itself never raises (cdp.py sets websockets=None
-    # when the package is absent), so checking it explicitly is the only reliable guard.
-    if _ws is None:
-        _error(
-            "CDP requires the 'websockets' package. "
-            "Install with: uv pip install 'flarecrawl[cdp]'  (or: uv pip install websockets)",
-            "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
-        )
+    # Guard the optional dependency up front — before the auth/network checks
+    # below — so a missing install yields an actionable message instead of a
+    # misleading "Not authenticated".
+    _require_cdp_websockets(as_json)
 
     from ..config import get_proxy
     account_id = get_account_id()

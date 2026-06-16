@@ -47,6 +47,7 @@ from ._common import (
     _parse_auth,
     _parse_body,
     _parse_headers,
+    _require_cdp_websockets,
     _run_then_fetch,
     _sanitize_filename,
     _validate_url,
@@ -1315,6 +1316,16 @@ def scrape(
     cache_ttl = 0 if no_cache else DEFAULT_CACHE_TTL
     from ..config import get_proxy
     effective_proxy = proxy or get_proxy()
+
+    # If any flag promoted this scrape to CDP, the optional `websockets` package
+    # is mandatory. Guard it here — after all arg validation, before the auth
+    # check below — so a missing install reports the dependency, not a
+    # misleading "Not authenticated" (issue #3). The dedicated CDP commands
+    # guard inside _get_cdp_client; scrape builds the REST client (which checks
+    # auth) first, so it needs its own early guard.
+    if cdp:
+        _require_cdp_websockets(json_output or is_batch_mode)
+
     # Defer auth when --paywall is set: bypass uses direct HTTP, not CF API.
     # Client is created only if credentials exist (needed as fallback).
     if paywall:
