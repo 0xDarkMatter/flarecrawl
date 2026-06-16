@@ -5,6 +5,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **crawl: timeout no longer discards completed records** (#2). When
+  `crawl --wait -o out.json` hits the wait timeout, completed records are now
+  fetched from Cloudflare (jobs persist 14 days) and written to the output with
+  `status: "timeout"`, instead of exiting with a bare `TIMEOUT` and an empty
+  output. Non-timeout errors still abort without writing a partial file.
+- **CDP commands: clear error when `websockets` is missing** (#3). CDP-dependent
+  commands (`design extract/coherence/diff`, `scrape --cdp`, …) now check for the
+  optional `websockets` package up front and emit a `MISSING_DEPENDENCY` message
+  (`uv pip install 'flarecrawl[cdp]'`) before the auth check — previously a
+  missing install surfaced as a misleading "Not authenticated".
+
 ## [0.31.0] - 2026-06-13
 
 ### Added

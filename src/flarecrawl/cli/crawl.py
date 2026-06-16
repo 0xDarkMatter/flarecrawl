@@ -208,8 +208,18 @@ def crawl(
                 job_id, timeout=timeout or 600, poll_interval=poll_interval,
             )
     except FlareCrawlError as e:
-        _handle_api_error(e, json_output)
-        return
+        if e.code != "TIMEOUT":
+            _handle_api_error(e, json_output)
+            return
+        # Timeout: completed records still persist on Cloudflare (jobs live 14 days).
+        # Recover them instead of discarding the whole crawl — fall through to the
+        # fetch + write path below with a best-effort "timeout" status.
+        console.print("[yellow]Crawl timed out — saving records completed so far.[/yellow]")
+        try:
+            final_status = client.crawl_status(job_id)
+        except FlareCrawlError:
+            final_status = {}
+        final_status["status"] = "timeout"
 
     # Fetch results
     try:

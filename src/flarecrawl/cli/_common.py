@@ -355,11 +355,16 @@ def _get_cdp_client(
     proxy: str | None = None,
 ):
     """Create and connect a CDP WebSocket client."""
-    try:
-        from ..cdp import CDPClient
-    except ImportError:
+    from ..cdp import CDPClient, websockets as _ws
+
+    # Guard the optional dependency up front — before the auth/network checks below —
+    # so a missing install yields an actionable message instead of a misleading
+    # "Not authenticated". The import itself never raises (cdp.py sets websockets=None
+    # when the package is absent), so checking it explicitly is the only reliable guard.
+    if _ws is None:
         _error(
-            "CDP requires the 'websockets' package. Install with: uv pip install websockets",
+            "CDP requires the 'websockets' package. "
+            "Install with: uv pip install 'flarecrawl[cdp]'  (or: uv pip install websockets)",
             "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
         )
 
