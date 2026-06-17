@@ -228,7 +228,7 @@ def init_tracing(
             if not _warned_missing:
                 warnings.warn(
                     "OpenTelemetry not installed; tracing disabled. "
-                    "Install with `pip install flarecrawl[perf]`.",
+                    "Install the perf extra: `uv tool install 'flarecrawl[perf]'`.",
                     stacklevel=2,
                 )
                 _warned_missing = True

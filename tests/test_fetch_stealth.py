@@ -29,7 +29,7 @@ def test_missing_curl_cffi_raises_helpful_error(tmp_path, monkeypatch):
         download_binary_stealth("https://example.com/x", tmp_path / "out.pdf")
     msg = str(exc_info.value)
     assert "curl_cffi" in msg
-    assert "uv pip install" in msg
+    assert "uv tool install" in msg
 
 
 def test_writes_file_with_mock_session(tmp_path, monkeypatch):

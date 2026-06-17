@@ -259,7 +259,7 @@ def batch_config(
     try:
         import yaml
     except ImportError:
-        _error("PyYAML required for batch config. Install: pip install pyyaml",
+        _error("PyYAML required for batch config. Install the recipes extra: uv tool install 'flarecrawl[recipes]'",
                "VALIDATION_ERROR", EXIT_VALIDATION)
         return
 

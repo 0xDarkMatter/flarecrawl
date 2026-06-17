@@ -174,7 +174,7 @@ class TestCdpWebsocketsGuard:
             assert "websockets" in payload["error"]["message"].lower()
 
     def test_install_hint_brackets_survive_rich_markup(self, mock_credentials):
-        """Regression: the actionable hint `uv pip install 'flarecrawl[cdp]'`
+        """Regression: the actionable hint `uv tool install 'flarecrawl[cdp]'`
         must render with the `[cdp]` extra intact in human (text) mode. Rich
         treats `[cdp]` as a style tag and silently strips it unless the message
         is escaped — which turned the install command into a broken one."""

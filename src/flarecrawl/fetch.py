@@ -241,7 +241,7 @@ def download_binary_stealth(
         from curl_cffi import requests as cffi_requests
     except ImportError as exc:
         raise ImportError(
-            "Stealth download requires curl_cffi. Install with: uv pip install curl_cffi"
+            "Stealth download requires curl_cffi. Install the stealth extra: uv tool install 'flarecrawl[stealth]'"
         ) from exc
 
     start = time.time()

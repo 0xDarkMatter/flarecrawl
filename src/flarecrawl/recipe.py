@@ -120,7 +120,7 @@ def load_recipe(path: Path) -> dict:
     try:
         import yaml
     except ImportError as exc:
-        raise RecipeError("YAML support requires PyYAML: uv pip install pyyaml") from exc
+        raise RecipeError("YAML support requires PyYAML. Install the recipes extra: uv tool install 'flarecrawl[recipes]'") from exc
 
     if not path.exists():
         raise RecipeError(f"Recipe not found: {path}")

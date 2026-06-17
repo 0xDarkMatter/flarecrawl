@@ -208,7 +208,7 @@ def videos(
     download: Annotated[bool, typer.Option("--download", help="Download videos via yt-dlp at highest resolution")] = False,
     download_dir: Annotated[Path | None, typer.Option("--download-dir", help="Directory for downloaded videos")] = None,
     browser_cookies: Annotated[str | None, typer.Option("--browser-cookies", help="Grab cookies from local browser (chrome|firefox)")] = None,
-    yt_dlp: Annotated[bool, typer.Option("--yt-dlp", help="Run discovered URLs through yt-dlp's extractor registry to resolve provider-specific embeds (DVIDS, Vimeo with auth, etc.). Optional dep: pip install flarecrawl[videos].")] = False,
+    yt_dlp: Annotated[bool, typer.Option("--yt-dlp", help="Run discovered URLs through yt-dlp's extractor registry to resolve provider-specific embeds (DVIDS, Vimeo with auth, etc.). Optional dep: uv tool install 'flarecrawl[videos]'.")] = False,
 ):
     """Discover video URLs on a web page.
 
@@ -402,7 +402,7 @@ def videos(
         import subprocess
         ytdlp = shutil.which("yt-dlp")
         if not ytdlp:
-            _error("yt-dlp not found. Install with: uv pip install yt-dlp", "MISSING_DEPENDENCY", EXIT_ERROR, as_json=json_output)
+            _error("yt-dlp not found. Install the videos extra: uv tool install 'flarecrawl[videos]'", "MISSING_DEPENDENCY", EXIT_ERROR, as_json=json_output)
             return
         dl_dir = download_dir or Path(".")
         dl_dir.mkdir(parents=True, exist_ok=True)

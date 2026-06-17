@@ -110,7 +110,7 @@ class TestCDPInteract:
 
     These require:
     1. CF auth configured
-    2. websockets package installed (pip install flarecrawl[cdp])
+    2. websockets package installed (uv tool install 'flarecrawl[cdp]')
     3. Local HTTP server running (handled by local_server fixture)
     """
 

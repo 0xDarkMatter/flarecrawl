@@ -112,7 +112,7 @@ def _error(
         _output_json(error_obj)
     else:
         # Escape the message — it's data, not markup. Without this, literal
-        # brackets in a message (e.g. the "uv pip install 'flarecrawl[cdp]'"
+        # brackets in a message (e.g. the "uv tool install 'flarecrawl[cdp]'"
         # dependency hint) are parsed as Rich style tags and silently stripped,
         # turning an actionable install command into a broken one.
         console.print(f"[red]Error:[/red] {escape(message)}")
@@ -329,7 +329,8 @@ def _apply_browser_cookies(
         from ..browser_cookies import grab_cookies
     except ImportError:
         _error(
-            "Browser cookie extraction requires rookiepy. Install with: uv pip install rookiepy",
+            "Browser cookie extraction requires a cookie backend. "
+            "Install the cookies extra: uv tool install 'flarecrawl[cookies]'",
             "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
         )
         return None  # unreachable — _error raises
@@ -367,8 +368,8 @@ def _require_cdp_websockets(as_json: bool = False) -> None:
 
     if _ws is None:
         _error(
-            "CDP requires the 'websockets' package. "
-            "Install with: uv pip install 'flarecrawl[cdp]'  (or: uv pip install websockets)",
+            "CDP requires the 'websockets' package. Install the cdp extra: "
+            "uv tool install 'flarecrawl[cdp]'  (in a project: uv add 'flarecrawl[cdp]')",
             "MISSING_DEPENDENCY", EXIT_ERROR, as_json=as_json,
         )
 

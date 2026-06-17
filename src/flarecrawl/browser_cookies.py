@@ -4,7 +4,8 @@ Supports two backends:
   - rookiepy (preferred, Rust-based, faster)
   - browser-cookie3 (fallback, pure Python, wider Windows support)
 
-Install either: uv pip install rookiepy  OR  pip install browser-cookie3
+Install the cookies extra: uv tool install 'flarecrawl[cookies]'
+(faster Rust backend instead: uv tool install flarecrawl --with rookiepy)
 """
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ def _require_cookie_lib() -> None:
     if _backend is None:
         raise FlareCrawlError(
             "Browser cookie extraction requires rookiepy or browser-cookie3. "
-            "Install with: pip install browser-cookie3  (or: uv pip install rookiepy)",
+            "Install the cookies extra: uv tool install 'flarecrawl[cookies]'  "
+            "(faster Rust backend instead: uv tool install flarecrawl --with rookiepy)",
             code="MISSING_DEPENDENCY",
         )
 

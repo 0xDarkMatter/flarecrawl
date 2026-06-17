@@ -13,7 +13,7 @@ Why this exists:
   - Free tier users who don't want to pay for Workers Paid plan can use
     this as a pure-local alternative.
 
-Optional dependency: ``pip install flarecrawl[local-browser]`` pulls
+Optional dependency: ``uv tool install 'flarecrawl[local-browser]'`` pulls
 ``playwright`` and downloads the headless-shell binary.
 """
 
@@ -47,9 +47,10 @@ def _resolve_chromium_path() -> str:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise LocalBrowserError(
-            "Local browser support requires Playwright. Install with: "
-            "uv pip install 'flarecrawl[local-browser]'  "
-            "(or: uv pip install playwright && playwright install chromium)"
+            "Local browser support requires Playwright. Install the "
+            "local-browser extra: uv tool install 'flarecrawl[local-browser]'  "
+            "(in a project: uv add 'flarecrawl[local-browser]'), "
+            "then: playwright install chromium"
         ) from exc
 
     # Open a short-lived Playwright handle just to read the chromium path
