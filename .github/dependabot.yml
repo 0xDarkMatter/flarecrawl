@@ -1,0 +1,39 @@
+version: 2
+
+# Grouped updates so security/version bumps arrive as a small number of
+# reviewable PRs rather than one-per-advisory. Security updates are grouped
+# separately and raised regardless of schedule.
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # All security fixes in one PR.
+      pip-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      # Routine minor/patch bumps in one PR; majors stay individual.
+      pip-version:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

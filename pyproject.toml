@@ -37,7 +37,7 @@ dependencies = [
     "rich>=13.0.0",
     "httpx[http2]>=0.25.0",
     "beautifulsoup4>=4.12.0",
-    "lxml>=5.0.0",
+    "lxml>=6.1.0",  # >=6.1.0: iterparse/ETCompatXMLParser XXE fix (untrusted sitemap/RSS XML)
     "pyyaml>=6.0",
     "keyring>=24.0",
     # selectolax is imported unconditionally by extract.py and authcrawl.py,
@@ -58,7 +58,7 @@ cookies = ["browser-cookie3>=0.20"]
 secure = []  # keyring is now a core dep; extra kept for backwards compatibility
 stealth = ["curl_cffi>=0.7.0"]
 local-browser = ["playwright>=1.40.0"]
-videos = ["yt-dlp>=2024.1.0"]
+videos = ["yt-dlp>=2026.6.9"]  # >=2026.6.9: --exec inject, aria2c RCE, filename, cookie-leak fixes
 recipes = ["pyyaml>=6.0"]
 perf = [
   "uvloop>=0.19.0; sys_platform != 'win32'",

@@ -18,6 +18,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`uv pip install 'flarecrawl[cdp]'`) before the auth check — previously a
   missing install surfaced as a misleading "Not authenticated".
 
+### Security
+
+- Cleared all open Dependabot advisories. Bumped `lxml>=6.1.0` (core dep — XXE
+  via `iterparse`/`ETCompatXMLParser` defaults on untrusted sitemap/RSS XML) and
+  `yt-dlp>=2026.6.9` (`videos` extra — `--exec` injection, aria2c RCE, filename
+  sanitisation, cookie leak; flarecrawl resolves metadata only, so these were not
+  reachable via its own calls, but the floor protects `[videos]` users). Lock
+  refresh also pulls patched `cryptography>=49`, `idna>=3.18`, and `starlette>=1.3.1`
+  (transitive; starlette only via `[mcp]`, which uses stdio transport — the HTTP
+  vulns are not reachable). Added a grouped `.github/dependabot.yml`.
+
 ## [0.31.0] - 2026-06-13
 
 ### Added
