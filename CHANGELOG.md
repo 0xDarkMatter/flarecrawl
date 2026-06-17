@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-06-17
+
 ### Fixed
 
 - **crawl: timeout no longer discards completed records** (#2). When
