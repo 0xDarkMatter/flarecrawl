@@ -29,7 +29,7 @@ def mcp_cmd(
     5 orientation + 5 T1 composite + 17 T2 curated + 9 T3 raw.
 
     Requires the mcp extra:
-        uv pip install 'flarecrawl[mcp]'
+        uv tool install 'flarecrawl[mcp]'
 
     Usage in Claude Code (.mcp.json):
         {"mcpServers": {"flarecrawl": {"command": "flarecrawl", "args": ["mcp"]}}}
@@ -39,7 +39,7 @@ def mcp_cmd(
     except ImportError:
         typer.echo(
             "The 'mcp' package is not installed. "
-            "Install it with: uv pip install 'flarecrawl[mcp]'",
+            "Install it with: uv tool install 'flarecrawl[mcp]'",
             err=True,
         )
         raise typer.Exit(1) from None

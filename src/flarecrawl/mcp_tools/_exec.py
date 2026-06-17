@@ -313,11 +313,11 @@ def _check_optional_deps() -> dict[str, bool]:
 def missing_dep_install_hint(dep_name: str) -> str:
     """Return the uv install command for a missing dep."""
     _hints = {
-        "stealth (curl_cffi)": "uv pip install 'flarecrawl[stealth]'  # or: uv add curl_cffi",
-        "cdp (websockets)": "uv pip install 'flarecrawl[cdp]'  # or: uv add websockets",
-        "local-browser (playwright)": "uv pip install 'flarecrawl[local-browser]' && playwright install chromium",
+        "stealth (curl_cffi)": "uv tool install 'flarecrawl[stealth]'  # in a project: uv add 'flarecrawl[stealth]'",
+        "cdp (websockets)": "uv tool install 'flarecrawl[cdp]'  # in a project: uv add 'flarecrawl[cdp]'",
+        "local-browser (playwright)": "uv tool install 'flarecrawl[local-browser]' && playwright install chromium",
         "search (JINA_API_KEY)": "export JINA_API_KEY=<your-key>  # free at jina.ai",
-        "recipes (pyyaml)": "uv pip install 'flarecrawl[recipes]'  # or: uv add pyyaml",
-        "videos (yt-dlp)": "uv pip install 'flarecrawl[videos]'  # or: uv add yt-dlp",
+        "recipes (pyyaml)": "uv tool install 'flarecrawl[recipes]'  # in a project: uv add 'flarecrawl[recipes]'",
+        "videos (yt-dlp)": "uv tool install 'flarecrawl[videos]'  # in a project: uv add 'flarecrawl[videos]'",
     }
     return _hints.get(dep_name, f"uv add {dep_name}")

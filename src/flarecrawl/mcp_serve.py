@@ -13,7 +13,7 @@ Usage (programmatic):
     serve(read_only=True)   # read-only mode
 
 The ``mcp`` package must be installed:
-    uv pip install 'flarecrawl[mcp]'
+    uv tool install 'flarecrawl[mcp]'
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def serve(read_only: bool = False) -> None:
     except ImportError as exc:
         raise ImportError(
             "The 'mcp' package is required to run the MCP server. "
-            "Install it with: uv pip install 'flarecrawl[mcp]'"
+            "Install it with: uv tool install 'flarecrawl[mcp]'"
         ) from exc
 
     import asyncio

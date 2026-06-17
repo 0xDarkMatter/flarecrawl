@@ -45,7 +45,7 @@ def _warn_fallback_once() -> None:
     if not _FALLBACK_LOGGED:
         logger.warning(
             "protego is not installed; robots.txt will allow all URLs. "
-            "Install with: pip install 'flarecrawl[perf]'"
+            "Install the perf extra: uv tool install 'flarecrawl[perf]'"
         )
         _FALLBACK_LOGGED = True
 

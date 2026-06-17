@@ -25,8 +25,8 @@ except ImportError:
 def _require_websockets() -> None:
     if websockets is None:
         raise FlareCrawlError(
-            "CDP requires the 'websockets' package. "
-            "Install with: uv pip install 'flarecrawl[cdp]'  (or: uv pip install websockets)",
+            "CDP requires the 'websockets' package. Install the cdp extra: "
+            "uv tool install 'flarecrawl[cdp]'  (in a project: uv add 'flarecrawl[cdp]')",
             code="MISSING_DEPENDENCY",
         )
 
